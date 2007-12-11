@@ -2,11 +2,16 @@ SOURCEFORGE:
 	TODO before upload:
 		values
 	data backup
+	
+	build script:
+		bdist_wininst
+		sdist --format=zip
+		sdist --format=gztar
+		upload to sourceforge
 
 GENERAL:
 	configuration system:
 		config files can go in labrad/config
-			but this 
 		need a class to manage reading/writing and persisting config
 		allow overrides per-user, per-session, etc.
 
