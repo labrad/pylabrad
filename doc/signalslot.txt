@@ -1,0 +1,21 @@
+connect by sending a request to the desired signal
+    - request should contain ID of the slot for messages
+    - server keeps a list of everyone who is connected, sends signal to all
+    - some signals can be keyed to more than just client ID, e.g. context and
+      possibly other data sent in the registration packet
+    - client needs to dispatch the incoming signal to the correct slot
+    
+self.connect(server.signal, self.slot, *a, **kw)
+    - self.slot is a callable (see below)
+
+
+disconnect also by sending a request to the desired signal
+    - request should be empty to indicate disconnection
+
+
+self.disconnect(server.signal)
+
+
+-> message: slot(self, source, data, *a, **kw)
+    - source is just server (wrapped)
+    - data is the message content
