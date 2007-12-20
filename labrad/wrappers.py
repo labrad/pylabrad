@@ -275,8 +275,10 @@ class AsyncClient:
         setattr(self, name, server)
 
     def _refreshServer(self, name):
-        server = getattr(self, name)
-        return server._refresh()
+        if hasattr(self, name):
+            server = getattr(self, name)
+            return server._refresh()
+        return defer.succeed(None)
 
     def _delServer(self, name):
         if hasattr(self, name):

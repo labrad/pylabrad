@@ -20,6 +20,7 @@ from twisted.cred import portal, checkers, credentials
 from nevow import loaders, rend, tags as T, entities as E, \
                   url, inevow, guard, athena, static
 from nevow.taglibrary import tabbedPane
+from nevow.inevow import ISession
 from zope.interface import implements
 
 from labrad.config import ConfigFile, configPath
@@ -54,6 +55,9 @@ def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
     return [s for s in servers if s.startswith('node')]
 
+class DumbInterface:
+    pass
+
 class ServerResource(rend.Page):
     addSlash = True
 
@@ -64,7 +68,10 @@ class ServerResource(rend.Page):
             return self, ()
         data = ctx.arg('data')
         d = srv.settings[setting](data)
-        return d.addCallback(goHome)
+        def saveException(failure):
+            failure.trap(Exception)
+            ISession(ctx).fields['flash'] = (data, srv.name, setting, failure)
+        return d.addErrback(saveException).addCallback(goHome)
     
     def data_name(self, ctx, srv):
         return self.original.name
@@ -203,6 +210,8 @@ class ServerList(rend.Fragment):
     def render_server(self, ctx, data):
         cxn = self.original
         nodes = _nodes(cxn)
+        exc = ISession(ctx).fields.get('flash', None)
+        excHere = False
 
         baseName, running_anywhere, info = data
         instanceName = None
@@ -220,6 +229,12 @@ class ServerList(rend.Fragment):
                     color, state, enabled = RED, 'stopped', [1, 0, 0]
             else:
                 color, state, enabled = GRAY, 'unavailable', [0, 0, 0]
+            if exc is not None and \
+               (exc[0] == name or exc[0] == baseName) and exc[1] == node:
+                color = RED
+                state = 'error!'
+                del ISession(ctx).fields['flash']
+                excHere = True
             controls = []
             for act, enabled, img in zip(['start', 'stop', 'restart'], enabled,
                                          ['add', 'delete', 'arrow_refresh']):
@@ -234,10 +249,17 @@ class ServerList(rend.Fragment):
                 else:
                     item = IMG(img + '_gray')
                 controls.append(item)
-            node_actions.append((
-                T.td[T.span(style=color)[state]],
-                T.td[controls]
-            ))
+            if excHere:
+                node_actions.append((
+                    T.td[T.b(title=str(exc[3]), style=color)[state]],
+                    T.td[controls]
+                ))
+                excHere = False
+            else:
+                node_actions.append((
+                    T.td[T.span(style=color)[state]],
+                    T.td[controls]
+                ))
         if running_anywhere:
             name = T.a(href=instanceName)[baseName]
         else:
