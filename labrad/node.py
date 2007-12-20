@@ -208,9 +208,9 @@ def createPythonServerCls(plugin):
 
 def getNodeConfig(nodename=None):
     try:
-        conf = ConfigFile('node-local')
-    except:
         conf = ConfigFile('node')
+    except:
+        conf = ConfigFile('node-template')
     if conf.has_section(nodename):
         section = nodename
     else:

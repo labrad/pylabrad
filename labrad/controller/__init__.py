@@ -96,6 +96,7 @@ class ServerResource(rend.Page):
                 T.title['LabRAD Server'],
             ],
             T.body[
+                T.p[T.a(href=url.root)['<< back']],
                 T.h1[data_name],
                 T.p[data_descr],
                 T.p[data_notes],
@@ -110,19 +111,22 @@ class ServerResource(rend.Page):
 class ControllerPage(rend.Page):
     addSlash = True
 
+    @inlineCallbacks
     def childFactory(self, ctx, name):
         cxn = self.realm.cxn
+        yield cxn.refresh()
         if not cxn:
-            return self
+            returnValue(self)
         elif name in cxn.servers:
+            print "returning server resource:", name
             srv = ServerResource(cxn.servers[name])
             srv.realm = self.realm
-            return srv
+            returnValue(srv)
         elif name == IMAGES:
-            return ImageResource(name)
+            returnValue(ImageResource(name))
         elif name == REFRESH:
-            return cxn.refresh().addCallback(lambda r: self)
-        return rend.NotFound
+            returnValue(cxn.refresh().addCallback(lambda r: self))
+        returnValue(rend.NotFound)
 
     def data_pages(self, ctx, data):
         cxn = self.realm.cxn
@@ -201,6 +205,7 @@ class ServerList(rend.Fragment):
         nodes = _nodes(cxn)
 
         baseName, running_anywhere, info = data
+        instanceName = None
         node_actions = []
         for node in nodes:
             if node in info:
@@ -208,6 +213,7 @@ class ServerList(rend.Fragment):
                 # controls are start, stop, restart
                 if running:
                     color, state, enabled = GREEN, 'running', [0, 1, 1]
+                    instanceName = name
                 elif not local and running_anywhere:
                     color, state, enabled = GRAY, 'running', [0, 0, 0]
                 else:
@@ -232,7 +238,11 @@ class ServerList(rend.Fragment):
                 T.td[T.span(style=color)[state]],
                 T.td[controls]
             ))
-        return ctx.tag[T.td[baseName], node_actions]
+        if running_anywhere:
+            name = T.a(href=instanceName)[baseName]
+        else:
+            name = baseName
+        return ctx.tag[T.td[name], node_actions]
 
     docFactory = loaders.stan(
         T.table(data=T.directive('servers'), render=rend.sequence)[

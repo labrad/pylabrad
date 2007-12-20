@@ -59,7 +59,7 @@ class TestServer(LabradServer):
         log.msg('Echo delay: %s' % delay)
         self.log((datetime.now(), 'Echo delay: %s' % delay))
         if delay is not None:
-            c['delay'] = delay
+            c['delay'] = float(delay)
         return c['delay']
 
     @setting(40, speed=['v[m/s]', ''], returns=['v[m/s]'])

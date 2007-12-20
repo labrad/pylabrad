@@ -32,13 +32,8 @@ import time
 from types import InstanceType
 from datetime import timedelta, datetime
 
-from labrad import constants as C
-
-try:
-    from Scientific.Physics.PhysicalQuantities import PhysicalQuantity as PQ
-    havePQ = True
-except:
-    havePQ = False
+from labrad import constants as C, units as U
+from labrad.units import Value, Complex
 
 try:
     from numpy import ndarray, array, dtype, fromstring
@@ -273,12 +268,13 @@ def flatten(obj, types=[]):
     check the registry of flattening functions, to see whether one exists
     for the object type, or a superclass.
     """
+    if hasattr(obj, '__lrflatten__'):
+        return obj.__lrflatten__()
+
     if not isinstance(types, list):
         types = [types]
     types = [parseTypeTag(t) for t in types]
     
-    if hasattr(obj, '__lrflatten__'):
-        return obj.__lrflatten__()
     t = getType(obj)
 
     if not len(types):
@@ -313,52 +309,6 @@ def flatten(obj, types=[]):
             if s is None:
                 raise FlatteningError(obj, types)
     return s, t
-    
-##    s = None
-##
-##    # first, try flattening the object without any hints
-##    # TODO: before flattening, find the best fit type
-##    try:
-##        if hasattr(obj, '__lrflatten__'):
-##            s, t = obj.__lrflatten__()
-##        else:
-##            t = type(obj)
-##            # handle classic classes
-##            if t == InstanceType:
-##                t = obj.__class__
-##
-##            # check if we have a flattener for this type
-##            if t in _flatteners:
-##                s, t = _flatteners[t](obj)
-##            else:
-##                # check if we have a flattener for a superclass
-##                for cls in _flatteners:
-##                    if issubclass(t, cls):
-##                        s, t = _flatteners[cls](obj)
-##    except Exception, e:
-##        #print 'Error while flattening: %r' % e
-##        pass
-##    if len(types):
-##        # if the no-hint flattening worked, check whether it is
-##        # compatible with one of the allowed types.
-##        if s is not None:
-##            for t2 in types:
-##                if t <= t2:
-##                    return s, t
-##                elif t2 <= t:
-##                    return s, t2
-##        # otherwise flatten to the first type that works
-##        for t in types:
-##            try:
-##                return t.__flatten__(obj)
-##            except:
-##                pass
-##    else:
-##        if s is not None:
-##            return s, t
-##    # oops! unable to flatten to LabRAD format
-##    raise FlatteningError(obj, types)
-
 
 def evalLRData(s):
     """Evaluate LR data in a namespace with all LRTypes."""
@@ -573,6 +523,15 @@ class LRValue(LRType):
     def __repr__(self):
         return self.__class__.__name__ + '(%r)' % self.units
 
+    @property
+    def parsedUnit(self):
+        if not hasattr(self, '_parsedUnit'):
+            if self.units == None:
+                self._parsedUnit = None
+            else:
+                self._parsedUnit = U._findUnit(self.units)
+        return self._parsedUnit
+
     @classmethod
     def __parse__(cls, s):
         units, s = parseUnits(s)
@@ -591,14 +550,20 @@ class LRValue(LRType):
 
     def __unflatten__(self, s):
         v = unpack('d', s.get(8))[0]
-        return Value(v, self.units)
+        if self.parsedUnit is not None:
+            v = Value(v, self.parsedUnit)
+        return v
 
     def __flatten__(self, v):
-        if havePQ and isinstance(v, PQ):
-            v = v.inUnitsOf(self.units).getValue()
+        if isinstance(v, Value):
+            v = v[self.parsedUnit]
         return pack('d', float(v))
 
 registerType(float, LRValue())
+
+@typeFunc(Value)
+def getValueType(pq):
+    return LRValue(pq.unit.labradName())
 
 
 class LRComplex(LRValue):
@@ -608,13 +573,19 @@ class LRComplex(LRValue):
     
     def __unflatten__(self, s):
         real, imag = unpack('dd', s.get(16))
-        return Complex(complex(real, imag), self.units)
+        return Complex(complex(real, imag), self.parsedUnit)
 
     def __flatten__(self, c):
+        if isinstance(c, Complex):
+            c = c[self.parsedUnit]
         c = complex(c)
         return pack('dd', c.real, c.imag)
 
 registerType(complex, LRComplex())
+
+@typeFunc(Complex)
+def getValueType(pq):
+    return LRComplex(pq.unit.labradName())
 
 
 class LRCluster(LRType):
@@ -674,6 +645,8 @@ class LRCluster(LRType):
 
     def __flatten__(self, c):
         """Flatten python tuple to LabRAD cluster."""
+        if len(c) == 0:
+            raise FlatteningError('Cannot flatten zero-length clusters')
         return ''.join(t.__flatten__(elem) for t, elem in zip(self.items, c))
 
 registerTypeFunc(tuple, LRCluster.__lrtype__)
@@ -892,86 +865,6 @@ registerTypeFunc(Exception, LRError().__lrtype__)
 
 # data types
 
-class Value(float):
-    """Real number with units.
-
-    This is implemented as a subclass of the built-in float type,
-    so that a Value can be used just as a regular number.
-    """
-    
-    __slots__ = ['units'] # make room for units, but not a whole dict
-    
-    def __new__(cls, value, units=None):
-        v = float.__new__(cls, value)
-        v.units = units
-        return v
-
-    def __str__(self):
-        if self.units:
-            return '%s %s' % (float(self), self.units)
-        else:
-            return str(float(self))
-
-    def __repr__(self):
-        return 'Value(%r, %r)' % (float(self), self.units)
-
-    def __lrtype__(self):
-        return LRValue(self.units)
-
-    def __lrflatten__(self):
-        t = self.__lrtype__()
-        return t.__flatten__(self), t
-
-    def __eq__(self, other):
-        try:
-            return float(self) == float(other) and \
-                   self.units == getattr(other, 'units', None)
-        except:
-            return False
-    
-    def toPQ(self):
-        if havePQ:
-            return PQ(float(self), self.units)
-        else:
-            return None
-
-
-class Complex(complex):
-    """Complex number with units.
-
-    This is implemented as a subclass of the built-in complex type,
-    so that a Complex can be used just as a regular number.
-    """
-    
-    __slots__ = ['units'] # make room for units, but not a whole dict
-
-    def __new__(cls, value, units=None):
-        v = complex.__new__(cls, value)
-        v.units = units
-        return v
-    
-    def __str__(self):
-        if self.units:
-            return '%s %s' % (complex(self), self.units)
-        else:
-            return str(complex(self))
-
-    def __repr__(self):
-        return 'Complex(%r, %r)' % (complex(self), self.units)
-
-    def __eq__(self, other):
-        try:
-            return complex(self) == complex(other) and \
-                   self.units == getattr(other, 'units', None)
-        except:
-            return False
-    
-    def __lrtype__(self):
-        return LRComplex(self.units)
-
-registerType(complex, LRComplex())
-
-
 class Error(Exception):
     """LabRAD base error class.
 
@@ -1084,19 +977,6 @@ if useNumpy:
             return flat, LRList(t, depth=n)
         flat = dims + a.tostring()
         return flat, LRList(t, depth=n)
-
-if havePQ:
-    @flattener(PQ)
-    def flattenPQ(pq):
-        return LRValue(pq.getUnitName()).__flatten__(pq.getValue())
-
-@flattener(float)
-def flattenFloat(f):
-    return LRValue().__flatten__(f)
-
-@flattener(complex)
-def flattenComplex(c):
-    return LRComplex().__flatten__(c)
 
 
 # errors

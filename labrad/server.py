@@ -201,7 +201,7 @@ class Signal(object):
         # TODO: isolate listeners so that one failure does not kill the rest
         if hasattr(self, 'parent'):
             for target, ID in self.listeners.items():
-                print "signalling %d, %d: %s." % (target, ID, data)
+                #print "signalling %d, %d: %s." % (target, ID, data)
                 self.parent.prot.sendPacket(target, (0, 0), 0, (ID, data))
 
     def connect(self, key):
@@ -383,14 +383,14 @@ class LabradServer(protocol.ClientFactory):
                 sig.disconnect(ID)
 
     def handleSignalSignup(self, sig):
-        print 'server: %s, creating signal: %s' % (self.name, sig.name)
+        #print 'server: %s, creating signal: %s' % (self.name, sig.name)
         @setting(sig.ID, sig.name, data=['w'], returns=[''])
         def handler(self, c, data=None):
             if data is None:
-                print "disconnect %d from signal '%s'." % (c.source, sig.name)
+                #print "disconnect %d from signal '%s'." % (c.source, sig.name)
                 sig.disconnect(c.source)
             else:
-                print "connect %d, %d to signal '%s'." % (c.source, data, sig.name)
+                #print "connect %d, %d to signal '%s'." % (c.source, data, sig.name)
                 sig.connect((c.source, data))
         setattr(self, '_signal_' + sig.name, handler)
 
@@ -401,7 +401,7 @@ class LabradServer(protocol.ClientFactory):
             self.startup.errback(reason)
         else:
             # check whether connection closed cleanly
-            print 'connection lost:', reason
+            #print 'connection lost:', reason
             if reason.check(ConnectionDone):
                 self.shutdown.callback()
             else:

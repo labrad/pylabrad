@@ -2,6 +2,13 @@ pylabrad v0.9.0
 
 
 
+Incorporated in pylabrad:
+
+=========================================
+
+PyParsing Copyright (c) 2003-2007  Paul T. McGuire
+
+
 =========================================
 
 Silk icon set 1.3

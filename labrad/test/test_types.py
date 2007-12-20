@@ -14,10 +14,9 @@
 
 from datetime import datetime
 
-from pytz import timezone
 from twisted.trial import unittest, util
 
-from labrad import types as T, constants as C
+from labrad import types as T
 
 class labradTypesTests(unittest.TestCase):
     def testTags(self):
@@ -82,12 +81,12 @@ class labradTypesTests(unittest.TestCase):
             datetime.now(),
 
             # values
-            T.Value(5),
+            5.0,
             T.Value(6, ''),
             T.Value(7, 'ms'),
-            T.Complex(8.),
-            T.Complex(9., ''),
-            T.Complex(10., 'GHz'),
+            8+0j,
+            T.Complex(9+0j, ''),
+            T.Complex(10+0j, 'GHz'),
 
             # clusters
             (1, True, 'a'),
@@ -104,6 +103,7 @@ class labradTypesTests(unittest.TestCase):
             [(1L, 'a'), (2L, 'b')],
         ]
         for data_in in tests:
+            #print data_in, T.flatten(data_in)
             data_out = T.unflatten(*T.flatten(data_in))
             self.assertEquals(data_in, data_out)
 

@@ -175,7 +175,6 @@ class LabradProtocol(protocol.Protocol):
         self.transport.write(raw)
 
     def disconnect(self):
-        print 'disconnect called...'
         self.transport.loseConnection()
 
     def timeout(self):
