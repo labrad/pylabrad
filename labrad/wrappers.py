@@ -161,14 +161,23 @@ class AsyncServerWrapper:
 
     @inlineCallbacks
     def _addSetting(self, name, labrad_name, ID):
-        setting = yield wrapAsync(
-            self._settingWrapper, self, name, labrad_name, ID)
-        self.settings[name, labrad_name, ID] = setting
-        setattr(self, name, setting)
+        try:
+            setting = yield wrapAsync(
+                self._settingWrapper, self, name, labrad_name, ID)
+        except:
+            pass
+        else:
+            self.settings[name, labrad_name, ID] = setting
+            setattr(self, name, setting)
 
+    @inlineCallbacks
     def _refreshSetting(self, name):
         setting = getattr(self, name)
-        return setting._refresh()
+        try:
+            yield setting._refresh()
+        except:
+            yield self._delSetting(name)
+        
 
     def _delSetting(self, name):
         if hasattr(self, name):
@@ -269,16 +278,23 @@ class AsyncClient:
 
     @inlineCallbacks
     def _addServer(self, name, labrad_name, ID):
-        server = yield wrapAsync(
-            self._serverWrapper, self, name, labrad_name, ID)
-        self.servers[name, labrad_name, ID] = server
-        setattr(self, name, server)
+        try:
+            server = yield wrapAsync(
+                self._serverWrapper, self, name, labrad_name, ID)
+        except:
+            pass
+        else:
+            self.servers[name, labrad_name, ID] = server
+            setattr(self, name, server)
 
+    @inlineCallbacks
     def _refreshServer(self, name):
         if hasattr(self, name):
             server = getattr(self, name)
-            return server._refresh()
-        return defer.succeed(None)
+            try:
+                yield server._refresh()
+            except:
+                yield self._delServer(name)
 
     def _delServer(self, name):
         if hasattr(self, name):
