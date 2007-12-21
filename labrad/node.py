@@ -44,8 +44,6 @@ from twisted.plugin import getPlugins
 
 from zope.interface import Interface, implements
 
-defer.setDebugging(True)
-
 def findEnvironmentVars(string):
     return re.findall('%([^%]+)%', string)
 

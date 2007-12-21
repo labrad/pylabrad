@@ -785,7 +785,7 @@ for name, unit in _unit_table.items():
 c       = 299792458.*m/s                   # speed of light
 mu0     = 4.e-7*pi*N/A**2                  # permeability of vacuum
 eps0    = 1/mu0/c**2                       # permittivity of vacuum
-Grav    = 6.67259e-11*m**3/kg/s**2         # gravitational constant
+G       = 6.67259e-11*m**3/kg/s**2         # gravitational constant
 hplanck = 6.6260755e-34*J*s                # Planck constant
 hbar    = hplanck/(2*pi)                   # Planck constant / 2pi
 e       = 1.60217733e-19*C                 # elementary charge
@@ -802,6 +802,7 @@ Bohr    = 4*pi*eps0*hbar**2/me/e**2        # Bohr radius
 ha      = 10000*m**2                       # hectare
 b       = 1.e-28*m                         # barn
 Hartree = me*e**4/16/pi**2/eps0**2/hbar**2 # Wavenumbers/inverse cm
+rootHz  = sqrtHz = Hz**0.5                 # for power spectral density
 tsp     = 4.92892159375*ml # teaspoon
 tbsp    = 3*tsp            # tablespoon
 floz    = 2*tbsp           # fluid ounce

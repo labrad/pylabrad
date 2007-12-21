@@ -45,18 +45,12 @@ class ImageResource(rend.Page):
         return static.File(os.path.join(IMAGE_DIR, name),
                            defaultType='image/png')
 
-goHome = lambda _: (url.root, ())
-
-def printResult(result):
-    print result
-    return result
+# redirect to root page and clear query parameters
+goHome = lambda _: (url.root.clear(), ())
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
     return [s for s in servers if s.startswith('node')]
-
-class DumbInterface:
-    pass
 
 class ServerResource(rend.Page):
     addSlash = True
@@ -72,19 +66,16 @@ class ServerResource(rend.Page):
             failure.trap(Exception)
             ISession(ctx).fields['flash'] = (data, srv.name, setting, failure)
         return d.addErrback(saveException).addCallback(goHome)
-    
-    def data_name(self, ctx, srv):
-        return self.original.name
-
-    def data_descr(self, ctx, srv):
-        return self.original.__doc__
-
-    def data_notes(self, ctx, srv):
-        return self.original.notes
 
     def data_settings(self, ctx, srv):
         settings = self.original.settings.values()
         return sorted(settings, key=lambda s: s.ID)
+
+    def render_server(self, ctx, data):
+        ctx.tag.fillSlots('name', self.original._labrad_name)
+        ctx.tag.fillSlots('descr', self.original.__doc__)
+        ctx.tag.fillSlots('notes', self.original.notes)
+        return ctx.tag
 
     def render_setting(self, ctx, setting):
         return ctx.tag[
@@ -103,14 +94,16 @@ class ServerResource(rend.Page):
                 T.title['LabRAD Server'],
             ],
             T.body[
-                T.p[T.a(href=url.root)['<< back']],
-                T.h1[data_name],
-                T.p[data_descr],
-                T.p[data_notes],
-                T.h4['Settings'],
-                T.ul(data=T.directive('settings'), render=rend.sequence)[
-                    T.li(pattern='item', render=T.directive('setting')),
-                    T.li(pattern='empty')[T.td['No registered settings.']]
+                T.p[T.a(href=url.root.clear())['<< back']],
+                T.div(render=T.directive('server'))[
+                    T.h1[T.slot('name')],
+                    T.p[T.slot('descr')],
+                    T.p[T.slot('notes')],
+                    T.h4['Settings'],
+                    T.ul(data=T.directive('settings'), render=rend.sequence)[
+                        T.li(pattern='item', render=T.directive('setting')),
+                        T.li(pattern='empty')[T.td['No registered settings.']]
+                    ]
                 ]
             ]
         ])
@@ -125,7 +118,6 @@ class ControllerPage(rend.Page):
         if not cxn:
             returnValue(self)
         elif name in cxn.servers:
-            print "returning server resource:", name
             srv = ServerResource(cxn.servers[name])
             srv.realm = self.realm
             returnValue(srv)
