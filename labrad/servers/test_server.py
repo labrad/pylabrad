@@ -32,9 +32,6 @@ class TestServer(LabradServer):
     name = 'Python Test Server'
     testMode = True
 
-    #def initServer(self):
-    #    raise Exception()
-
     def serverConnected(self, data):
         print 'connected:', data
 

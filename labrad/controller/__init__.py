@@ -20,7 +20,7 @@ from twisted.cred import portal, checkers, credentials
 from nevow import loaders, rend, tags as T, entities as E, \
                   url, inevow, guard, athena, static
 from nevow.taglibrary import tabbedPane
-from nevow.inevow import ISession
+from nevow.inevow import ISession, IStatusMessage
 from zope.interface import implements
 
 from labrad.config import ConfigFile, configPath
@@ -28,44 +28,50 @@ from labrad.wrappers import AsyncClient
 
 import os
 
-REFRESH = '__refresh__'
-IMAGES = '__images__'
+REFRESH = 'refresh'
+IMAGES = 'images'
+SCRIPT = 'js'
 
 RED = 'color:rgb(%d,%d,%d)' % (180,0,0)
 GREEN = 'color:rgb(%d,%d,%d)' % (0,180,0)
 GRAY = 'color:rgb(%d,%d,%d)' % (180,180,180)
 
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
-IMAGE_DIR = os.path.join(HERE_DIR, 'images')
 IMG = lambda name, **kw: T.img(src=url.root.child(IMAGES).child(name + '.png'),
                                style='border:0px;', **kw)
 
-class ImageResource(rend.Page):
-    def childFactory(self, ctx, name):
-        return static.File(os.path.join(IMAGE_DIR, name),
-                           defaultType='image/png')
-
-# redirect to root page and clear query parameters
-goHome = lambda _: (url.root.clear(), ())
+LOGOUT = url.root.clear().child(guard.LOGOUT_AVATAR)
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
     return [s for s in servers if s.startswith('node')]
 
+menu = [(url.root.clear(), 'Home'),
+        (url.root.clear().child('security'), 'Security'),
+        (url.root.clear().child(REFRESH), 'Refresh')]
+
+def render_menu(ctx, data):
+    ctx.tag[ T.a(href=LOGOUT)['Logout'] ]
+    for addr, label in menu:
+        ctx.tag[ ' | ', T.a(href=addr)[label] ]
+    return ctx.tag
+
 class ServerResource(rend.Page):
     addSlash = True
 
-    def locateChild(self, ctx, segments):
+    @inlineCallbacks
+    def childFactory(self, ctx, setting):
         srv = self.original
-        setting = segments[0]
         if setting not in srv.settings:
-            return self, ()
+            returnValue(self)
         data = ctx.arg('data')
-        d = srv.settings[setting](data)
-        def saveException(failure):
-            failure.trap(Exception)
-            ISession(ctx).fields['flash'] = (data, srv.name, setting, failure)
-        return d.addErrback(saveException).addCallback(goHome)
+        try:
+            yield srv[setting](data)
+        except Exception, exc:
+            print exc
+            ISession(ctx).fields['flash'] = (data, srv.name, setting, exc)
+            print ISession(ctx).fields
+        returnValue(url.root.clear())
 
     def data_settings(self, ctx, srv):
         settings = self.original.settings.values()
@@ -94,7 +100,7 @@ class ServerResource(rend.Page):
                 T.title['LabRAD Server'],
             ],
             T.body[
-                T.p[T.a(href=url.root.clear())['<< back']],
+                T.div(render=render_menu),
                 T.div(render=T.directive('server'))[
                     T.h1[T.slot('name')],
                     T.p[T.slot('descr')],
@@ -116,40 +122,43 @@ class ControllerPage(rend.Page):
         cxn = self.realm.cxn
         yield cxn.refresh()
         if not cxn:
-            returnValue(self)
+            returnValue(url.root.clear())
         elif name in cxn.servers:
             srv = ServerResource(cxn.servers[name])
             srv.realm = self.realm
             returnValue(srv)
-        elif name == IMAGES:
-            returnValue(ImageResource(name))
         elif name == REFRESH:
-            returnValue(cxn.refresh().addCallback(lambda r: self))
+            yield cxn.refresh()
+            returnValue(url.root.clear())
+        elif name == 'security':
+            resc = SecurityPage(self.original)
+            resc.realm = self.realm
+            returnValue(resc)
         returnValue(rend.NotFound)
 
-    def data_pages(self, ctx, data):
-        cxn = self.realm.cxn
-        if cxn:
-            mgr = cxn.manager
-            return {'pages': (('Servers', ServerList(cxn)),
-                              ('Security', IPInfo(mgr)))}
-        else:
-            return {'pages': (('Servers', T.p['Not connected to LabRAD...']),
-                              ('Security', T.p['Not connected to LabRAD...']))}
+    child_images = static.File(os.path.join(HERE_DIR, IMAGES),
+                               defaultType='image/png')
+    child_script = static.File(os.path.join(HERE_DIR, SCRIPT),
+                               defaultType='text/javascript')
+
+    def render_body(self, ctx, data):
+        return ServerList(self.realm.cxn)
 
     docFactory = loaders.stan(
         T.html[
             T.head[
                 T.title['LabRAD Controller'],
-                tabbedPane.tabbedPaneGlue.inlineGlue
+                #T.script(type="text/javascript", src="script/jquery.js"),
             ],
             T.body[
-                T.p[ T.a(href=guard.LOGOUT_AVATAR)['Logout'], ' | ',
-                     T.a(href=url.root.child(REFRESH))['Refresh'] ],
-                T.invisible(data=T.directive('pages'),
-                            render=tabbedPane.tabbedPane)
+                T.div(render=render_menu),
+                T.invisible(render=T.directive('body')),
             ]
         ])
+
+class SecurityPage(ControllerPage):
+    def render_body(self, ctx, data):
+        return IPInfo(self.realm.cxn.manager)
 
 class ServerList(rend.Fragment):
     def render_header(self, ctx, data):
@@ -158,8 +167,8 @@ class ServerList(rend.Fragment):
         im = IMG('arrow_refresh')
         return ctx.tag[
             T.td[T.b['server']],
-            [T.td(colspan=3)[T.b[n], E.nbsp,
-             T.a(href=url.root.child('node_'+n).child('refresh'))[im]]
+            [T.td(colspan=2)[T.b[n], E.nbsp,
+             T.a(href=url.root.child('node_'+n).child('refresh_servers'))[im]]
              for n in nodes]
         ]
 
