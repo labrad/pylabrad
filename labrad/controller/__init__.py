@@ -71,7 +71,7 @@ class ServerResource(rend.Page):
             print exc
             ISession(ctx).fields['flash'] = (data, srv.name, setting, exc)
             print ISession(ctx).fields
-        returnValue(url.root.clear())
+        returnValue(url.here.clear().parent())
 
     def data_settings(self, ctx, srv):
         settings = self.original.settings.values()
