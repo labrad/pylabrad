@@ -13,6 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+
 """
 LabRAD <-> Python data conversion
 
@@ -31,6 +32,7 @@ from struct import pack, unpack
 import time
 from types import InstanceType
 from datetime import timedelta, datetime
+from itertools import chain
 
 from labrad import constants as C, units as U
 from labrad.units import Value, Complex
@@ -40,7 +42,7 @@ try:
     useNumpy = True
 except:
     useNumpy = False
-useNumpy = False
+#useNumpy = False
 
 # helper classes
 
@@ -78,15 +80,25 @@ class Buffer(object):
     def __init__(self, s):
         self.s = s
 
-    def get(self, i):
+    def get(self, i=1):
         temp, self.s = self.s[:i], self.s[i:]
         return temp
+
+    def peek(self, i=1):
+        return self.s[:i]
 
     def __len__(self):
         return len(self.s)
 
     def __str__(self):
         return self.s
+
+    def strip(self, chars):
+        self.s = self.s.strip(chars)
+        return self
+
+    def index(self, char):
+        return self.s.index(char)
         
 
 # typetag parsing
@@ -99,13 +111,13 @@ def parseTypeTag(s):
     try:
         if isinstance(s, LRType):
             return s
-        s = stripComments(s)
-        ## TODO: this is a hack.  get rid of it.
+        s = Buffer(stripComments(s))
+        ## TODO: this is a workaround for a bug in the manager
         if s == '_':
             return LRNone()
         types = []
         while len(s):
-            t, s = parseSingleType(s)
+            t = parseSingleType(s)
             types.append(t)
         if len(types) == 0:
             return LRNone()
@@ -119,10 +131,10 @@ def parseTypeTag(s):
 
 def parseSingleType(s):
     """Parse a single type at the beginning of a type string."""
-    s = s.strip(WHITESPACE)
-    t, s = _parsers[s[:1]](s[1:])
-    s = s.strip(WHITESPACE)
-    return t, s
+    s.strip(WHITESPACE)
+    t = _parsers[s.get()](s)
+    s.strip(WHITESPACE)
+    return t
 
 def stripComments(s):
     """Remove comments from a type tag.
@@ -130,30 +142,27 @@ def stripComments(s):
     Inline comments are delimited by curly brackets {} and may not be nested.
     In addition, anything after a colon : is considered a comment.
     """
-    s = re.sub(COMMENTS, '', s)
     # TODO: ignore colon inside unit strings
-    s = s.split(':')[0]
-    return s
+    return COMMENTS.sub('', s).split(':')[0]
 
 def parseNumber(s):
     """Parse an integer at the beginning of a string."""
-    s = s.strip(WHITESPACE)
+    s.strip(WHITESPACE)
     n = d = 0
-    while s and s[:1] in '0123456789':
-        n, s = 10*n + int(s[:1]), s[1:]
+    while len(s) and s.peek() in '0123456789':
+        n = 10*n + int(s.get())
         d += 1
     if d == 0:
         n = None # no digits
-    return n, s
+    return n
 
 def parseUnits(s):
     """Parse units from a typestring."""
     s = s.strip(WHITESPACE)
-    if s[:1] != '[':
-        return None, s
-    close = s.index(']')
-    units, s = s[1:close], s[close+1:]
-    return units, s
+    if s.peek() != '[':
+        return None
+    length = s.index(']') + 1
+    return s.get(length)[1:-1]
 
 
 # a registry of types and type functions that can determine
@@ -203,7 +212,7 @@ def getType(obj):
     if t in _typeFuncs:
         return _typeFuncs[t](obj)
     else:
-        # check if we have a flattener for a superclass
+        # check if we have a type function for a superclass
         for cls in _typeFuncs:
             if issubclass(t, cls):
                 return _typeFuncs[cls](obj)
@@ -354,7 +363,7 @@ class LRType(object):
         to consume some more of the string to determine the type.  It
         should return a tuple of (type object, rest of string).
         """
-        return cls(), s
+        return cls()
 
     @classmethod
     def __lrtype__(cls, obj):
@@ -418,6 +427,7 @@ class LRNone(LRType, Singleton):
         return ''
 
 registerType(type(None), LRNone())
+
 
 class LRBool(LRType, Singleton):
     """A simple boolean."""
@@ -534,8 +544,7 @@ class LRValue(LRType):
 
     @classmethod
     def __parse__(cls, s):
-        units, s = parseUnits(s)
-        return cls(units), s
+        return cls(parseUnits(s))
 
     def __eq__(self, other):
         return type(self) == type(other) and self.units == other.units
@@ -606,17 +615,15 @@ class LRCluster(LRType):
     @classmethod
     def __parse__(cls, s):
         items = []
-        while len(s) and s[:1] != ')':
-            t, s = parseSingleType(s)
-            items.append(t)
-        if s[:1] != ')':
+        while len(s) and s.peek(1) != ')':
+            items.append(parseSingleType(s))
+        if s.get(1) != ')':
             raise Exception('Unbalanced parentheses in cluster.')
-        return cls(*items), s[1:]
+        return cls(*items)
 
     @classmethod
     def __lrtype__(cls, c):
-        items = [getType(i) for i in c]
-        return cls(*items)
+        return cls(*[getType(i) for i in c])
 
     def __len__(self):
         return len(self.items)
@@ -666,8 +673,8 @@ class LRList(LRType):
             self.__unflatten__ = self.__unflatten_array__
 
     def __str__(self):
-        depth = '' if self.depth == 1 else str(self.depth)
-        elem = '_' if self.elem is None else str(self.elem)
+        depth = str(self.depth) if self.depth > 1 else ''
+        elem = str(self.elem) if self.elem is not None else '_'
         return '*%s%s' % (depth, elem)
 
     def __repr__(self):
@@ -678,17 +685,17 @@ class LRList(LRType):
     def __parse__(cls, s):
         s = s.strip(WHITESPACE)
         # get the list dimensionality
-        n, s = parseNumber(s)
+        n = parseNumber(s)
         if n == 0:
             raise Exception('Cannot create 0-dimensional list.')
         n = n or 1 # if there were no digits, make a 1D list
         s = s.strip(WHITESPACE)
-        if s[:1] == '_':
-            # empty list
-            return cls(None, n), s[1:]
+        if s.peek() == '_':
+            t = None # empty list
+            s.get() # drop underscore
         else:
-            t, s = parseSingleType(s)
-            return cls(t, n), s
+            t = parseSingleType(s)
+        return cls(t, n)
 
     @classmethod
     def __lrtype__(cls, L):
@@ -697,12 +704,10 @@ class LRList(LRType):
             depth, temp = depth+1, temp[0]
 
         def iterND(ls):
-            if isinstance(ls, list):
-                for i in ls:
-                    for e in iterND(i):
-                        yield e
+            if len(ls) and isinstance(ls[0], list):
+                return chain(*(iterND(i) for i in ls))
             else:
-                yield ls
+                return iter(ls)
 
         t = LRAny()
         for elem in iterND(L):
@@ -760,20 +765,27 @@ class LRList(LRType):
             a = array([])
             a.shape = (0,) * n
             return a
+
+        def makeArray(t, width):
+            return fromstring(s.get(size * width), dtype=dtype(t))
+        
         if self.elem == LRBool():
-            t = dtype('bool')
-            L = size * 1
+            a = makeArray('bool', 1)
         elif self.elem == LRInt():
-            t = dtype('int32')
-            L = size * 4
+            a = makeArray('int32', 4)
         elif self.elem == LRWord():
-            t = dtype('uint32')
-            L = size * 4
+            a = makeArray('uint32', 4)
+        elif self.elem <= LRValue():
+            print 'float'
+            a = makeArray('float64', 8)
+            a = U.withUnits(a, self.elem.units)
+        elif self.elem <= LRComplex():
+            print 'complex'
+            a = makeArray('complex128', 16)
+            a = U.withUnits(a, self.elem.units)
         else:
+            print 'objects'
             a = array([unflatten(s, self.elem) for _ in xrange(size)])
-            a.shape = dims
-            return a
-        a = fromstring(s.get(L), dtype=t)
         a.shape = dims
         return a
 
@@ -824,8 +836,8 @@ class LRError(LRType):
 
     @classmethod
     def __parse__(cls, s):
-        payload, s = parseSingleType(s)
-        return LRError(payload), s
+        payload = parseSingleType(s)
+        return LRError(payload)
 
     def __eq__(self, other):
         return type(self) == type(other) and self.payload == other.payload
@@ -894,7 +906,7 @@ class Error(Exception):
     def __lrflatten__(self):
         s, t = flatten((self.code, self.msg, self.payload))
         return s, LRError(t.items[2])
-    
+
 
 # python flatteners
 

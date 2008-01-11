@@ -16,7 +16,8 @@ def makeQuantity(value, unit=None):
 options:
     has-a value, has-a unit (Scientific Python approach)
     is-a value, has-a unit
-    is-a value, is-a thingWithUnits, has-a unit *
+    is-a value, is-a thingWithUnits, has-a unit
+	is-a value, is-a thingWithUnits >> subclass with units stored in class *
 
 + we can use isinstance to determine what the PQs are.
 + no extra storage on instances
@@ -28,9 +29,7 @@ options:
 
 
 makeValue(5, 'm')
-makeValue('5 m')
 
 U(5, 'm')
-U('5 m')
 
 5 * U['m']

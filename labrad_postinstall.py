@@ -47,12 +47,11 @@ def install():
     print "Creating start menu entries..."
     mkdir(menuPath)
 
-
     nodeShortcut = os.path.join(menuPath, "LabRAD Node.lnk")
     if os.path.isfile(nodeShortcut):
         os.remove(nodeShortcut)
     create_shortcut("twistd.py", "Node to start and stop LabRAD servers",
-	                nodeShortcut, "-n labradnode")
+	            nodeShortcut, "-n labradnode")
     file_created(nodeShortcut)
 	
     # create local copy of configuration
@@ -70,7 +69,7 @@ def install():
     if os.path.isfile(controllerShortcut):
         os.remove(controllerShortcut)
     create_shortcut("twistd.py", "Web control for LabRAD, localhost:7667",
-	                controllerShortcut, "-n labradcontrol")
+	            controllerShortcut, "-n labradcontrol")
     file_created(controllerShortcut)
     
     # create local copy of configuration

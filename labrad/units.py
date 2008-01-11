@@ -20,6 +20,7 @@
 # last revision: 2007-5-25
 #
 
+
 """
 Physical quantities with units.
 
@@ -138,7 +139,7 @@ class HasUnits(object):
 
     @property
     def value(self):
-        return self._numType(self)
+        return self.__class__._numType(self)
 
     @property
     def units(self):
@@ -264,23 +265,15 @@ class HasUnits(object):
         num = ''
         denom = ''
         for unit, power in zip(_base_names, self.unit.powers):
-            if power < 0:
-                denom += '/' + unit
-                if power != -1:
-                    denom += '**' + str(-power)
-            elif power > 0:
-                num += '*' + unit
-                if power != 1:
-                    num += '**' + str(power)
+            if power != 1 and power != -1:
+                unit += '**' + str(abs(power))
+            if power < 0: denom += '/' + unit
+            elif power > 0: num += '*' + unit
         for unit, power in self.unit.lex_names.items():
-            if power < 0:
-                denom += '/' + unit
-                if power != -1:
-                    denom += '**' + str(-power)
-            elif power > 0:
-                num += '*' + unit
-                if power != 1:
-                    num += '**' + str(power)
+            if power != 1 and power != -1:
+                unit += '**' + str(abs(power))
+            if power < 0: denom += '/' + unit
+            elif power > 0: num += '*' + unit
         if len(num) == 0:
             num = '1'
         else:
@@ -298,8 +291,7 @@ class HasUnits(object):
         one of the quantity
         @rtype: C{bool}
         """
-        unit = _findUnit(unit)
-        return self.unit.isCompatible(unit)
+        return self.unit.isCompatible(_findUnit(unit))
 
     def getValue(self):
         """Return value of physical quantity (no unit)."""
@@ -316,6 +308,8 @@ class HasUnits(object):
         """Return value of physical quantity expressed in new units."""
         if isinstance(newUnit, HasUnits):
             newUnit = newUnit.unit
+        if not isinstance(newUnit, (str, Unit)):
+            raise Exception(newUnit)
         return self.inUnitsOf(newUnit).getValue()
 
 class Value(HasUnits, float):
@@ -326,11 +320,20 @@ class Complex(HasUnits, complex):
 
 _classDict = {float: Value, complex: Complex}
 
+try:
+    from numpy import array, ndarray
+except ImportError:
+    array = ndarray = None
+
 def withUnits(value, unit=None):
     t = type(1.0 * value)
+    # numpy workaround: new values are constructed with
+    # array(), rather than the class ndarray itself
+    nt = t if t != ndarray else array
+    
     if t not in _classDict:
-        valueType = type('%sWithUnits' % t.__name__,
-                         (HasUnits, t), {'_numType': t})
+        valueType = type('%sWithUnits' % nt.__name__,
+                         (HasUnits, t), {'_numType': nt})
         _classDict[t] = valueType
     cls = _classDict[t]
     return cls(value, unit)
@@ -513,7 +516,7 @@ class Unit(object):
         offset = self.offset - (other.offset * other.factor / self.factor)
         return (factor, offset)
 
-    def isCompatible (self, other):     # added 1998/10/01 GPW
+    def isCompatible(self, other):     # added 1998/10/01 GPW
         """
         @param other: another unit
         @type other: L{Unit}
