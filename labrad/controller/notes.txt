@@ -1,0 +1,8 @@
+athena:
+    + can push events to the browser
+    - don't know how to instantiate widgets on the fly
+
+AJAX (dojo):
+    + client side logic
+    + learn ajax, javascript
+    - how to incorporate with nevow?

@@ -40,7 +40,7 @@ from labrad.units import Value, Complex
 try:
     from numpy import ndarray, array, dtype, fromstring
     useNumpy = True
-except:
+except ImportError:
     useNumpy = False
 #useNumpy = False
 
@@ -78,21 +78,34 @@ class RegisterParser(type):
 
 class Buffer(object):
     def __init__(self, s):
+        if isinstance(s, Buffer):
+            self.s = s.s
         self.s = s
+        self.rh = 0
 
     def get(self, i=1):
         temp, self.s = self.s[:i], self.s[i:]
+        self.rh -= i
         return temp
 
     def peek(self, i=1):
         return self.s[:i]
 
+    def peekrh(self, i=1):
+        return self.s[rh:rh+i]
+        
+    def skip(self, i=1);
+        self.rh += rh
+        
     def __len__(self):
         return len(self.s)
 
     def __str__(self):
         return self.s
 
+    def __getitem__(self, key):
+        return self.s[key]
+        
     def strip(self, chars):
         self.s = self.s.strip(chars)
         return self
@@ -390,6 +403,11 @@ class LRType(object):
     def isFullySpecified(self):
         return True
 
+    isFixedWidth = True
+        
+    def __width__(self, s):
+        return self.width
+        
     def __unflatten__(self, s):
         """Unflatten data from a string representation.
 
@@ -430,12 +448,14 @@ class LRNone(LRType, Singleton):
             raise FlatteningError(data, self)
         return ''
 
-registerType(type(None), LRNone())
+NONE = LRNone()
+registerType(type(None), NONE)
 
 
 class LRBool(LRType, Singleton):
     """A simple boolean."""
     tag = 'b'
+    width = 1
     def __unflatten__(self, s):
         return bool(ord(s.get(1)))
     
@@ -444,12 +464,14 @@ class LRBool(LRType, Singleton):
             raise FlatteningError(b, self)
         return chr(b)
 
-registerType(bool, LRBool())
+BOOL = LRBool()
+registerType(bool, BOOL)
 
 
 class LRInt(LRType, Singleton):
     """A signed 32-bit integer."""
     tag = 'i'
+    width = 4
     def __unflatten__(self, s):
         return unpack('i', s.get(4))[0]
     
@@ -458,12 +480,14 @@ class LRInt(LRType, Singleton):
             raise FlatteningError(n, self)
         return pack('i', n)
 
-registerType(int, LRInt())
+INT = LRInt()
+registerType(int, INT)
 
 
 class LRWord(LRType, Singleton):
     """An unsigned 32-bit integer."""
     tag = 'w'
+    width = 4
     def __unflatten__(self, s):
         return long(unpack('I', s.get(4))[0])
     
@@ -472,7 +496,8 @@ class LRWord(LRType, Singleton):
             raise FlatteningError(n, self)
         return pack('I', n)
 
-registerType(long, LRWord())
+WORD = LRWord()
+registerType(long, WORD)
 
 
 class LRStr(LRType, Singleton):
@@ -482,12 +507,18 @@ class LRStr(LRType, Singleton):
         n = unpack('i', s.get(4))[0]
         return s.get(n)
     
+    isFixedWidth = False
+    
+    def __width__(self, s):
+        return unpack('i', s.peekrh(4))[0] + 4
+    
     def __flatten__(self, s):
         if not isinstance(s, str):
             raise FlatteningError(s, self)
         return pack('I', len(s)) + s
 
-registerType(str, LRStr())
+STR = LRStr()
+registerType(str, STR)
 
 
 def timeOffset():
@@ -504,6 +535,7 @@ class LRTime(LRType, Singleton):
     """
 
     tag = 't'
+    width = 16
     
     def __unflatten__(self, s):
         secs, us = unpack('QQ', s.get(16))
@@ -517,13 +549,15 @@ class LRTime(LRType, Singleton):
         us = long(float(diff.microseconds)/pow(10,6)*pow(2,64))
         return pack('QQ', secs, us)
 
-registerType(datetime, LRTime())
+TIME = LRTime()
+registerType(datetime, TIME)
 
 
 class LRValue(LRType):
     """Represents the type of a real number that carries units."""
     
     tag = 'v'
+    width = 8
 
     def __init__(self, units=None):
         self.units = units
@@ -583,6 +617,7 @@ class LRComplex(LRValue):
     """Represents the type of a complex number that carries units."""
     
     tag = 'c'
+    width = 16
     
     def __unflatten__(self, s):
         real, imag = unpack('dd', s.get(16))
@@ -608,6 +643,9 @@ class LRCluster(LRType):
 
     def __init__(self, *items):
         self.items = items
+        self.isFixedWidth = all(item.isFixedWidth for item in items)
+        if self.isFixedWidth:
+            self.width = sum(item.width for item in items)
 
     def __str__(self):
         return '(%s)' % ''.join(str(i) for i in self.items)
@@ -649,7 +687,15 @@ class LRCluster(LRType):
 
     def isFullySpecified(self):
         return all(t.isFullySpecified() for t in self.items)
-
+    
+    def __width__(self, s):
+        width = 0
+        for i in self.items:
+            w = i.width if i.isFixedWidth else i.__width__(s)
+            width += w
+            s.skip(w)
+        return width
+        
     def __unflatten__(self, s):
         """Unflatten items into a python tuple."""
         return tuple(unflatten(s, t) for t in self.items)
@@ -671,10 +717,6 @@ class LRList(LRType):
     def __init__(self, elem=None, depth=1):
         self.elem = elem
         self.depth = depth
-
-        # use numpy arrays for numeric element types
-        if useNumpy and elem in [LRBool(), LRInt(), LRWord()]:
-            self.__unflatten__ = self.__unflatten_array__
 
     def __str__(self):
         depth = str(self.depth) if self.depth > 1 else ''
@@ -758,40 +800,6 @@ class LRList(LRType):
             else:
                 return [unflattenNDlist(s, dims[1:]) for _ in xrange(dims[0])]
         return unflattenNDlist(s, dims)
-
-    def __unflatten_array__(self, s):
-        """Unflatten to numpy array."""
-        # get list dimensions
-        n = self.depth
-        dims = unpack('i'*n, s.get(4*n))
-        size = reduce(lambda x, y: x*y, dims)
-        if self.elem is None or size == 0:
-            a = array([])
-            a.shape = (0,) * n
-            return a
-
-        def makeArray(t, width):
-            return fromstring(s.get(size * width), dtype=dtype(t))
-        
-        if self.elem == LRBool():
-            a = makeArray('bool', 1)
-        elif self.elem == LRInt():
-            a = makeArray('int32', 4)
-        elif self.elem == LRWord():
-            a = makeArray('uint32', 4)
-        elif self.elem <= LRValue():
-            print 'float'
-            a = makeArray('float64', 8)
-            a = U.withUnits(a, self.elem.units)
-        elif self.elem <= LRComplex():
-            print 'complex'
-            a = makeArray('complex128', 16)
-            a = U.withUnits(a, self.elem.units)
-        else:
-            print 'objects'
-            a = array([unflatten(s, self.elem) for _ in xrange(size)])
-        a.shape = dims
-        return a
 
     def __flatten__(self, L):
         """Flatten (nested) python list to LabRAD list.
@@ -920,82 +928,84 @@ class Word(int):
         return LRWord()
 
 class List(list):
-    def __init__(self, tag, data):
+    def __init__(self, data, tag):
         self.lrtype = parseTypeTag(tag)
         self.data = data
-        self._unflat = False
-        self._unflat_array = False
     
     def __lrtype__(self):
         return self.lrtype
     
     def __len__(self):
-        self._unflatten()
-        return len(list(self))
+        return len(self.list)
     
     def __iter__(self):
-        self._unflatten()
-        return iter(list(self))
+        return iter(self.list)
         
     def __getitem__(self, key):
-        self._unflatten()
-        return list(self)[key]
+        return self.list[key]
         
     def __setitem__(self, key, value):
-        self._unflatten()
-        list(self)[key] = value
+        self.list[key] = value
         
     def __delitem__(self, key):
-        self._unflatten()
-        del list(self)[key]
+        del self.list[key]
         
-    def _unflatten(self):
+    def __contains__(self, item):
+        return self.list.__contains__(item)
+        
+    @property
+    def list(self):
         """Unflatten to nested python list."""
-        if self._unflat:
-            return
+        if hasattr(self, '_list'):
+            return self._list
         s = Buffer(self.data)
         n, elem = self.lrtype.depth, self.lrtype.elem
         dims = unpack('i'*n, s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if elem is None or size == 0:
-            unflat = nestedList([], n-1))
+            self._list = nestedList([], n-1)
         else:
-            def unflattenND(s, dims):
+            def unflattenND(dims):
                 if len(dims) == 1:
                     return [unflatten(s, elem) for _ in xrange(dims[0])]
                 else:
-                    return [unflattenND(s, dims[1:]) for _ in xrange(dims[0])]
-            unflat = unflattenND(s, dims))
-        self.extend(unflat)
-        self._unflat = True
+                    return [unflattenND(dims[1:]) for _ in xrange(dims[0])]
+            self._list = unflattenND(dims)
+        return self._list
         
-    def _unflatten_array(self, s):
+    @property
+    def array(self):
         """Unflatten to numpy array."""
-        if self._unflat_array:
-            return
+        if hasattr(self, '_array'):
+            return self._array
+        if hasattr(self, '_list'):
+            self._array = array(self._list)
+            return self._array
         s = Buffer(self.data)
         n, elem = self.lrtype.depth, self.lrtype.elem
         dims = unpack('i'*n, s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
-        if elem is None or size == 0:
-            a = array([])
-            dims = (0,) * n
-        elif elem == LRBool():
-            t = dtype('bool')
-            L = size * 1
+        
+        def unflattenArray(t, width):
+            return fromstring(s.get(size * width), dtype=dtype(t))
+        
+        if elem == LRBool():
+            a = unflattenArray('bool', 1)
         elif elem == LRInt():
-            t = dtype('int32')
-            L = size * 4
+            a = unflattenArray('int32', 4)
         elif elem == LRWord():
-            t = dtype('uint32')
-            L = size * 4
+            a = unflattenArray('uint32', 4)
+        elif elem <= LRValue():
+            a = unflattenArray('float64', 8)
+            a = U.withUnits(a, elem.units)
+        elif elem <= LRComplex():
+            a = unflattenArray('complex128', 16)
+            a = U.withUnits(a, elem.units)
         else:
-            a = array([unflatten(s, self.elem) for _ in xrange(size)])
-            a.shape = dims
-            return a
-        a = fromstring(s.get(L), dtype=t)
+            a = array([unflatten(s, elem) for _ in xrange(size)])
         a.shape = dims
-        return a
+        self._array = a
+        return self._array
         
 # python flatteners
 
@@ -1015,46 +1025,6 @@ def flattenTuple(c):
     items, types = zip(*[flatten(i) for i in c])
     return ''.join(items), LRCluster(*types)
 
-
-@flattener(list)
-def flattenList(L):
-    """Flatten (nested) python list to LabRAD list.
-
-    Lists must be homogeneous and rectangular.
-    """
-    # TODO: make list flattening recursive
-    n = 1
-    temp = L
-    while len(temp) and isinstance(temp[0], list):
-        n += 1
-        temp = temp[0]
-    def flattenNDlist(ls):
-        if not len(ls):
-            items, types, lengths = [''], [None], [[]]
-        elif isinstance(ls[0], list):
-            items, types, lengths = \
-                zip(*[flattenNDlist(row) for row in ls])
-        else:
-            items, types = zip(*[flatten(i) for i in ls])
-            lengths = [[]]
-        base_t = types[0]
-        for t in types:
-            if t <= base_t:
-                base_t = t
-            elif base_t <= t:
-                pass
-            else:
-                raise Exception('Inhomogeneous list.')
-        for length in lengths:
-            if length != lengths[0]:
-                raise Exception('List is not rectangular.')
-        return ''.join(items), base_t, [len(ls)] + list(lengths[0])
-    items, t, lengths = flattenNDlist(L)
-    if t is None:
-        lengths, flat = [0] * n, ''
-    else:
-        flat = ''.join(items)
-    return pack('i' * len(lengths), *lengths) + flat, LRList(t, depth=n)
 
 if useNumpy:
     @flattener(ndarray)
