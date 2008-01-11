@@ -101,6 +101,7 @@ class Buffer(object):
         return self.s.index(char)
         
 
+
 # typetag parsing
 
 WHITESPACE = ' ,\t'
@@ -217,6 +218,9 @@ def getType(obj):
             if issubclass(t, cls):
                 return _typeFuncs[cls](obj)
     raise TypeError("No LabRAD type for: %r." % obj)
+
+def isType(obj, tag):
+    return getType(obj) <= parseTypeTag(tag)
 
 
 # flattening and unflattening
@@ -907,7 +911,92 @@ class Error(Exception):
         s, t = flatten((self.code, self.msg, self.payload))
         return s, LRError(t.items[2])
 
+class Int(int):
+    def __lrtype__(self):
+        return LRInt()
 
+class Word(int):
+    def __lrtype__(self):
+        return LRWord()
+
+class List(list):
+    def __init__(self, tag, data):
+        self.lrtype = parseTypeTag(tag)
+        self.data = data
+        self._unflat = False
+        self._unflat_array = False
+    
+    def __lrtype__(self):
+        return self.lrtype
+    
+    def __len__(self):
+        self._unflatten()
+        return len(list(self))
+    
+    def __iter__(self):
+        self._unflatten()
+        return iter(list(self))
+        
+    def __getitem__(self, key):
+        self._unflatten()
+        return list(self)[key]
+        
+    def __setitem__(self, key, value):
+        self._unflatten()
+        list(self)[key] = value
+        
+    def __delitem__(self, key):
+        self._unflatten()
+        del list(self)[key]
+        
+    def _unflatten(self):
+        """Unflatten to nested python list."""
+        if self._unflat:
+            return
+        s = Buffer(self.data)
+        n, elem = self.lrtype.depth, self.lrtype.elem
+        dims = unpack('i'*n, s.get(4*n))
+        size = reduce(lambda x, y: x*y, dims)
+        if elem is None or size == 0:
+            unflat = nestedList([], n-1))
+        else:
+            def unflattenND(s, dims):
+                if len(dims) == 1:
+                    return [unflatten(s, elem) for _ in xrange(dims[0])]
+                else:
+                    return [unflattenND(s, dims[1:]) for _ in xrange(dims[0])]
+            unflat = unflattenND(s, dims))
+        self.extend(unflat)
+        self._unflat = True
+        
+    def _unflatten_array(self, s):
+        """Unflatten to numpy array."""
+        if self._unflat_array:
+            return
+        s = Buffer(self.data)
+        n, elem = self.lrtype.depth, self.lrtype.elem
+        dims = unpack('i'*n, s.get(4*n))
+        size = reduce(lambda x, y: x*y, dims)
+        if elem is None or size == 0:
+            a = array([])
+            dims = (0,) * n
+        elif elem == LRBool():
+            t = dtype('bool')
+            L = size * 1
+        elif elem == LRInt():
+            t = dtype('int32')
+            L = size * 4
+        elif elem == LRWord():
+            t = dtype('uint32')
+            L = size * 4
+        else:
+            a = array([unflatten(s, self.elem) for _ in xrange(size)])
+            a.shape = dims
+            return a
+        a = fromstring(s.get(L), dtype=t)
+        a.shape = dims
+        return a
+        
 # python flatteners
 
 @flattener(Exception)
