@@ -42,7 +42,6 @@ try:
     useNumpy = True
 except ImportError:
     useNumpy = False
-#useNumpy = False
 
 # helper classes
 
@@ -85,16 +84,21 @@ class Buffer(object):
 
     def get(self, i=1):
         temp, self.s = self.s[:i], self.s[i:]
-        self.rh -= i
+        self.rh = max(self.rh-i, 0)
         return temp
 
     def peek(self, i=1):
         return self.s[:i]
-
-    def peekrh(self, i=1):
-        return self.s[rh:rh+i]
         
-    def skip(self, i=1):
+    def getrh(self, i=1):
+        temp = self.s[self.rh:self.rh+i]
+        self.rh += i
+        return temp
+        
+    def peekrh(self, i=1):
+        return self.s[self.rh:self.rh+i]
+        
+    def skiprh(self, i=1):
         self.rh += i
         
     def __len__(self):
@@ -102,7 +106,7 @@ class Buffer(object):
 
     def __str__(self):
         return self.s
-
+        
     def __getitem__(self, key):
         return self.s[key]
         
@@ -117,9 +121,6 @@ class Buffer(object):
 
 # typetag parsing
 
-WHITESPACE = ' ,\t'
-COMMENTS = re.compile('\{[^\{\}]*\}')
-
 def parseTypeTag(s):
     """Parse a type tag into a LabRAD type object."""
     try:
@@ -127,12 +128,11 @@ def parseTypeTag(s):
             return s
         s = Buffer(stripComments(s))
         ## TODO: this is a workaround for a bug in the manager
-        if s == '_':
+        if s.peek() == '_':
             return LRNone()
         types = []
         while len(s):
-            t = parseSingleType(s)
-            types.append(t)
+            types.append(parseSingleType(s))
         if len(types) == 0:
             return LRNone()
         elif len(types) == 1:
@@ -143,6 +143,8 @@ def parseTypeTag(s):
         print 'failed to parse:', s
         raise
 
+WHITESPACE = ' ,\t'
+        
 def parseSingleType(s):
     """Parse a single type at the beginning of a type string."""
     s.strip(WHITESPACE)
@@ -150,6 +152,8 @@ def parseSingleType(s):
     s.strip(WHITESPACE)
     return t
 
+COMMENTS = re.compile('\{[^\{\}]*\}')
+    
 def stripComments(s):
     """Remove comments from a type tag.
 
@@ -404,8 +408,10 @@ class LRType(object):
         return True
 
     isFixedWidth = True
+    width = 0
         
     def __width__(self, s):
+        s.skiprh(self.width)
         return self.width
         
     def __unflatten__(self, s):
@@ -440,6 +446,7 @@ class LRAny(LRType, Singleton):
 class LRNone(LRType, Singleton):
     """An empty piece of LabRAD data."""
     tag = ''
+    
     def __unflatten__(self, s):
         return None
     
@@ -456,6 +463,7 @@ class LRBool(LRType, Singleton):
     """A simple boolean."""
     tag = 'b'
     width = 1
+    
     def __unflatten__(self, s):
         return bool(ord(s.get(1)))
     
@@ -503,14 +511,16 @@ registerType(long, WORD)
 class LRStr(LRType, Singleton):
     """A string of bytes prefixed by a 32-bit length field."""
     tag = 's'
-    def __unflatten__(self, s):
-        n = unpack('i', s.get(4))[0]
-        return s.get(n)
-    
     isFixedWidth = False
     
     def __width__(self, s):
-        return unpack('i', s.peekrh(4))[0] + 4
+        width = unpack('i', s.getrh(4))[0]
+        s.skiprh(width)
+        return width + 4
+    
+    def __unflatten__(self, s):
+        n = unpack('i', s.get(4))[0]
+        return s.get(n)
     
     def __flatten__(self, s):
         if not isinstance(s, str):
@@ -643,10 +653,7 @@ class LRCluster(LRType):
 
     def __init__(self, *items):
         self.items = items
-        self.isFixedWidth = all(item.isFixedWidth for item in items)
-        if self.isFixedWidth:
-            self.width = sum(item.width for item in items)
-
+        
     def __str__(self):
         return '(%s)' % ''.join(str(i) for i in self.items)
 
@@ -688,13 +695,16 @@ class LRCluster(LRType):
     def isFullySpecified(self):
         return all(t.isFullySpecified() for t in self.items)
     
+    @property
+    def isFixedWidth(self):
+        if hasattr(self, '_isFixedWidth'):
+            return self._isFixedWidth
+        self._isFixedWidth = all(item.isFixedWidth for item in self.items)
+        if self._isFixedWidth:
+            self.width = sum(item.width for item in items)    
+    
     def __width__(self, s):
-        width = 0
-        for i in self.items:
-            w = i.width if i.isFixedWidth else i.__width__(s)
-            width += w
-            s.skip(w)
-        return width
+        return sum(item.__width__(s) for item in self.items)
         
     def __unflatten__(self, s):
         """Unflatten items into a python tuple."""
@@ -727,6 +737,18 @@ class LRList(LRType):
         contents = '(%r, depth=%r)' % (self.elem, self.depth)
         return self.__class__.__name__ + contents
 
+    isFixedWidth = False
+    
+    def __width__(self, s):
+        n, elem = self.depth, self.elem
+        dims = unpack('i'*n, s.getrh(4*n))
+        size = reduce(lambda x, y: x*y, dims)
+        if elem.isFixedWidth:
+            width = size * elem.width
+        else:
+            width = sum(elem.__width__(s) for _ in xrange(size))
+        return 4*n + width
+        
     @classmethod
     def __parse__(cls, s):
         s = s.strip(WHITESPACE)
@@ -787,6 +809,9 @@ class LRList(LRType):
         return self.elem.isFullySpecified()
 
     def __unflatten__(self, s):
+        data = s.get(self.__width__(s))
+        return List(data, self)
+    
         """Unflatten to nested python list."""
         # get list dimensions
         n = self.depth
@@ -821,6 +846,9 @@ class LRList(LRType):
         return pack('i' * len(lengths), *lengths) + flat
 
 registerTypeFunc(list, LRList.__lrtype__)
+if useNumpy:
+    pass
+    #registerTypeFunc(ndarray, LRList.__lrtype__)
 
 
 def nestedList(obj, n):
@@ -864,6 +892,12 @@ class LRError(LRType):
         payload = getattr(E, 'payload', None)
         return LRError(getType(payload))
 
+    isFixedWidth = False
+    
+    def __width__(self, s):
+        s.getrh(4)
+        return 4 + LRStr().__width__(s) + self.payload.__width__(s)
+        
     def __unflatten__(self, s):
         """Unflatten to Error type to capture code, message and payload."""
         if self.payload is LRNone():
@@ -927,176 +961,115 @@ class Word(int):
     def __lrtype__(self):
         return LRWord()
 
-class List(list):
+class LazyList(list):
+    """A proxy object for LabRAD lists.
+    
+    LazyList will be unflattened as needed when list methods are called,
+    or can alternately be unflattened as a numpy array, bypassing the slow
+    step of creating a large python list.
+    
+    **DO NOT instantiate LazyList directly, use the List() instead.**
+    """
     def __init__(self, data, tag):
-        self.lrtype = parseTypeTag(tag)
-        self.data = data
+        self._data = data
+        self._lrtype = parseTypeTag(tag)
     
 	def __lrtype__(self):
-		return self.lrtype
+		return self._lrtype
 	
-	def __getattribute__(self, name):
-		if name not in ['asArray', '_createArray']:
-			self._createList()
-		return list.__getattribute__(self, name)
-    
-    def __add__(self, other):
-        self._createList()
-        return list.__add__(self, other)
-    
-    def __contains__(self, item):
-        self._createList()
-        return list.__contains__(self, item)
-    
-    def __delitem__(self, key):
-        self._createList()
-        return list.__delitem__(self, key)
-    
-    def __delslice__(self, i, j):
-        self._createList()
-        return list.__delslice__(self, i, j)
-    
-    def __eq__(self, other):
-        self._createList()
-        return list.__eq__(self, other)
-
-    def __ge__(self, other):
-        self._createList()
-        return list.__ge__(self, other)
-        
-    def __getitem__(self, key):
-        self._createList()
-        return list.__getitem__(self, key)
-        
-    def __getslice__(self, i, j):
-        self._createList()
-        return list.__getslice__(self, i, j)
-        
-    def __gt__(self, other):
-        self._createList()
-        return list.__gt__(self, other)
-        
-    def __hash__(self):
-        self._createList()
-        return list.__hash__(self)
-        
-    def __iadd__(self, other):
-        self._createList()
-        return list.__iadd__(self, other)
-        
-    def __imul__(self, other):
-        self._createList()
-        return list.__imul__(self, other)
-        
-    def __iter__(self):
-        self._createList()
-        return list.__iter__(self)
-        
-    def __le__(self, other):
-        self._createList()
-        return list.__le__(self, other)
-        
-    def __len__(self):
-        self._createList()
-        return list.__len__(self)        
-        
-    def __lt__(self, other):
-        self._createList()
-        return list.__lt__(self, other)
-    
-    def __mul__(self, other):
-        self._createList()
-        return list.__mul__(self, other)
-    
-    def __ne__(self, other):
-        self._createList()
-        return list.__ne__(self, other)
-    
-    def __repr__(self):
-        self._createList()
-        return list.__repr__(self)
-    
-    def __reversed__(self):
-        self._createList()
-        return list.__reversed__(self)
-    
-    def __rmul__(self, other):
-        self._createList()
-        return list.__rmul__(self, other)
-    
-    def __setitem__(self, key, value):
-        self._createList()
-        return list.__setitem__(self, key)
-        
-    def __setslice__(self, i, j, sequence):
-        self._createList()
-        return list.__setslice__(self, i, j, sequence)
-        
     def asList(self):
-        self._createList()
+        self._unflattenList()
         return list(self)
-        
-    def _createList(self):
+    
+    def asArray(self):
+        self._unflattenArray()
+        return self._array
+    
+    def _unflattenList(self):
         """Unflatten to nested python list."""
         if hasattr(self, '_list'):
-            print "already unflattened"
             return
-        print "unflattening"
-        s = Buffer(self.data)
-        n, elem = self.lrtype.depth, self.lrtype.elem
+        cls = self.__class__
+        for attr in _listAttrs:
+            delattr(cls, attr)
+            
+        s = Buffer(self._data)
+        n, elem = self._lrtype.depth, self._lrtype.elem
         dims = unpack('i'*n, s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
+        
         if elem is None or size == 0:
-            list.extend(self, nestedList([], n-1))
+            self.extend(nestedList([], n-1))
         else:
             def unflattenND(dims):
                 if len(dims) == 1:
                     return [unflatten(s, elem) for _ in xrange(dims[0])]
                 else:
                     return [unflattenND(dims[1:]) for _ in xrange(dims[0])]
-            list.extend(self, unflattenND(dims))
+            self.extend(unflattenND(dims))
         self._list = True
-        
-    def asArray(self):
-        self._createArray()
-        return self._array
        
-    def _createArray(self):
+    def _unflattenArray(self):
         """Unflatten to numpy array."""
         if hasattr(self, '_array'):
-            print "already unflattened as array"
             return self._array
         if hasattr(self, '_list'):
-            print "creating array from list"
             self._array = array(list(self))
             return self._array
-        print "unflattening as array"
-        s = Buffer(self.data)
-        n, elem = self.lrtype.depth, self.lrtype.elem
+        
+        s = Buffer(self._data)
+        n, elem = self._lrtype.depth, self._lrtype.elem
         dims = unpack('i'*n, s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         
-        def unflattenArray(t, width):
-            return fromstring(s.get(size * width), dtype=dtype(t))
-        
-        if elem == LRBool():
-            a = unflattenArray('bool', 1)
-        elif elem == LRInt():
-            a = unflattenArray('int32', 4)
-        elif elem == LRWord():
-            a = unflattenArray('uint32', 4)
+        make = lambda t, width: fromstring(s.get(size*width), dtype=dtype(t))
+        if elem == LRBool(): a = make('bool', 1)
+        elif elem == LRInt(): a = make('int32', 4)
+        elif elem == LRWord(): a = make('uint32', 4)
         elif elem <= LRValue():
-            a = unflattenArray('float64', 8)
+            a = make('float64', 8)
             a = U.withUnits(a, elem.units)
         elif elem <= LRComplex():
-            a = unflattenArray('complex128', 16)
+            a = make('complex128', 16)
             a = U.withUnits(a, elem.units)
         else:
             a = array([unflatten(s, elem) for _ in xrange(size)])
         a.shape = dims
         self._array = a
         return self._array
-        
+
+# attributes of the list class will be wrapped with LazyList methods
+# when one of these wrapped is accessed, the LazyList will be unflattened
+# and the wrapped attributes deleted, so that the instance can be used
+# as a standard list thereafter.
+_listAttrs = [
+    '__add__', '__contains__', '__delitem__', '__delslice__', '__eq__', '__ge__',
+    '__getitem__', '__getslice__', '__gt__', '__hash__', '__iadd__', '__imul__',
+    '__iter__', '__le__', '__len__', '__lt__', '__mul__', '__ne__', '__repr__',
+    '__reversed__', '__rmul__', '__setitem__', '__setslice__', 'append', 'count',
+    'extend', 'index', 'insert', 'pop', 'remove', 'reverse', 'sort']
+
+def _wrapper(name):
+    def func(self, *args, **kwargs):
+        self._unflattenList()
+        return getattr(list, name)(self, *args, **kwargs)
+    func.__name__ = name
+    func.__doc__ = getattr(list, name).__doc__
+    return func
+    
+for name in _listAttrs:
+    setattr(LazyList, name, _wrapper(name))
+
+def List(data, tag):
+    """Construct a new LazyList type and return an instance.
+    
+    LazyList wrapper attributes are deleted on unflattening to avoid
+    additional overhead on subsequent usage.  As a result, LazyList
+    classes are single-use.  This function constructs a class that has
+    a copy of the LazyList __dict__ and so behaves in the same way.
+    """
+    return type("List", (list,), LazyList.__dict__.copy())(data, tag)
+
 # python flatteners
 
 @flattener(Exception)
@@ -1112,7 +1085,7 @@ def flattenException(E):
 @flattener(tuple)
 def flattenTuple(c):
     """Flatten python tuple to LabRAD cluster."""
-    items, types = zip(*[flatten(i) for i in c])
+    items, types = zip(*(flatten(i) for i in c))
     return ''.join(items), LRCluster(*types)
 
 

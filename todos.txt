@@ -15,12 +15,20 @@ GENERAL:
 		need a class to manage reading/writing and persisting config
 		allow overrides per-user, per-session, etc.
 
+    - make numpy arrays work with units
+    - flatten LazyLists correctly if they've never been unflattened
+    - test numpy conversions
+    - test LazyList (+ profile)
+    - allow *() to be unflattened to numpy array [size modified]
+    
 	data handling:
 		numpy (and other flatteners/unflatteners)
 		flatten/unflatten to a generic labRAD data type
 			convert to python data on demand
 		allow conversion to/from array of cluster of values and numpy array
 
+    - flatten can handle int/long -> i/w
+        
 	request cancellation/context expiration
         send context expiration when requests are cancelled (client)
 	
