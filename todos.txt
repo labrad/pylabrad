@@ -50,6 +50,7 @@ GENERAL:
 		generate lots of random data (good and mal-formed)
 		profiling for data flatten/unflatten operations to test speed
 		test setting decorator
+        test eval and repr of labrad data for data vault
     
 	configuration:
 		system to setup hostname, nodenames, port, passwords, etc.

@@ -94,8 +94,8 @@ class Buffer(object):
     def peekrh(self, i=1):
         return self.s[rh:rh+i]
         
-    def skip(self, i=1);
-        self.rh += rh
+    def skip(self, i=1):
+        self.rh += i
         
     def __len__(self):
         return len(self.s)
@@ -932,55 +932,145 @@ class List(list):
         self.lrtype = parseTypeTag(tag)
         self.data = data
     
-    def __lrtype__(self):
-        return self.lrtype
+	def __lrtype__(self):
+		return self.lrtype
+	
+	def __getattribute__(self, name):
+		if name not in ['asArray', '_createArray']:
+			self._createList()
+		return list.__getattribute__(self, name)
     
-    def __len__(self):
-        return len(self.list)
+    def __add__(self, other):
+        self._createList()
+        return list.__add__(self, other)
     
-    def __iter__(self):
-        return iter(self.list)
+    def __contains__(self, item):
+        self._createList()
+        return list.__contains__(self, item)
+    
+    def __delitem__(self, key):
+        self._createList()
+        return list.__delitem__(self, key)
+    
+    def __delslice__(self, i, j):
+        self._createList()
+        return list.__delslice__(self, i, j)
+    
+    def __eq__(self, other):
+        self._createList()
+        return list.__eq__(self, other)
+
+    def __ge__(self, other):
+        self._createList()
+        return list.__ge__(self, other)
         
     def __getitem__(self, key):
-        return self.list[key]
+        self._createList()
+        return list.__getitem__(self, key)
         
+    def __getslice__(self, i, j):
+        self._createList()
+        return list.__getslice__(self, i, j)
+        
+    def __gt__(self, other):
+        self._createList()
+        return list.__gt__(self, other)
+        
+    def __hash__(self):
+        self._createList()
+        return list.__hash__(self)
+        
+    def __iadd__(self, other):
+        self._createList()
+        return list.__iadd__(self, other)
+        
+    def __imul__(self, other):
+        self._createList()
+        return list.__imul__(self, other)
+        
+    def __iter__(self):
+        self._createList()
+        return list.__iter__(self)
+        
+    def __le__(self, other):
+        self._createList()
+        return list.__le__(self, other)
+        
+    def __len__(self):
+        self._createList()
+        return list.__len__(self)        
+        
+    def __lt__(self, other):
+        self._createList()
+        return list.__lt__(self, other)
+    
+    def __mul__(self, other):
+        self._createList()
+        return list.__mul__(self, other)
+    
+    def __ne__(self, other):
+        self._createList()
+        return list.__ne__(self, other)
+    
+    def __repr__(self):
+        self._createList()
+        return list.__repr__(self)
+    
+    def __reversed__(self):
+        self._createList()
+        return list.__reversed__(self)
+    
+    def __rmul__(self, other):
+        self._createList()
+        return list.__rmul__(self, other)
+    
     def __setitem__(self, key, value):
-        self.list[key] = value
+        self._createList()
+        return list.__setitem__(self, key)
         
-    def __delitem__(self, key):
-        del self.list[key]
+    def __setslice__(self, i, j, sequence):
+        self._createList()
+        return list.__setslice__(self, i, j, sequence)
         
-    def __contains__(self, item):
-        return self.list.__contains__(item)
+    def asList(self):
+        self._createList()
+        return list(self)
         
-    @property
-    def list(self):
+    def _createList(self):
         """Unflatten to nested python list."""
         if hasattr(self, '_list'):
-            return self._list
+            print "already unflattened"
+            return
+        print "unflattening"
         s = Buffer(self.data)
         n, elem = self.lrtype.depth, self.lrtype.elem
         dims = unpack('i'*n, s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if elem is None or size == 0:
-            self._list = nestedList([], n-1)
+            list.extend(self, nestedList([], n-1))
         else:
             def unflattenND(dims):
                 if len(dims) == 1:
                     return [unflatten(s, elem) for _ in xrange(dims[0])]
                 else:
                     return [unflattenND(dims[1:]) for _ in xrange(dims[0])]
-            self._list = unflattenND(dims)
-        return self._list
+            list.extend(self, unflattenND(dims))
+        self._list = True
         
-    @property
-    def array(self):
+    def asArray(self):
+        self._createArray()
+        return self._array
+       
+    def _createArray(self):
         """Unflatten to numpy array."""
         if hasattr(self, '_array'):
+            print "already unflattened as array"
             return self._array
         if hasattr(self, '_list'):
-            self._array = array(self._list)
+            print "creating array from list"
+            self._array = array(list(self))
             return self._array
+        print "unflattening as array"
         s = Buffer(self.data)
         n, elem = self.lrtype.depth, self.lrtype.elem
         dims = unpack('i'*n, s.get(4*n))
