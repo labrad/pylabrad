@@ -80,26 +80,16 @@ class Buffer(object):
         if isinstance(s, Buffer):
             self.s = s.s
         self.s = s
-        self.rh = 0
 
     def get(self, i=1):
         temp, self.s = self.s[:i], self.s[i:]
-        self.rh = max(self.rh-i, 0)
         return temp
 
     def peek(self, i=1):
         return self.s[:i]
         
-    def getrh(self, i=1):
-        temp = self.s[self.rh:self.rh+i]
-        self.rh += i
-        return temp
-        
-    def peekrh(self, i=1):
-        return self.s[self.rh:self.rh+i]
-        
-    def skiprh(self, i=1):
-        self.rh += i
+    def skip(self, i=1):
+        self.s = self.s[i:]
         
     def __len__(self):
         return len(self.s)
@@ -258,29 +248,6 @@ def unflatten(s, t):
 
 # a registry of flattener functions that can convert python data
 # into LabRAD data, keyed on the python class that they can accept
-_flatteners = {}
-
-def registerFlattener(cls, flatten):
-    """Register a LabRAD flattener for a python type.
-
-    The flatten function should take a python object of type cls
-    and return a tuple of (flattened data string, type object).
-    The type object must be a valid LRType object, such as those
-    created by the parseTypeTag function.
-    """
-    _flatteners[cls] = flatten
-
-def flattener(cls):
-    """Decorator for registering flattener functions.
-
-    A flattener should be a function that takes a python object of
-    type cls and returns a tuple (flattened data str, labrad type),
-    where labrad type is either a type tag (str) or an LRType object.
-    """
-    def register(func):
-        _flatteners[cls] = func
-        return func
-    return register
 
 def flatten(obj, types=[]):
     """Flatten python data into labrad data.
@@ -411,7 +378,7 @@ class LRType(object):
     width = 0
         
     def __width__(self, s):
-        s.skiprh(self.width)
+        s.skip(self.width)
         return self.width
         
     def __unflatten__(self, s):
@@ -514,9 +481,9 @@ class LRStr(LRType, Singleton):
     isFixedWidth = False
     
     def __width__(self, s):
-        width = unpack('i', s.getrh(4))[0]
-        s.skiprh(width)
-        return width + 4
+        width = unpack('i', s.get(4))[0]
+        s.skip(width)
+        return 4 + width
     
     def __unflatten__(self, s):
         n = unpack('i', s.get(4))[0]
@@ -620,7 +587,7 @@ registerType(float, LRValue())
 
 @typeFunc(Value)
 def getValueType(pq):
-    return LRValue(pq.unit.labradName())
+    return LRValue(pq.unit.name())
 
 
 class LRComplex(LRValue):
@@ -643,7 +610,7 @@ registerType(complex, LRComplex())
 
 @typeFunc(Complex)
 def getValueType(pq):
-    return LRComplex(pq.unit.labradName())
+    return LRComplex(pq.unit.name())
 
 
 class LRCluster(LRType):
@@ -741,7 +708,8 @@ class LRList(LRType):
     
     def __width__(self, s):
         n, elem = self.depth, self.elem
-        dims = unpack('i'*n, s.getrh(4*n))
+        s = Buffer(s)
+        dims = unpack('i'*n, s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if elem.isFixedWidth:
             width = size * elem.width
@@ -786,6 +754,27 @@ class LRList(LRType):
                 break
         return cls(t, depth)
 
+    @classmethod
+    def __lrtype_array__(cls, L):
+        depth = len(L.shape)
+        if L.dtype == dtype('bool'): t = LRBool()
+        elif L.dtype == dtype('int32'): t = LRInt()
+        elif L.dtype == dtype('uint32'): t = LRWord()
+        elif L.dtype == dtype('int64'): t = LRWord()
+        elif L.dtype == dtype('float64'):
+            if hasattr(L, 'units'):
+                t = LRValue(L.units)
+            else:
+                t = LRValue()
+        elif L.dtype == dtype('complex128'):
+            if hasattr(L, 'units'):
+                t = LRComplex(L.units)
+            else:
+                t = LRComplex()
+        else:
+            raise Exception("Can't flatten array of %s" % L.dtype)
+        return cls(t, depth)
+        
     def __le__(self, other):
         """Test whether this type is more specific than another.
 
@@ -831,6 +820,8 @@ class LRList(LRType):
 
         Lists must be homogeneous and rectangular.
         """
+        if useNumpy and isinstance(L, ndarray):
+            return self.__flatten_array__(L)
         lengths = [None] * self.depth
         def flattenNDlist(ls, n=0):
             if lengths[n] is None:
@@ -845,10 +836,25 @@ class LRList(LRType):
         lengths = [l or 0 for l in lengths]
         return pack('i' * len(lengths), *lengths) + flat
 
+    def __flatten_array__(self, a):
+        """Flatten numpy array to LabRAD list."""
+        n = len(a.shape)
+        dims = pack('i' * n, *a.shape)
+        if a.dtype in ['bool', 'int32', 'uint32', 'float64', 'complex128']:
+            pass
+        elif a.dtype == dtype('int64'):
+            a.dtype = 'uint32'
+            a = a.flat[::2]
+        elif a.dtype == dtype('float64'): t = LRValue()
+        elif a.dtype == dtype('complex128'): t = LRComplex()
+        else:
+            elems, types = zip(*(flatten(i) for i in a.flat))
+            return dims + ''.join(elems)
+        return dims + a.tostring()
+        
 registerTypeFunc(list, LRList.__lrtype__)
 if useNumpy:
-    pass
-    #registerTypeFunc(ndarray, LRList.__lrtype__)
+    registerTypeFunc(ndarray, LRList.__lrtype_array__)
 
 
 def nestedList(obj, n):
@@ -895,7 +901,7 @@ class LRError(LRType):
     isFixedWidth = False
     
     def __width__(self, s):
-        s.getrh(4)
+        s.skip(4)
         return 4 + LRStr().__width__(s) + self.payload.__width__(s)
         
     def __unflatten__(self, s):
@@ -1070,51 +1076,8 @@ def List(data, tag):
     """
     return type("List", (list,), LazyList.__dict__.copy())(data, tag)
 
-# python flatteners
-
-@flattener(Exception)
-def flattenException(E):
-    """Flatten generic python Exceptions to LabRAD errors."""
-    code = getattr(E, 'code', 0)
-    msg = getattr(E, 'msg', repr(E))
-    payload = getattr(E, 'payload', None)
-    s, t = flatten((int(code), str(msg), payload))
-    return s, LRError(t.items[2])
-
-
-@flattener(tuple)
-def flattenTuple(c):
-    """Flatten python tuple to LabRAD cluster."""
-    items, types = zip(*(flatten(i) for i in c))
-    return ''.join(items), LRCluster(*types)
-
-
-if useNumpy:
-    @flattener(ndarray)
-    def flattenArray(a):
-        """Flatten numpy array to LabRAD list."""
-        # TODO: respect type hints here.
-        n = len(a.shape)
-        dims = pack('i' * n, *a.shape)
-        if a.dtype == dtype('bool'): t = LRBool()
-        elif a.dtype == dtype('int32'): t = LRInt()
-        elif a.dtype == dtype('uint32'): t = LRWord()
-        elif a.dtype == dtype('int64'):
-            a.dtype = 'uint32'
-            a = a.flat[::2]
-            t = LRWord()
-        elif a.dtype == dtype('float64'): t = LRValue()
-        elif a.dtype == dtype('complex128'): t = LRComplex()
-        else:
-            elems, types = zip(*[flatten(i) for i in a.flat])
-            flat = dims + ''.join(elems)
-            return flat, LRList(t, depth=n)
-        flat = dims + a.tostring()
-        return flat, LRList(t, depth=n)
-
 
 # errors
-
 
 class FlatteningError(Error):
     """Raised when data cannot be flattened into a valid labrad type."""

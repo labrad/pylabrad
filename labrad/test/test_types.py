@@ -97,7 +97,7 @@ class labradTypesTests(unittest.TestCase):
             [1, 2, 3, 4],
             [1L, 2L, 3L, 4L],
             [[]],
-            [['a', 'b'], ['c', 'd']],
+            [['a', 'bb', 'ccc'], ['dddd', 'eeeee', 'ffffff']],
 
             # more complex stuff
             [(1L, 'a'), (2L, 'b')],

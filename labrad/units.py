@@ -54,7 +54,11 @@ The version included with LabRAD has been slightly changed:
       
 """
 
-from math import floor, ceil, pi
+from math import floor, pi
+try:
+    from numpy import array, ndarray
+except ImportError:
+    array = ndarray = None
 
 from labrad import grammar
 from labrad.util.ratio import Ratio
@@ -129,36 +133,64 @@ class NumberDict(dict):
         return new
 
 
-class HasUnits(object):
+class WithUnits(object):
+    """Mixin class for adding units to numeric types."""
+
     def __new__(cls, value, unit=None):
         if unit is None:
             return value
-        inst = super(HasUnits, cls).__new__(cls, value)
-        inst.unit = _findUnit(unit)
-        return inst
-
+        value *= 1.0
+        cls = cls._findClass(type(value), unit)
+        return super(WithUnits, cls).__new__(cls, value)
+        
+    _numericTypes = {}
+        
+    @classmethod
+    def _findClass(cls, numType, unit=None):
+        """Find a class for a particular numeric type and unit.
+        
+        Classes will be created if they haven't been already.
+        """
+        # find or create a class with units for this numeric type
+        if numType not in cls._numericTypes:
+            # numpy workaround: new values are constructed with
+            # array(), rather than the class ndarray itself
+            nt = numType if numType != ndarray else array
+            cls._numericTypes[numType] = type('%sWithUnits' % nt.__name__,
+                                              (WithUnits, numType),
+                                              {'_numType': nt, '_units': {}})
+        cls = cls._numericTypes[numType]
+        if unit is None:
+            return cls
+        
+        # find or create a class with this specific unit
+        unit = _findUnit(unit)
+        if unit not in cls._units:
+            cls._units[unit] = type(cls.__name__, (cls,), {'unit': unit})
+        cls = cls._units[unit]
+        return cls
+        
     @property
     def value(self):
         return self.__class__._numType(self)
 
     @property
     def units(self):
-        return self.unit.labradName()
+        return self.unit.name()
 
     def __str__(self):
-        return str(self.value) + ' ' + self.unit.name()
+        return '%s %s' % (self.value, self.units)
 
     def __repr__(self):
-        return '%s(%r, %r)' % (self.__class__.__name__,
-                               self.value, self.unit.name())
+        return '%s(%r, %r)' % (self.__class__.__name__, self.value, self.units)
 
     def _sum(self, other, sign1, sign2):
-        if isinstance(other, HasUnits):
-            new_value = sign1 * self.value + \
-                        sign2 * other.value * other.unit.conversionFactorTo(self.unit)
+        if isinstance(other, WithUnits):
+            value = sign1 * self.value + \
+                    sign2 * other.value * other.unit.conversionFactorTo(self.unit)
         else:
-            new_value = sign1 * self.value + sign2 * other
-        return withUnits(new_value, self.unit)
+            value = sign1 * self.value + sign2 * other
+        return WithUnits(value, self.unit)
 
     def __add__(self, other):
         return self._sum(other, 1, 1)
@@ -176,58 +208,42 @@ class HasUnits(object):
         return cmp(diff.value, 0)
 
     def __mul__(self, other):
-        if not isinstance(other, HasUnits):
-            return withUnits(self.value * other, self.unit)
-        value = self.value * other.value
-        unit = self.unit * other.unit
-        if unit.isDimensionless():
-            return value * unit.factor
-        else:
-            return withUnits(value, unit)
+        if not isinstance(other, WithUnits):
+            return WithUnits(self.value * other, self.unit)
+        return WithUnits(self.value * other.value,
+                         self.unit * other.unit)
 
     __rmul__ = __mul__
 
     def __div__(self, other):
-        if not isinstance(other, HasUnits):
-            return withUnits(self.value / other, self.unit)
-        value = self.value / other.value
-        unit = self.unit / other.unit
-        if unit.isDimensionless():
-            return value * unit.factor
-        else:
-            return withUnits(value, unit)
+        if not isinstance(other, WithUnits):
+            return WithUnits(self.value / other, self.unit)
+        return WithUnits(self.value / other.value,
+                         self.unit / other.unit)
 
     def __rdiv__(self, other):
-        if not isinstance(other, HasUnits):
-            return withUnits(other / self.value, pow(self.unit, -1))
-        value = other.value / self.value
-        unit = other.unit / self.unit
-        if unit.isDimensionless():
-            return value * unit.factor
-        else:
-            return withUnits(value, unit)
+        if not isinstance(other, WithUnits):
+            return WithUnits(other / self.value, pow(self.unit, -1))
+        return WithUnits(other.value / self.value,
+                         other.unit / self.unit)
 
     def __pow__(self, other):
-        if isinstance(other, HasUnits):
+        if isinstance(other, WithUnits) and not other.unit.isDimensionless():
             raise TypeError('Exponents must be dimensionless')
-        if isinstance(other, Ratio):
-            return withUnits(pow(self.value, float(other)),
-                             pow(self.unit, other))
-        else:
-            return withUnits(pow(self.value, other),
-                             pow(self.unit, other))
+        return WithUnits(pow(self.value, float(other)),
+                         pow(self.unit, other))
 
     def __rpow__(self, other):
         raise TypeError('Exponents must be dimensionless')
 
     def __abs__(self):
-        return withUnits(abs(self.value), self.unit)
+        return WithUnits(abs(self.value), self.unit)
 
     def __pos__(self):
         return self
 
     def __neg__(self):
-        return withUnits(-self.value, self.unit)
+        return WithUnits(-self.value, self.unit)
 
     def __nonzero__(self):
         return self.value != 0
@@ -251,8 +267,8 @@ class HasUnits(object):
         @raises TypeError: if any of the specified units are not compatible
         with the original unit
         """
-        value = _convertValue(self.value, self.unit, unit)
-        return withUnits(value, unit)
+        factor, offset = self.unit.conversionTupleTo(unit)
+        return WithUnits((self.value + offset) * factor, unit)
 
     # Contributed by Berthold Hoellmann
     def inBaseUnits(self):
@@ -261,7 +277,7 @@ class HasUnits(object):
         i.e. SI units in most cases
         @rtype: L{PhysicalQuantity}
         """
-        new_value = self.value * self.unit.factor
+        value = self.value * self.unit.factor
         num = ''
         denom = ''
         for unit, power in zip(_base_names, self.unit.powers):
@@ -281,7 +297,7 @@ class HasUnits(object):
         name = num + denom
         if name == '1':
             name = ''
-        return withUnits(new_value, name)
+        return WithUnits(value, name)
 
     def isCompatible(self, unit):
         """
@@ -293,56 +309,28 @@ class HasUnits(object):
         """
         return self.unit.isCompatible(_findUnit(unit))
 
-    def getValue(self):
-        """Return value of physical quantity (no unit)."""
-        return self.value
-
-    def getUnitName(self):
-        """Return unit (string) of physical quantity."""
-        return self.unit.name()
-
     def sqrt(self):
         return pow(self, Ratio(1,2))
     
     def __getitem__(self, newUnit):
         """Return value of physical quantity expressed in new units."""
-        if isinstance(newUnit, HasUnits):
+        if isinstance(newUnit, WithUnits):
             newUnit = newUnit.unit
-        if not isinstance(newUnit, (str, Unit)):
-            raise Exception(newUnit)
-        return self.inUnitsOf(newUnit).getValue()
+        return self.inUnitsOf(newUnit).value
 
-class Value(HasUnits, float):
+class Value(WithUnits, float):
     _numType = float
+    _units = {}
+WithUnits._numericTypes[float] = Value
 
-class Complex(HasUnits, complex):
+class Complex(WithUnits, complex):
     _numType = complex
-
-_classDict = {float: Value, complex: Complex}
-
-try:
-    from numpy import array, ndarray
-except ImportError:
-    array = ndarray = None
-
-def withUnits(value, unit=None):
-    t = type(1.0 * value)
-    # numpy workaround: new values are constructed with
-    # array(), rather than the class ndarray itself
-    nt = t if t != ndarray else array
-    
-    if t not in _classDict:
-        valueType = type('%sWithUnits' % nt.__name__,
-                         (HasUnits, t), {'_numType': nt})
-        _classDict[t] = valueType
-    cls = _classDict[t]
-    return cls(value, unit)
+    _units = {}
+WithUnits._numericTypes[complex] = Complex
 
 
 class Unit(object):
-
-    """
-    Unit of measurement
+    """Unit of measurement
 
     A unit is defined by a name (possibly composite), a scaling factor,
     and the exponentials of each of the SI base units that enter into
@@ -369,7 +357,7 @@ class Unit(object):
                           themselves.
         @type lex_names: C{dict} or C{str}
         """
-        if isinstance(names, basestring):
+        if isinstance(names, str):
             self.names = NumberDict()
             self.names[names] = Ratio(1)
         else:
@@ -377,7 +365,7 @@ class Unit(object):
         self.factor = factor
         self.offset = offset
         self.powers = [Ratio(p) for p in powers]
-        if isinstance(lex_names, basestring):
+        if isinstance(lex_names, str):
             self.lex_names = NumberDict()
             if lex_names:
                 self.lex_names[lex_names] = Ratio(1)
@@ -390,7 +378,7 @@ class Unit(object):
     __str__ = __repr__
 
     def __cmp__(self, other):
-        if not isinstance(other, HasUnits):
+        if not isinstance(other, WithUnits):
             return cmp(self.factor, other)
         if self.powers != other.powers or self.lex_names != other.lex_names:
             raise TypeError('Incompatible units')
@@ -483,7 +471,7 @@ class Unit(object):
             raise TypeError(('Unit conversion (%s to %s) cannot be expressed ' +
                              'as a simple multiplicative factor') % \
                              (self.name(), other.name()))
-        return self.factor/other.factor
+        return self.factor / other.factor
 
     def conversionTupleTo(self, other): # added 1998/09/29 GPW
         """
@@ -514,7 +502,7 @@ class Unit(object):
         # thus, D = d1 - d2*s2/s1 and S = s1/s2
         factor = self.factor / other.factor
         offset = self.offset - (other.offset * other.factor / self.factor)
-        return (factor, offset)
+        return factor, offset
 
     def isCompatible(self, other):     # added 1998/10/01 GPW
         """
@@ -527,12 +515,11 @@ class Unit(object):
         return self.powers == other.powers and self.lex_names == other.lex_names
 
     def isDimensionless(self):
-        return (not any(self.powers)) and (sum(self.lex_names.values()) == 0)
+        return not any(self.powers) and not any(self.lex_names.values())
 
     def isAngle(self):
-        return self.powers[7] == 1 and \
-               sum(self.powers) == 1 and \
-               sum(self.lex_names.values()) == 0
+        return self.powers[7] == 1 and sum(self.powers) == 1 and \
+               not any(self.lex_names.values())
 
     def setName(self, name):
         self.names = NumberDict()
@@ -543,18 +530,11 @@ class Unit(object):
         num = ''
         denom = ''
         full_dict = dict(self.names, **self.lex_names)
-        for unit in full_dict.keys():
-            power = full_dict[unit]
-            if power < 0:
-                denom += '/' + unit
-                if power != -1:
-                    s = str(-power)
-                    denom += '^' + s
-            elif power > 0:
-                num += '*' + unit
-                if power != 1:
-                    s = str(power)
-                    num += '^' + s
+        for unit, power in full_dict.items():
+            if power != 1 and power != -1:
+                unit += '^' + str(abs(power))
+            if power < 0: denom += '/' + unit
+            elif power > 0: num += '*' + unit
         if len(num) == 0:
             num = '1'
         else:
@@ -564,50 +544,32 @@ class Unit(object):
             return ''
         return name
 
-    def labradName(self):
-        name = self.name()
-        if name == '1':
-            name = ''
-        return name
-
 
 # Helper functions
 
 def _findUnit(name):
-    if not isinstance(name, basestring):
-        unit = name
-    elif name == '':
-        return _ident()
+    if isinstance(name, Unit):
+        return name
     elif name in _unit_table:
-        unit = _unit_table[name]
+        return _unit_table[name]
     else:
         result = grammar.unit.parseString(name)
-        unit = _ident()
+        unit = IDENTITY
         for sign, list_ in [(1, result.posexp), (-1, result.negexp)]:
-            if isinstance(list_, basestring):
+            if isinstance(list_, str):
                 continue
             for elem in list_:
-                try:
-                    base = _unit_table[elem['name']]
-                except KeyError:
-                    base = _stringUnit(elem['name'])
                 num = elem['num'] if 'num' in elem else 1
                 denom = elem['denom'] if 'denom' in elem else 1
-                unit = unit * base**(sign*Ratio(num, denom))
+                term = elem['name']
+                if term not in _unit_table:
+                    _unit_table[term] = _stringUnit(term)
+                unit = unit * _unit_table[term]**(sign*Ratio(num, denom))
         _unit_table[name] = unit
-    if not isinstance(unit, Unit):
-        raise TypeError('%s is not a unit' % unit)
-    return unit
-
-def _ident():
-    return Unit(NumberDict(), 1., [0,0,0,0,0,0,0,0,0], 0, NumberDict())
+        return unit
 
 def _stringUnit(name):
     return Unit(NumberDict(), 1., [0,0,0,0,0,0,0,0,0], 0, name)
-
-def _convertValue(value, src_unit, target_unit):
-    (factor, offset) = src_unit.conversionTupleTo(target_unit)
-    return (value + offset) * factor
 
 
 # SI unit definitions
@@ -661,7 +623,7 @@ def _addUnit(name, unit, comment=''):
         raise KeyError, 'Unit ' + name + ' already defined'
     if comment:
         _help.append((name, comment, unit))
-    if isinstance(unit, basestring):
+    if isinstance(unit, str):
 	unit = eval(unit, _unit_table)
         for cruft in ['__builtins__', '__args__']:
             try: del _unit_table[cruft]
@@ -672,9 +634,9 @@ def _addUnit(name, unit, comment=''):
 def _addPrefixed(unit):
     _help.append('Prefixed units for %s:' % unit)
     _prefixed_names = []
-    for prefix in _prefixes:
-	name = prefix[0] + unit
-	_addUnit(name, prefix[1]*_unit_table[unit])
+    for prefix, factor in _prefixes:
+        name = prefix + unit
+        _addUnit(name, factor * _unit_table[unit])
         _prefixed_names.append(name)
     _help.append(', '.join(_prefixed_names))
 
@@ -683,7 +645,6 @@ def _addPrefixed(unit):
 _help.append('SI derived units; these automatically get prefixes:\n' + \
      ', '.join([prefix + ' (%.0E)' % value for prefix, value in _prefixes]) + \
              '\n')
-
 
 _unit_table['kg'] = Unit('kg', 1., [0,1,0,0,0,0,0,0,0])
 
@@ -708,7 +669,10 @@ del _unit_table['kg']
 
 for unit in _unit_table.keys():
     _addPrefixed(unit)
-
+    
+IDENTITY = Unit(NumberDict(), 1., [0,0,0,0,0,0,0,0,0], 0, NumberDict())
+_unit_table[''] = IDENTITY
+    
 # Time units
 _help.append('Time units:')
 
@@ -781,7 +745,9 @@ del kelvin
 
 # add units to the module namespace
 for name, unit in _unit_table.items():
-    globals()[name] = withUnits(1.0, unit)
+    if name == '':
+        continue
+    globals()[name] = WithUnits(1.0, unit)
 
 
 # add constants to the module namespace
@@ -825,12 +791,11 @@ psi     = 6894.75729317*Pa # pounds per square inch
 degR    = (5./9.)*K        # degrees Rankine
 
 
-
 def description():
     """Return a string describing all available units."""
     s = ''  # collector for description text
     for entry in _help:
-        if isinstance(entry, basestring):
+        if isinstance(entry, str):
             # headline for new section
             s += '\n' + entry + '\n'
         elif isinstance(entry, tuple):
@@ -849,18 +814,17 @@ __doc__ += '\n' + description()
 
 if __name__ == '__main__':
 
-    l = withUnits(10., 'm')
-    big_l = withUnits(10., 'km')
+    l = WithUnits(10., 'm')
+    big_l = WithUnits(10., 'km')
     print big_l + l
-    t = withUnits(314159., 's')
-    print t.inUnitsOf('d','h','min','s')
+    t = WithUnits(314159., 's')
 
-    p = withUnits # just a shorthand...
+    p = WithUnits # just a shorthand...
 
     e = p('2.7 Hartree*Nav')
     e.convertToUnit('kcal/mol')
     print e
     print e.inBaseUnits()
 
-    freeze = p('0 degC')
-    print freeze.inUnitsOf ('degF')
+    freeze = p(0, 'degC')
+    print freeze.inUnitsOf('degF')

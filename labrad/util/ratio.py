@@ -74,6 +74,9 @@ class Ratio(object):
     def __float__(self):
         return float(self.num) / float(self.denom)
 
+    def __nonzero__(self):
+        return self.num != 0
+        
     def __repr__(self):
         return 'Ratio(%s,%s)' % (self.num, self.denom)
     
