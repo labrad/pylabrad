@@ -24,6 +24,7 @@ GENERAL:
         send context expiration when requests are cancelled (client)
 	
 	context-cloning of wrappers
+    
 	signals and slots (multiple dispatch, loose coupling):
 		disconnect listeners when a server disconnects
 		automatically reestablish signal/slot connections (optional)
