@@ -141,7 +141,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
             accepts_s = []
             for group in groups:
                 if len(group) > 1:
-                    t = T.LRCluster(*[T.parseTypeTag(t) for t in group])
+                    t = T.LRCluster(*(T.parseTypeTag(t) for t in group))
                     s = ', '.join('%s{%s}' % (sub_t, arg)
                                   for sub_t, arg in zip(t, args))
                     s = '(%s)' % s

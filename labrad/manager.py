@@ -63,8 +63,8 @@ class AsyncClientManager:
     def __init__(self, cxn):
         self.cxn = cxn
 
-    def send(self, packet, *args, **kwargs):
-        return self.cxn.request(C.MANAGER_ID, packet, *args, **kwargs)
+    def send(self, packet, *args, **kw):
+        return self.cxn.request(C.MANAGER_ID, packet, *args, **kw)
 
     @inlineCallbacks
     def _getIDList(self, setting, data=None):

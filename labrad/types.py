@@ -32,7 +32,8 @@ from struct import pack, unpack
 import time
 from types import InstanceType
 from datetime import timedelta, datetime
-from itertools import chain
+from itertools import chain, imap
+from operator import itemgetter
 
 from labrad import constants as C, units as U
 from labrad.units import Value, Complex
@@ -79,18 +80,16 @@ class Buffer(object):
     def __init__(self, s):
         if isinstance(s, Buffer):
             self.s = s.s
-        self.s = s
+        else:
+            self.s = s
 
     def get(self, i=1):
         temp, self.s = self.s[:i], self.s[i:]
         return temp
-
-    def peek(self, i=1):
-        return self.s[:i]
         
     def skip(self, i=1):
         self.s = self.s[i:]
-        
+    
     def __len__(self):
         return len(self.s)
 
@@ -117,8 +116,8 @@ def parseTypeTag(s):
         if isinstance(s, LRType):
             return s
         s = Buffer(stripComments(s))
-        ## TODO: this is a workaround for a bug in the manager
-        if s.peek() == '_':
+        ## this is a workaround for a bug in the manager
+        if s[:1] == '_':
             return LRNone()
         types = []
         while len(s):
@@ -157,7 +156,7 @@ def parseNumber(s):
     """Parse an integer at the beginning of a string."""
     s.strip(WHITESPACE)
     n = d = 0
-    while len(s) and s.peek() in '0123456789':
+    while len(s) and s[:1] in '0123456789':
         n = 10*n + int(s.get())
         d += 1
     if d == 0:
@@ -167,7 +166,7 @@ def parseNumber(s):
 def parseUnits(s):
     """Parse units from a typestring."""
     s = s.strip(WHITESPACE)
-    if s.peek() != '[':
+    if s[:1] != '[':
         return None
     length = s.index(']') + 1
     return s.get(length)[1:-1]
@@ -183,7 +182,9 @@ def registerType(cls, t):
     This is used in a case where the LabRAD type is known
     immediately from the python class.
     """
-    _types[cls] = t
+    classes = (cls,) if not isinstance(cls, tuple) else cls
+    for cls in classes:
+        _types[cls] = t
 
 _typeFuncs = {}
 
@@ -193,12 +194,16 @@ def registerTypeFunc(cls, typeFunc):
     The type function takes a python object of class cls and
     returns an appropriate LabRAD type object for it.
     """
-    _typeFuncs[cls] = typeFunc
+    classes = (cls,) if not isinstance(cls, tuple) else cls
+    for cls in classes:
+        _typeFuncs[cls] = typeFunc
 
 def typeFunc(cls):
     """Decorator for registering type functions."""
     def register(func):
-        _typeFuncs[cls] = func
+        classes = (cls,) if not isinstance(cls, tuple) else cls
+        for cls in classes:
+            _typeFuncs[cls] = func
         return func
     return register
 
@@ -536,58 +541,47 @@ class LRValue(LRType):
     tag = 'v'
     width = 8
 
-    def __init__(self, units=None):
-        self.units = units
+    def __init__(self, unit=None):
+        self.unit = unit
 
     def __str__(self):
-        if self.units is None:
+        if self.unit is None:
             return self.tag
         else:
-            return self.tag + '[%s]' % self.units
+            return self.tag + '[%s]' % self.unit
 
     def __repr__(self):
-        return self.__class__.__name__ + '(%r)' % self.units
-
-    @property
-    def parsedUnit(self):
-        if not hasattr(self, '_parsedUnit'):
-            if self.units == None:
-                self._parsedUnit = None
-            else:
-                self._parsedUnit = U._findUnit(self.units)
-        return self._parsedUnit
+        return self.__class__.__name__ + '(%r)' % self.unit
 
     @classmethod
     def __parse__(cls, s):
         return cls(parseUnits(s))
 
     def __eq__(self, other):
-        return type(self) == type(other) and self.units == other.units
+        return type(self) == type(other) and self.unit == other.unit
     
     def __le__(self, other):
         return type(other) == LRAny or \
                (type(self) == type(other) and \
-                (self.units == other.units or other.units is None))
+                (self.unit == other.unit or other.unit is None))
 
     def isFullySpecified(self):
-        return self.units is not None
+        return self.unit is not None
 
     def __unflatten__(self, s):
         v = unpack('d', s.get(8))[0]
-        if self.parsedUnit is not None:
-            v = Value(v, self.parsedUnit)
-        return v
-
+        return Value(v, self.unit)
+        
+    @classmethod
+    def __lrtype__(cls, v):
+        if isinstance(v, U.WithUnit):
+            return cls(v.unit)
+        return cls()
+        
     def __flatten__(self, v):
-        if isinstance(v, Value):
-            v = v[self.parsedUnit]
         return pack('d', float(v))
 
-registerType(float, LRValue())
-
-@typeFunc(Value)
-def getValueType(pq):
-    return LRValue(pq.unit.name())
+registerTypeFunc((float, Value), LRValue.__lrtype__)
 
 
 class LRComplex(LRValue):
@@ -598,19 +592,13 @@ class LRComplex(LRValue):
     
     def __unflatten__(self, s):
         real, imag = unpack('dd', s.get(16))
-        return Complex(complex(real, imag), self.parsedUnit)
-
+        return Complex(complex(real, imag), self.unit)
+    
     def __flatten__(self, c):
-        if isinstance(c, Complex):
-            c = c[self.parsedUnit]
         c = complex(c)
         return pack('dd', c.real, c.imag)
 
-registerType(complex, LRComplex())
-
-@typeFunc(Complex)
-def getValueType(pq):
-    return LRComplex(pq.unit.name())
+registerTypeFunc((complex, Complex), LRComplex.__lrtype__)
 
 
 class LRCluster(LRType):
@@ -631,7 +619,7 @@ class LRCluster(LRType):
     @classmethod
     def __parse__(cls, s):
         items = []
-        while len(s) and s.peek(1) != ')':
+        while len(s) and s[0] != ')':
             items.append(parseSingleType(s))
         if s.get(1) != ')':
             raise Exception('Unbalanced parentheses in cluster.')
@@ -639,7 +627,7 @@ class LRCluster(LRType):
 
     @classmethod
     def __lrtype__(cls, c):
-        return cls(*[getType(i) for i in c])
+        return cls(*(getType(i) for i in c))
 
     def __len__(self):
         return len(self.items)
@@ -668,7 +656,7 @@ class LRCluster(LRType):
             return self._isFixedWidth
         self._isFixedWidth = all(item.isFixedWidth for item in self.items)
         if self._isFixedWidth:
-            self.width = sum(item.width for item in items)    
+            self.width = sum(item.width for item in self.items)    
     
     def __width__(self, s):
         return sum(item.__width__(s) for item in self.items)
@@ -708,13 +696,14 @@ class LRList(LRType):
     
     def __width__(self, s):
         n, elem = self.depth, self.elem
-        s = Buffer(s)
         dims = unpack('i'*n, s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if elem.isFixedWidth:
             width = size * elem.width
         else:
-            width = sum(elem.__width__(s) for _ in xrange(size))
+            newBuf = Buffer(s)
+            width = sum(elem.__width__(newBuf) for _ in xrange(size))
+        s.skip(width)
         return 4*n + width
         
     @classmethod
@@ -726,7 +715,7 @@ class LRList(LRType):
             raise Exception('Cannot create 0-dimensional list.')
         n = n or 1 # if there were no digits, make a 1D list
         s = s.strip(WHITESPACE)
-        if s.peek() == '_':
+        if s[:1] == '_':
             t = None # empty list
             s.get() # drop underscore
         else:
@@ -756,24 +745,15 @@ class LRList(LRType):
 
     @classmethod
     def __lrtype_array__(cls, L):
-        depth = len(L.shape)
-        if L.dtype == dtype('bool'): t = LRBool()
-        elif L.dtype == dtype('int32'): t = LRInt()
-        elif L.dtype == dtype('uint32'): t = LRWord()
-        elif L.dtype == dtype('int64'): t = LRWord()
-        elif L.dtype == dtype('float64'):
-            if hasattr(L, 'units'):
-                t = LRValue(L.units)
-            else:
-                t = LRValue()
-        elif L.dtype == dtype('complex128'):
-            if hasattr(L, 'units'):
-                t = LRComplex(L.units)
-            else:
-                t = LRComplex()
+        if L.dtype == 'bool': t = LRBool()
+        elif L.dtype == 'int32': t = LRInt()
+        elif L.dtype == 'uint32': t = LRWord()
+        elif L.dtype == 'int64': t = LRWord()
+        elif L.dtype == 'float64': t = LRValue()
+        elif L.dtype == 'complex128': t = LRComplex()
         else:
             raise Exception("Can't flatten array of %s" % L.dtype)
-        return cls(t, depth)
+        return cls(t, depth=len(L.shape))
         
     def __le__(self, other):
         """Test whether this type is more specific than another.
@@ -798,7 +778,7 @@ class LRList(LRType):
         return self.elem.isFullySpecified()
 
     def __unflatten__(self, s):
-        data = s.get(self.__width__(s))
+        data = s.get(self.__width__(Buffer(s)))
         return List(data, self)
     
         """Unflatten to nested python list."""
@@ -820,6 +800,10 @@ class LRList(LRType):
 
         Lists must be homogeneous and rectangular.
         """
+        if hasattr(L, 'asList') and not hasattr(L, '_list'):
+            # if we get a LazyList that hasn't been unflattened,
+            # we can just return the original data unchanged
+            return L._data
         if useNumpy and isinstance(L, ndarray):
             return self.__flatten_array__(L)
         lengths = [None] * self.depth
@@ -838,17 +822,15 @@ class LRList(LRType):
 
     def __flatten_array__(self, a):
         """Flatten numpy array to LabRAD list."""
-        n = len(a.shape)
-        dims = pack('i' * n, *a.shape)
+        dims = pack('i' * len(a.shape), *a.shape)
         if a.dtype in ['bool', 'int32', 'uint32', 'float64', 'complex128']:
             pass
         elif a.dtype == dtype('int64'):
             a.dtype = 'uint32'
             a = a.flat[::2]
-        elif a.dtype == dtype('float64'): t = LRValue()
-        elif a.dtype == dtype('complex128'): t = LRComplex()
         else:
-            elems, types = zip(*(flatten(i) for i in a.flat))
+            elems = imap(itemgetter(0), (flatten(i) for i in a.flat))
+            #elems, types = zip(*(flatten(i) for i in a.flat))
             return dims + ''.join(elems)
         return dims + a.tostring()
         
@@ -983,6 +965,10 @@ class LazyList(list):
 	def __lrtype__(self):
 		return self._lrtype
 	
+    @property
+    def elem(self):
+        return self._lrtype.elem
+    
     def asList(self):
         self._unflattenList()
         return list(self)
@@ -1034,10 +1020,10 @@ class LazyList(list):
         elif elem == LRWord(): a = make('uint32', 4)
         elif elem <= LRValue():
             a = make('float64', 8)
-            a = U.withUnits(a, elem.units)
+            #a = U.WithUnit(a, elem.units)
         elif elem <= LRComplex():
             a = make('complex128', 16)
-            a = U.withUnits(a, elem.units)
+            #a = U.WithUnit(a, elem.units)
         else:
             a = array([unflatten(s, elem) for _ in xrange(size)])
         a.shape = dims
@@ -1056,9 +1042,9 @@ _listAttrs = [
     'extend', 'index', 'insert', 'pop', 'remove', 'reverse', 'sort']
 
 def _wrapper(name):
-    def func(self, *args, **kwargs):
+    def func(self, *args, **kw):
         self._unflattenList()
-        return getattr(list, name)(self, *args, **kwargs)
+        return getattr(list, name)(self, *args, **kw)
     func.__name__ = name
     func.__doc__ = getattr(list, name).__doc__
     return func

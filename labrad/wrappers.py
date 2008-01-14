@@ -38,13 +38,14 @@ class AsyncSettingWrapper(object):
         self.__doc__, self.accepts, self.returns, self.notes = info
         self._num_listeners = 0
 
-    def __call__(self, *args, **kwargs):
-        wrap = extractKey(kwargs, 'wrap', True)
+    def __call__(self, *args, **kw):
+        wrap = extractKey(kw, 'wrap', True)
+        tag = extractKey(kw, 'tag', None) or self.accepts
         if not len(args):
             args = None
         elif len(args) == 1:
             args = args[0]
-        resp = self._server._send((self.ID, args, self.accepts), **kwargs)
+        resp = self._server._send((self.ID, args, tag), **kw)
         if wrap:
             resp.addCallback(lambda resp: resp[0][1])
         return resp
@@ -71,11 +72,11 @@ class AsyncSettingWrapper(object):
 class AsyncPacketWrapper(object):
     """An object to encapsulate a labrad packet to a server."""
     
-    def __init__(self, server, **kwargs):
+    def __init__(self, server, **kw):
         self.settings = MultiDict()
         self._server = server
         self._packet = []
-        self._kwargs = kwargs
+        self._kw = kw
 
         for name in server.settings:
             s = server.settings[name]
@@ -85,14 +86,10 @@ class AsyncPacketWrapper(object):
             setattr(self, name, wrapped)
             self.settings[name, labrad_name, ID] = wrapped
 
-    def send(self, **kwargs):
+    def send(self, **kw):
         """Send this packet to the server."""
-        kw = dict(self._kwargs)
-        kw.update(kwargs)
-        #print 'sending packet:', self._packet
         records = [rec[:3] for rec in self._packet]
-        #print 'records:', records
-        resp = self._server._send(records, **kw)
+        resp = self._server._send(records, **dict(self._kw, **kw))
         resp.addCallback(PacketResponse, self._server, self._packet)
         return resp
 
@@ -107,13 +104,14 @@ class AsyncPacketWrapper(object):
 
     def _wrap(self, setting):
         ID, accepts, name = setting.ID, setting.accepts, setting.name
-        def wrapped(*args, **kwargs):
-            key = extractKey(kwargs, 'key', None)
+        def wrapped(*args, **kw):
+            key = extractKey(kw, 'key', None)
+            tag = extractKey(kw, 'tag', None) or accepts
             if not len(args):
                 args = None
             elif len(args) == 1:
                 args = args[0]
-            self._packet.append((ID, args, accepts, key))
+            self._packet.append((ID, args, tag, key))
             return self
         return wrapped
 
@@ -191,8 +189,8 @@ class AsyncServerWrapper:
     def context(self):
         return self._cxn.context()
 
-    def packet(self, **kwargs):
-        return self._packetWrapper(self, **kwargs)
+    def packet(self, **kw):
+        return self._packetWrapper(self, **kw)
 
     def __call__(self):
         return self
@@ -203,9 +201,9 @@ class AsyncServerWrapper:
     def __getitem__(self, key):
         return self.settings[key]
 
-    def _send(self, *args, **kwargs):
+    def _send(self, *args, **kw):
         """Send packet to this server."""
-        return self._cxn._send(self.ID, *args, **kwargs)
+        return self._cxn._send(self.ID, *args, **kw)
 
 
 def connectAsync(host=C.MANAGER_HOST, port=C.MANAGER_PORT,
@@ -221,7 +219,7 @@ class AsyncClient:
         self.servers = MultiDict()
         self._next_context = 1
         self._disconnectWaiters = []
-        self._factory = protocol.labradClientFactory(self.name)
+        self._factory = protocol.LabradClientFactory(self.name)
 
     _staticAttrs = ['connect', 'notifyOnDisconnect',
                     'disconnect', 'refresh', 'context']
@@ -312,9 +310,9 @@ class AsyncClient:
     def __getitem__(self, key):
         return self.servers[key]
             
-    def _send(self, target, records, *args, **kwargs):
+    def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
-        return self._cxn.request(target, records, *args, **kwargs)
+        return self._cxn.request(target, records, *args, **kw)
 
 
 class AsyncClientAdapter:
@@ -383,13 +381,13 @@ class AsyncClientAdapter:
     def __getitem__(self, key):
         return self.servers[key]
 
-    def _send(self, target, records, *args, **kwargs):
+    def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
-        return self._cxn.request(target, records, *args, **kwargs)
+        return self._cxn.request(target, records, *args, **kw)
 
 
-def wrapAsync(cls, *args, **kwargs):
-    obj = cls(*args, **kwargs)
+def wrapAsync(cls, *args, **kw):
+    obj = cls(*args, **kw)
     d = obj._refresh()
     d.addCallback(lambda x: obj)
     return d

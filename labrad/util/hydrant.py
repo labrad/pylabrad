@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 
 from labrad import types as T
 
-def randType(noneOkay=True, nStructs=0):
+def randType(noneOkay=True, listOkay=True, nStructs=0):
     choices = [
         T.LRNone,
         T.LRBool,
@@ -34,19 +34,22 @@ def randType(noneOkay=True, nStructs=0):
         T.LRTime,
         lambda: T.LRValue(randUnits()),
         lambda: T.LRComplex(randUnits()),
-        lambda: T.LRCluster(*[randType(noneOkay=False, nStructs=nStructs+1)
-                              for _ in range(randint(1,5))]),
-        lambda: T.LRList(randType(noneOkay=False, nStructs=nStructs+1),
-                                  depth=randint(1,3))
+        lambda: T.LRCluster(*(randType(noneOkay=False, nStructs=nStructs+1)
+                              for _ in range(randint(1,5)))),
+        lambda: T.LRList(randType(noneOkay=False, listOkay=False,
+                                  nStructs=nStructs+1),
+                         depth=randint(1,3)),
     ]
     if not noneOkay:
         choices = choices[1:]
     if nStructs >= 3:
         choices = choices[:-2]
+    elif not listOkay:
+        choices = choices[:-1]
     return choice(choices)()
 
 def randUnits():
-    return choice((None, '', 's', 'ms', 'us', 'ns'))
+    return choice((None, '', 's', 'ms', 'us', 'm', 'm/s', 'V^2/Hz', 'V/Hz^1/2'))
 
 def randValue(t):
     if isinstance(t, T.LRNone): return genNone()
@@ -55,8 +58,8 @@ def randValue(t):
     if isinstance(t, T.LRWord): return genWord()
     if isinstance(t, T.LRStr): return genStr()
     if isinstance(t, T.LRTime): return genTime()
-    if isinstance(t, T.LRValue): return genValue(t.units)
-    if isinstance(t, T.LRComplex): return genComplex(t.units)
+    if isinstance(t, T.LRValue): return genValue(t.unit)
+    if isinstance(t, T.LRComplex): return genComplex(t.unit)
     if isinstance(t, T.LRCluster): return genCluster(*t.items)
     if isinstance(t, T.LRList): return genList(t.elem, t.depth)
 
@@ -66,44 +69,55 @@ def genBool(): return choice((True, False))
 def genInt(): return int(randint(-2**31, 2**31-1))
 def genWord(): return long(randint(0, 2**32-1))
 def genStr():
-    length = randint(0, 100)
-    return ''.join(chr(randint(0, 255)) for _ in range(length))
+    return ''.join(chr(randint(0, 255)) for _ in xrange(randint(0, 100)))
 
 def genTime():
     diff = timedelta(seconds=randint(-2**20, 2**20),
                      microseconds=randint(-2**20, 2**20))
     return datetime.now() + diff
 
-def genValue(units=None):
-    #return gauss(0, 1)
-    return T.Value(gauss(0, 1), units)
+def genValue(unit=None):
+    return T.Value(gauss(0, 1), unit)
 
-def genComplex(units=None):
-    #return complex(gauss(0, 1), gauss(0, 1))
-    return T.Complex(complex(gauss(0, 1), gauss(0, 1)), units)
+def genComplex(unit=None):
+    return T.Complex(complex(gauss(0, 1), gauss(0, 1)), unit)
 
 def genList(elem, depth=1):
-    lengths = [randint(1, 2**(5-depth)) for _ in range(depth)]
+    lengths = [randint(1, 2**(5-depth)) for _ in xrange(depth)]
     def genNDList(ls):
         if len(ls) == 1:
-            return [randValue(elem) for _ in range(ls[0])]
+            return [randValue(elem) for _ in xrange(ls[0])]
         else:
-            return [genNDList(ls[1:]) for _ in range(ls[0])]
+            return [genNDList(ls[1:]) for _ in xrange(ls[0])]
     return genNDList(lengths)
 
 def genCluster(*items):
     return tuple(randValue(t) for t in items)
 
 
-def hoseDown(setting, n=1000):
+def hoseDown(setting, n=1000, silent=True):
     for _ in range(n):
+        t = randType()
+        v = randValue(t)
+        if not silent:
+            print t
         try:
-            t = randType()
-            v = randValue(t)
-            print v, repr(t)
             resp = setting(v)
             assert v == resp
-        except Exception, e:
+        except:
             print 'problem:', str(t), repr(t)
             print str(T.flatten(v)[1]), str(T.flatten(resp)[1])
-            #raise
+            raise
+            
+if __name__ == '__main__':
+    import labrad
+    cxn = labrad.connect()
+    try:
+        hoseDown(cxn.python_test_server.echo, n=10000, silent=False)
+    except Exception, e:
+        print e
+    else:
+        print 'Success!'
+    finally:
+        print 'press <enter> to finish...'
+        raw_input()

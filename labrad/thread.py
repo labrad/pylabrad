@@ -46,7 +46,7 @@ def startReactor():
 def stopReactor(): 
     reactor.callFromThread(reactor.stop)
 
-def blockingCallFromThread(func, *args, **kwargs):
+def blockingCallFromThread(func, *args, **kw):
     e = threading.Event()
     l = []
     def _got_result(result):
@@ -54,7 +54,7 @@ def blockingCallFromThread(func, *args, **kwargs):
         e.set()
         return None
     def wrapped_func():
-        d = defer.maybeDeferred(func, *args, **kwargs)
+        d = defer.maybeDeferred(func, *args, **kw)
         d.addBoth(_got_result)
     reactor.callFromThread(wrapped_func)
     while True:
@@ -68,7 +68,7 @@ def blockingCallFromThread(func, *args, **kwargs):
         return result
 
 class DelayedResponse(defer.Deferred):
-    def __init__(self, func, *args, **kwargs):
+    def __init__(self, func, *args, **kw):
         defer.Deferred.__init__(self)
         self.e = threading.Event()
         self.l = []
@@ -77,7 +77,7 @@ class DelayedResponse(defer.Deferred):
             self.e.set()
             return None
         def wrapped_func():
-            d = defer.maybeDeferred(func, *args, **kwargs)
+            d = defer.maybeDeferred(func, *args, **kw)
             d.addBoth(_got_result)
         reactor.callFromThread(wrapped_func)
         self.waited = False

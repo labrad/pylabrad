@@ -208,7 +208,7 @@ class LabradRequestProtocol(LabradProtocol):
             req_num = self._nextRequest
             self._nextRequest += 1
 
-        req = labradRequest(timeout)
+        req = LabradRequest(timeout)
         req.deferred.addBoth(self._finishRequest, req_num)
         self.requests[req_num] = req
         self.sendPacket(target, context, req_num, records)
@@ -256,7 +256,7 @@ class LabradRequestProtocol(LabradProtocol):
     def removeListener(self, key, listener):
         self.listeners[key].remove(listener)
 
-class labradRequest:
+class LabradRequest:
     """Handle packets coming back from a particular request."""
 
     def __init__(self, timeout=None):
@@ -280,7 +280,7 @@ class labradRequest:
             self.deferred.callback(records)
 
 # factory
-class labradClientFactory(protocol.ClientFactory):
+class LabradClientFactory(protocol.ClientFactory):
 
     isServer = False
     protocol = LabradRequestProtocol

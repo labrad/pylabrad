@@ -51,15 +51,16 @@ class SettingWrapper(object):
         self._refreshed = False
         self._num_listeners = 0
 
-    def __call__(self, *args, **kwargs):
-        wait = extractKey(kwargs, 'wait', True)
-        wrap = extractKey(kwargs, 'wrap', True)
+    def __call__(self, *args, **kw):
+        wait = extractKey(kw, 'wait', True)
+        wrap = extractKey(kw, 'wrap', True)
+        tag = extractKey(kw, 'tag', None) or self.accepts
         if not len(args):
             args = None
         elif len(args) == 1:
             args = args[0]
         resp = DelayedResponse(self._server._send,
-                               (self.ID, args, self.accepts), **kwargs)
+                               (self.ID, args, tag), **kw)
         if wrap:
             resp.addCallback(lambda resp: resp[0][1])
         return resp.wait() if wait else resp
@@ -97,6 +98,7 @@ class SettingWrapper(object):
         self._refreshed = False
 
     def connect(self, handler, *args):
+        """Connect a local handler to this signal."""
         srv = self._server
         block(srv._cxn._cxn.addListener, (srv.ID, self.ID), handler)
         self._num_listeners += 1
@@ -105,6 +107,7 @@ class SettingWrapper(object):
             return self.__call__(self.ID, *args)
 
     def disconnect(self, handler):
+        """Disconnect a local handler from this signal."""
         srv = self._server
         block(srv._cxn._cxn.removeListener, (srv.ID, self.ID), handler)
         self._num_listeners -= 1
@@ -210,11 +213,12 @@ class HasDynamicAttrs(object):
     def _getAttrs(self):
         """Get the current list of attributes from labrad.
 
-        Should be overridden by subclasses, to get the attributes
-        they need."""
+        Should be overridden by subclasses with a method
+        to get the attributes they need.
+        """
         return []
 
-    _staticAttrs = [] # static attributes, so dynamic names don't collide
+    _staticAttrs = [] # static attributes names, so dynamic names don't collide
     _wrapAttr = lambda *a: None # should be overridden by subclasses
 
     def refresh(self, now=False):
@@ -267,15 +271,13 @@ class ServerWrapper(HasDynamicAttrs):
     def context(self):
         return self._cxn.context()
 
-    def packet(self, **kwargs):
-        kw = dict(self._kw)
-        kw.update(kwargs)
-        return PacketWrapper(self, **kw)
+    def packet(self, **kw):
+        return PacketWrapper(self, **dict(self._kw, **kw))
 
-    def __call__(self, **kwargs):
+    def __call__(self, **kw):
         return self
 
-    def clone(self, **kwargs):
+    def clone(self, **kw):
         # TODO: this should make a clone that can have different
         # default keyword args, and, in particular, should talk
         # to the server in a different context
@@ -301,18 +303,16 @@ Settings:
 class PacketWrapper(HasDynamicAttrs):
     """An object to encapsulate a labrad packet to a server."""
 
-    def __init__(self, server, **kwargs):
+    def __init__(self, server, **kw):
         HasDynamicAttrs.__init__(self)
         self._server = server
         self._packet = []
-        self._kwargs = kwargs
+        self._kw = kw
 
-    def send(self, wait=True, **kwargs):
+    def send(self, wait=True, **kw):
         """Send this packet to the server."""
-        kw = dict(self._kwargs)
-        kw.update(kwargs)
         records = [rec[:3] for rec in self._packet]
-        resp = DelayedResponse(self._server._send, records, **kw)
+        resp = DelayedResponse(self._server._send, records, **dict(self._kw, **kw))
         resp.addCallback(PacketResponse, self._server, self._packet)
         return resp.wait() if wait else resp
 
@@ -324,19 +324,20 @@ class PacketWrapper(HasDynamicAttrs):
     _staticAttrs = ['settings', 'send']
 
     def _getAttrs(self):
-        """Grab the most-recently cached list of the server's attributes."""
+        """Grab the list of the server's attributes."""
         ignored = self._server.settings # ensure refresh
         return self._server._slist
 
     def _wrapAttr(self, _parent, name, labrad_name, ID):
         s = self._server.settings[name]
-        def wrapped(*args, **kwargs):
-            key = extractKey(kwargs, 'key', None)
+        def wrapped(*args, **kw):
+            key = extractKey(kw, 'key', None)
+            tag = extractKey(kw, 'tag', None) or s.accepts
             if not len(args):
                 args = None
             elif len(args) == 1:
                 args = args[0]
-            self._packet.append((s.ID, args, s.accepts, key))
+            self._packet.append((s.ID, args, tag, key))
             return self
         return wrapped
 
@@ -347,14 +348,12 @@ class PacketWrapper(HasDynamicAttrs):
                 self._packet[i] = ID, value, accepts, key
 
     def _recordRepr(self, ID, data, types, key):
-        key_str = '' if key is None else " (key='%s')" % key
-        return '%s%s: %s' % (self._server.settings[ID].name, key_str, data)
+        key_str = "" if key is None else " (key='%s')" % key
+        return "%s%s: %s" % (self._server.settings[ID].name, key_str, data)
 
     def __repr__(self):
         data_str = '\n'.join(self._recordRepr(*rec) for rec in self._packet)
-        return """labrad Packet
-
-For Server: '%s'
+        return """Packet for server: '%s'
 
 Data:
 %s
@@ -384,7 +383,7 @@ class Client(HasDynamicAttrs):
     def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT):
         thread.startReactor()
         def getConnection(password):
-            factory = protocol.labradClientFactory(self.name)
+            factory = protocol.LabradClientFactory(self.name)
             factory.password = password
             reactor.connectTCP(host, port, factory, timeout)
             return factory.getConnection()
@@ -410,9 +409,9 @@ class Client(HasDynamicAttrs):
         self._next_context += 1
         return context
 
-    def _send(self, target, records, *args, **kwargs):
+    def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
-        return self._cxn.request(target, records, *args, **kwargs)
+        return self._cxn.request(target, records, *args, **kw)
 
     def __repr__(self):
         if self.connected:
@@ -424,7 +423,7 @@ Available servers:
 """ % (self.name, self.host, self.port, indent(repr(self.servers)))
         else:
             return """\
-LabRAC Client: '%s'
+LabRAD Client: '%s'
 
 Disconnected
 """ % self.name
