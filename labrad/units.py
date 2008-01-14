@@ -13,12 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+
 # Physical quantities with units
 #
 # Written by Konrad Hinsen <hinsen@cnrs-orleans.fr>
 # with contributions from Greg Ward
 # last revision: 2007-5-25
-#
 
 
 """
@@ -844,12 +844,9 @@ if __name__ == '__main__':
     print big_l + l
     t = WithUnit(314159., 's')
 
-    p = WithUnit # just a shorthand...
-
-    e = p('2.7 Hartree*Nav')
-    e.convertToUnit('kcal/mol')
-    print e
+    e = 2.7 * Hartree * Nav
+    print e.inUnitsOf('kcal/mol')
     print e.inBaseUnits()
 
-    freeze = p(0, 'degC')
-    print freeze.inUnitsOf('degF')
+    freeze = 0 * Unit('degC')
+    print freeze['degF']
