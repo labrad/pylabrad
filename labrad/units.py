@@ -384,6 +384,7 @@ class Unit(object):
                 continue
             for elem in list_:
                 num = elem['num'] if 'num' in elem else 1
+                num = -num if 'neg' in elem else num
                 denom = elem['denom'] if 'denom' in elem else 1
                 term = elem['name']
                 if term not in _unit_table:

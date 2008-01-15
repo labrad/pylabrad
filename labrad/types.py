@@ -968,11 +968,13 @@ class LazyList(list):
     @property
     def elem(self):
         return self._lrtype.elem
-    
+
+    @property
     def asList(self):
         self._unflattenList()
         return list(self)
-    
+
+    @property
     def asArray(self):
         self._unflattenArray()
         return self._array
