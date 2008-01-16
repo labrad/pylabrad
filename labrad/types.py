@@ -970,12 +970,12 @@ class LazyList(list):
         return self._lrtype.elem
 
     @property
-    def asList(self):
+    def aslist(self):
         self._unflattenList()
         return list(self)
 
     @property
-    def asArray(self):
+    def asarray(self):
         self._unflattenArray()
         return self._array
     
@@ -1028,7 +1028,7 @@ class LazyList(list):
             #a = U.WithUnit(a, elem.units)
         else:
             a = array([unflatten(s, elem) for _ in xrange(size)])
-        a.shape = dims
+        a.shape = dims + a.shape[1:] # handle clusters as elements
         self._array = a
         return self._array
 

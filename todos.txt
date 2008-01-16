@@ -17,8 +17,6 @@ GENERAL:
     
 	data handling:
         make numpy arrays work with units
-        allow *() to be unflattened to numpy array [size modified]
-        correctly flatten int/long -> i/w
         
 	request cancellation/context expiration
         send context expiration when requests are cancelled (client)
