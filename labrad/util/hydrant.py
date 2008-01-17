@@ -108,6 +108,23 @@ def hoseDown(setting, n=1000, silent=True):
             print 'problem:', str(t), repr(t)
             print str(T.flatten(v)[1]), str(T.flatten(resp)[1])
             raise
+
+def hoseDataVault(dv, n=1000, silent=True):
+    for i in range(n):
+        t = randType(noneOkay=False)
+        v = randValue(t)
+        if not silent:
+            print t
+        try:
+            pname = 'p%03s' % i
+            dv.add_parameter(pname, v)
+            resp = dv.get_parameter(pname)
+            assert v == resp
+        except:
+            print 'problem:', str(t), repr(t)
+            print str(T.flatten(v)[1]), str(T.flatten(resp)[1])
+            raise
+
             
 if __name__ == '__main__':
     import labrad
