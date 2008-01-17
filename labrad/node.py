@@ -44,6 +44,8 @@ from twisted.plugin import getPlugins
 
 from zope.interface import Interface, implements
 
+LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
+
 def findEnvironmentVars(string):
     return re.findall('%([^%]+)%', string)
 
@@ -121,10 +123,12 @@ class ServerProcess(ProcessProtocol):
 
     def outReceived(self, data):
         self.output.append((datetime.now(), data))
+        self.output = self.output[-LOG_LENGTH:]
         print "'%s' stdout: %s" % (self.name, data)
 
     def errReceived(self, data):
         self.output.append((datetime.now(), data))
+        self.output = self.output[-LOG_LENGTH:]
         print "'%s' stderr: %s" % (self.name, data)
 
     def clearOutput(self):
@@ -286,6 +290,9 @@ class ProcNode(MultiService):
     def refresh_servers(self):
         """Refresh the list of available servers."""
         found = {}
+
+        # refresh list of directories to search
+        self.serverMods, self.serverDirs = getNodeConfig()
 
         # look for python plugins
         for module in self.serverMods:

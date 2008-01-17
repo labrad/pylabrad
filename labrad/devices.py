@@ -99,9 +99,10 @@ class DeviceServer(LabradServer):
         yield self.refreshDeviceList()
 
     def stopServer(self):
-        ds = [defer.maybeDeferred(dev.shutdown)
-              for dev in self.devices.values()]
-        return defer.DeferredList(ds, fireOnOneErrback=True)
+        if hasattr(self, 'devices'):
+            ds = [defer.maybeDeferred(dev.shutdown)
+                  for dev in self.devices.values()]
+            return defer.DeferredList(ds, fireOnOneErrback=True)
 
     def findDevices(self):
         """Return a list of found devices.

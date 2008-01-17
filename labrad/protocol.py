@@ -128,7 +128,6 @@ class LabradProtocol(protocol.Protocol):
         source, context, request, records = yield 0
         msg = records[0][1]
         if isinstance(msg, Exception):
-            print msg
             self.disconnect() # unable to log in for some reason
             return
         if DEBUG: print msg # welcome message from labrad

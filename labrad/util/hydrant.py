@@ -34,8 +34,8 @@ def randType(noneOkay=True, listOkay=True, nStructs=0):
         T.LRTime,
         lambda: T.LRValue(randUnits()),
         lambda: T.LRComplex(randUnits()),
-        lambda: T.LRCluster(*(randType(noneOkay=False, nStructs=nStructs+1)
-                              for _ in range(randint(1,5)))),
+        lambda: T.LRCluster(*[randType(noneOkay=False, nStructs=nStructs+1)
+                              for _ in range(randint(1,5))]),
         lambda: T.LRList(randType(noneOkay=False, listOkay=False,
                                   nStructs=nStructs+1),
                          depth=randint(1,3)),

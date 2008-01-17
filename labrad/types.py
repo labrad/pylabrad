@@ -427,8 +427,7 @@ class LRNone(LRType, Singleton):
             raise FlatteningError(data, self)
         return ''
 
-NONE = LRNone()
-registerType(type(None), NONE)
+registerType(type(None), LRNone())
 
 
 class LRBool(LRType, Singleton):
@@ -444,8 +443,7 @@ class LRBool(LRType, Singleton):
             raise FlatteningError(b, self)
         return chr(b)
 
-BOOL = LRBool()
-registerType(bool, BOOL)
+registerType(bool, LRBool())
 
 
 class LRInt(LRType, Singleton):
@@ -460,8 +458,7 @@ class LRInt(LRType, Singleton):
             raise FlatteningError(n, self)
         return pack('i', n)
 
-INT = LRInt()
-registerType(int, INT)
+registerType(int, LRInt())
 
 
 class LRWord(LRType, Singleton):
@@ -476,8 +473,7 @@ class LRWord(LRType, Singleton):
             raise FlatteningError(n, self)
         return pack('I', n)
 
-WORD = LRWord()
-registerType(long, WORD)
+registerType(long, LRWord())
 
 
 class LRStr(LRType, Singleton):
@@ -499,8 +495,7 @@ class LRStr(LRType, Singleton):
             raise FlatteningError(s, self)
         return pack('I', len(s)) + s
 
-STR = LRStr()
-registerType(str, STR)
+registerType(str, LRStr())
 
 
 def timeOffset():
@@ -531,8 +526,7 @@ class LRTime(LRType, Singleton):
         us = long(float(diff.microseconds)/pow(10,6)*pow(2,64))
         return pack('QQ', secs, us)
 
-TIME = LRTime()
-registerType(datetime, TIME)
+registerType(datetime, LRTime())
 
 
 class LRValue(LRType):
@@ -627,7 +621,7 @@ class LRCluster(LRType):
 
     @classmethod
     def __lrtype__(cls, c):
-        return cls(*(getType(i) for i in c))
+        return cls(*[getType(i) for i in c])
 
     def __len__(self):
         return len(self.items)
@@ -830,7 +824,6 @@ class LRList(LRType):
             a = a.flat[::2]
         else:
             elems = imap(itemgetter(0), (flatten(i) for i in a.flat))
-            #elems, types = zip(*(flatten(i) for i in a.flat))
             return dims + ''.join(elems)
         return dims + a.tostring()
         
