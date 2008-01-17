@@ -14,6 +14,8 @@ GENERAL:
 		config files can go in labrad/config
 		need a class to manage reading/writing and persisting config
 		allow overrides per-user, per-session, etc.
+        one config file per server
+            - class to help read/write configuration to this file
     
 	data handling:
         make numpy arrays work with units

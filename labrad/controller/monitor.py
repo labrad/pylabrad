@@ -143,7 +143,7 @@ class TaskBarIcon(wx.TaskBarIcon):
         icon size...
         """
         if "wxMSW" in wx.PlatformInfo:
-            img = img.Scale(16, 16)
+            img = img.Scale(20, 20)
         elif "wxGTK" in wx.PlatformInfo:
             img = img.Scale(22, 22)
         # wxMac can be any size upto 128x128, so leave the source img alone....
