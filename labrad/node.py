@@ -14,12 +14,15 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-labrad.procnode
+labrad.node
 
 Provides an interface to manage all python labrad servers
 running on a particular computer.  This version runs each
 server in a separate process, so that they can not interfere
-with each other.
+with each other.  Information such as the manager host, port
+and password are passed to the child process in environment
+variables or via command line arguments.  The startup process
+for each child server is controlled by an associated .ini file.
 """
 
 import os
@@ -117,7 +120,8 @@ class ServerProcess(ProcessProtocol):
 
     def kill(self):
         try:
-            self.proc.signalProcess('KILL')
+            #self.proc.writeToChild(0, '\x03')
+            self.proc.signalProcess("KILL")
         except:
             pass
 

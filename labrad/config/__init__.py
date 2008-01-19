@@ -19,6 +19,8 @@ import os
 
 from ConfigParser import SafeConfigParser
 
+# by default, we look for configuration files
+# here in the labrad.config directory
 configPath = os.path.split(__file__)[0]
 
 class ConfigFile(object):

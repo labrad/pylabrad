@@ -306,6 +306,8 @@ class LabradServer(protocol.ClientFactory):
 
             # do server-specific initialization
             yield self.initServer()
+            reactor.addSystemEventTrigger('before', 'shutdown',
+                                          self.stopServer)
             self.serving = True
 
             # sign up for notifications when servers connect and disconnect
@@ -361,12 +363,12 @@ class LabradServer(protocol.ClientFactory):
         Any cleanup operations on the context should be done here.
         """
 
-    def stopFactory(self):
-        """Stop Factory.
-
-        Called when the server is stopped.
-        """
-        return self.stopServer()
+    #def stopFactory(self):
+    #    """Stop Factory.
+    #
+    #    Called when the server is stopped.
+    #    """
+    #    return self.stopServer()
 
     def createSignals(self):
         for methodName in dir(self):
