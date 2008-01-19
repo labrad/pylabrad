@@ -10,15 +10,11 @@ SOURCEFORGE:
 		upload to sourceforge
 
 GENERAL:
-	configuration system:
-		config files can go in labrad/config
-		need a class to manage reading/writing and persisting config
-		allow overrides per-user, per-session, etc.
-        one config file per server
-            - class to help read/write configuration to this file
-    
-	data handling:
-        make numpy arrays work with units
+    - server templates
+    - heirarchical data storage for data vault
+
+	config overrides in places other than labrad.config
+        - per-user, per-session, etc.
         
 	request cancellation/context expiration
         send context expiration when requests are cancelled (client)
@@ -52,9 +48,6 @@ GENERAL:
 		test setting decorator
         test eval and repr of labrad data for data vault
     
-	configuration:
-		system to setup hostname, nodenames, port, passwords, etc.
-	
 	logging
         configure twisted logging (less verbose when using util.runServer)
         allow logs to be accessed and manipulated remotely

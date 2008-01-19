@@ -122,6 +122,7 @@ class ServerProcess(ProcessProtocol):
         try:
             #self.proc.writeToChild(0, '\x03')
             self.proc.signalProcess("KILL")
+            #self.client._cxn.message(self.ID, (987654321, None))
         except:
             pass
 
@@ -154,6 +155,7 @@ class ServerProcess(ProcessProtocol):
         ID, name = data
         print 'server connected:', name
         if name == self.name:
+            self.ID = ID
             self.running = True
             self.startup.callback(self)
 
@@ -271,6 +273,7 @@ class ProcNode(MultiService):
         self.addService(self.cxn)
 
     def _connected(self, data, srv):
+        self.client = srv.client
         self.manager = srv.client.manager
         self.refresh_servers()
 
@@ -305,6 +308,7 @@ class ProcNode(MultiService):
                 for plugin in getPlugins(ILabradServer, sys.modules[module]):
                     p = createPythonServerCls(plugin)
                     p.manager = self.manager
+                    p.client = self.client
                     found[p.name] = p
             except Exception, e:
                 print e
@@ -318,6 +322,7 @@ class ProcNode(MultiService):
                     try:
                         p = createGenericServerCls(path, f)
                         p.manager = self.manager
+                        p.client = self.client
                         found[p.name] = p
                     except Exception, e:
                         print e

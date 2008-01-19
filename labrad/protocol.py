@@ -194,6 +194,10 @@ class LabradRequestProtocol(LabradProtocol):
         self.requests = {}
         self.listeners = {}
 
+    def message(self, target, records, context=(0, 0)):
+        """Send a message to the specified target."""
+        self.sendPacket(target, context, 0, records)
+        
     def request(self, target, records, context=(0, 0), timeout=None):
         """Send a request to the given target server.
 

@@ -40,6 +40,13 @@ class TestServer(LabradServer):
 
     log = Signal(555, 'log', '(ts)')
 
+    @inlineCallbacks
+    def stopServer(self):
+        print 'before yield'
+        yield None
+        print (yield self.client.manager.convert_units(T.Value(5, 'GHz'), 'Hz'))
+        print 'after yield'
+    
     @setting(2)
     def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""

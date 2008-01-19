@@ -308,8 +308,9 @@ class LabradServer(protocol.ClientFactory):
             yield self.initServer()
             reactor.addSystemEventTrigger('before', 'shutdown',
                                           self.stopServer)
+            prot.addListener(987654321, lambda _: reactor.stop())
             self.serving = True
-
+            
             # sign up for notifications when servers connect and disconnect
             yield mgr.notify_on_connect.connect(self.serverConnected)
             yield mgr.notify_on_disconnect.connect(self.serverDisconnected)
@@ -355,20 +356,13 @@ class LabradServer(protocol.ClientFactory):
         Called when the server is shutting down, but before we have
         closed any client connections.  Perform any cleanup operations here.
         """
-
+        
     def expireContext(self, c):
         """Expire Context.
 
         Called when a client which created a context disconnects.
         Any cleanup operations on the context should be done here.
         """
-
-    #def stopFactory(self):
-    #    """Stop Factory.
-    #
-    #    Called when the server is stopped.
-    #    """
-    #    return self.stopServer()
 
     def createSignals(self):
         for methodName in dir(self):
