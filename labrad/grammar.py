@@ -25,7 +25,7 @@ from labrad.pyparsing import (Word, Literal, Group, OneOrMore,
 toInt = lambda s, l, t: [int(t[0])]
 
 number = Word(nums).setParseAction(toInt)
-name = Word(alphas)
+name = Word(alphas + '%"\'\xE6\xF8') # degree and mu
 
 power = Literal('^').suppress()
 times = Literal('*').suppress()
