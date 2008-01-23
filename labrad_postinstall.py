@@ -22,6 +22,8 @@ menuDir = "LabRAD"
 menuPath = os.path.join(get_special_folder_path("CSIDL_COMMON_PROGRAMS"),
                         menuDir)
 scriptsPath = os.path.join(sys.prefix, 'Scripts')
+twistdPath = os.path.join(scriptsPath, 'twistd.py')
+ipyPath = os.path.join(scriptsPath, 'ipython.py')
 configPath = os.path.join(sys.prefix, 'Lib', 'site-packages', 'labrad', 'config')
 
 def mkdir(a, *p):
@@ -47,14 +49,17 @@ def install():
     print "Creating start menu entries..."
     mkdir(menuPath)
 
+    print "Creating node shortcut...",
     nodeShortcut = os.path.join(menuPath, "LabRAD Node.lnk")
     if os.path.isfile(nodeShortcut):
         os.remove(nodeShortcut)
-    create_shortcut("twistd.py", "Node to start and stop LabRAD servers",
+    create_shortcut(twistdPath, "Node to start and stop LabRAD servers",
 	            nodeShortcut, "-n labradnode")
     file_created(nodeShortcut)
+    print "done."
 	
     # create local copy of configuration
+    print "Creating local copy of node config...",
     create_local_copy(os.path.join(configPath, "node-template.ini"),
                       os.path.join(configPath, "node.ini"))
     nodeConf = os.path.join(menuPath, "LabRAD Node Config.lnk")
@@ -63,16 +68,19 @@ def install():
     create_shortcut(os.path.join(configPath, "node.ini"),
                     "Node Configuration", nodeConf)
     file_created(nodeConf)
+    print "done."
 
-	
+    print "Creating controller shortcut...",
     controllerShortcut = os.path.join(menuPath, "LabRAD Controller.lnk")
     if os.path.isfile(controllerShortcut):
         os.remove(controllerShortcut)
-    create_shortcut("twistd.py", "Web control for LabRAD, localhost:7667",
+    create_shortcut(twistdPath, "Web control for LabRAD, localhost:7667",
 	            controllerShortcut, "-n labradcontrol")
     file_created(controllerShortcut)
+    print "done."
     
     # create local copy of configuration
+    print "Creating local copy of controller config...",
     create_local_copy(os.path.join(configPath, "controller-template.ini"),
                       os.path.join(configPath, "controller.ini"))
     controllerConf = os.path.join(menuPath, "LabRAD Controller Config.lnk")
@@ -81,25 +89,31 @@ def install():
     create_shortcut(os.path.join(configPath, "controller.ini"),
                     "Controller Configuration", controllerConf)
     file_created(controllerConf)
+    print "done."
 
+    if os.path.exists(ipyPath):
+        print "Creating LabRAD shell shortcut...",
+        ipyShortcut = os.path.join(menuPath, "LabRAD Shell.lnk")
+        ipyScript = os.path.join(configPath, "ipythonrc-labrad.ini")
+        if os.path.isfile(ipyShortcut):
+            os.remove(ipyShortcut)
+        create_shortcut(ipyPath, "",
+                        ipyShortcut, "-rcfile %s" % ipyScript)
+        file_created(ipyShortcut)
+        print "done."
+
+        print "Creating LabRAD tutorial shortcut...",
+        ipyShortcut = os.path.join(menuPath, "LabRAD Tutorial.lnk")
+        ipyScript = os.path.join(configPath, "ipythonrc-labrad_tut.ini")
+        if os.path.isfile(ipyShortcut):
+            os.remove(ipyShortcut)
+        create_shortcut(ipyPath, "",
+                        ipyShortcut, "-rcfile %s" % ipyScript)
+        file_created(ipyShortcut)
+        print "done."
+    else:
+        print "IPython not found.  Skipping shortcuts for IPython shell."
     
-    ipyShortcut = os.path.join(menuPath, "LabRAD Shell.lnk")
-    ipyScript = os.path.join(configPath, "ipythonrc-labrad.ini")
-    if os.path.isfile(ipyShortcut):
-        os.remove(ipyShortcut)
-    create_shortcut(os.path.join(scriptsPath, 'ipython.py'), "",
-                    ipyShortcut, "-rcfile %s" % ipyScript)
-    file_created(ipyShortcut)
-    
-    ipyShortcut = os.path.join(menuPath, "LabRAD Tutorial.lnk")
-    ipyScript = os.path.join(configPath, "ipythonrc-labrad_tut.ini")
-    if os.path.isfile(ipyShortcut):
-        os.remove(ipyShortcut)
-    create_shortcut(os.path.join(scriptsPath, 'ipython.py'), "",
-                    ipyShortcut, "-rcfile %s" % ipyScript)
-    file_created(ipyShortcut)
-    
-    print "Done."
     
     
 def remove():
