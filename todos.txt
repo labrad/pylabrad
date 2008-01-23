@@ -15,6 +15,8 @@ GENERAL:
 
 	config overrides in places other than labrad.config
         - per-user, per-session, etc.
+    save/load data and configuration
+        - save config in registry where possible, but allow local override
         
 	request cancellation/context expiration
         send context expiration when requests are cancelled (client)
@@ -71,14 +73,19 @@ SERVERS:
 		server config files:
 			declare dependencies to be auto-started
 
-	PREAMP SERVER:
-        allow querying of state, not just setting
-
-	DATA SERVER:
+    CONTROLLER:
+        make server output visible (and clearable, etc.) in the browser
+        access all node settings remotely (e.g. directories)
+    
+    DATA VAULT:
         add comments to sessions and datasets
         dataset summary
         searching/sorting
 
+    DEVICE SERVER:
+        devices have a "select" hook
+            keeps a reference count of how many times they have been selected
+        
     CLIENT:
         separate views of servers in a context
 		caching broken if setting numbers change
@@ -86,20 +93,10 @@ SERVERS:
             make disconnect work cleanly
         some settings invisible by default (e.g. logging stuff)?
         asynchronous client use dynamic dispatch (tab-completion not needed)
-        
-    CONTROLLER:
-        make it bulletproof
-			error messages displayed inline, not in separate pages
-        allow viewing of logs/setting log levels
-		allow setting environment vars when starting servers
-		make pages for each server that let you browse settings (online help)
-		AJAXify
-		encrypt if possible
 
+    PREAMP SERVER:
+        allow querying of state, not just setting
+    
     test device model
     generic getters and setters, can we expose properties?
-    save/load data and configuration
-    server modes:
-        immediate- changes happen immediately
-        lazy- changes stored in context, synchronized later
     
