@@ -230,6 +230,7 @@ class AsyncClient:
         reactor.connectTCP(host, port, self._factory, timeout)
         self._cxn = yield self._factory.getConnection()
         self._mgr = ILabradManager(self._cxn)
+        self.ID = self._cxn.ID
 
         self.host = host
         self.port = port

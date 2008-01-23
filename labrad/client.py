@@ -396,6 +396,7 @@ class Client(HasDynamicAttrs):
         else:
             C.PASSWORD = pw # save password if it worked
             self._mgr = ILabradManager(self._cxn)
+            self.ID = self._cxn.ID
             self.host, self.port = host, port
             self.connected = True
 
