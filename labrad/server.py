@@ -213,7 +213,7 @@ class Signal(object):
                     if ctx not in self.listeners:
                         continue
                     for target, ID in self.listeners[ctx].items():
-                        p.message(target, (ID, data), context)
+                        p.message(target, (ID, data), ctx)
             
     def connect(self, context, target, ID):
         # TODO: use weak references here to prevent memory leaks
