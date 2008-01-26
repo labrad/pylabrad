@@ -195,24 +195,37 @@ class Signal(object):
         self.tag = tag
         self.listeners = {}
 
-    def __call__(self, data):
-        # TODO: remove listeners that fail (listeners may return deferreds)
+    def __call__(self, data, context=None):
         # TODO: remove listeners when clients disconnect
-        # TODO: isolate listeners so that one failure does not kill the rest
         if hasattr(self, 'parent'):
-            for target, ID in self.listeners.items():
-                #print "signalling %d, %d: %s." % (target, ID, data)
-                self.parent.prot.sendPacket(target, (0, 0), 0, (ID, data))
-
-    def connect(self, key):
+            p = self.parent.prot
+            if context is None:
+                # send this to everyone
+                for context, targets in self.listeners.items():
+                    for target, ID in targets.items():
+                        p.message(target, (ID, data), context)
+            else:
+                # send only to those in the specified
+                # context or list of contexts
+                if not isinstance(context, list):
+                    context = [context]
+                for ctx in context:
+                    if ctx not in self.listeners:
+                        continue
+                    for target, ID in self.listeners[ctx].items():
+                        p.message(target, (ID, data), context)
+            
+    def connect(self, context, target, ID):
         # TODO: use weak references here to prevent memory leaks
-        target, ID = key
-        self.listeners.setdefault(target, ID)
-
-    def disconnect(self, target):
-        if target in self.listeners:
-            del self.listeners[target]
-
+        cdict = self.listeners.setdefault(context, {})
+        tdict = cdict.setdefault(target, ID)
+        
+    def disconnect(self, context, target):
+        if context in self.listeners:
+            cdict = self.listeners[context]
+            if target in cdict:
+                del cdict[target]
+                
 class LabradServer(protocol.ClientFactory):
     """A generic labrad server."""
 
@@ -380,14 +393,14 @@ class LabradServer(protocol.ClientFactory):
 
     def handleSignalSignup(self, sig):
         #print 'server: %s, creating signal: %s' % (self.name, sig.name)
-        @setting(sig.ID, sig.name, data=['w'], returns=[''])
-        def handler(self, c, data=None):
-            if data is None:
+        @setting(sig.ID, sig.name, ID=['w'], returns=[''])
+        def handler(self, c, ID=None):
+            if ID is None:
                 #print "disconnect %d from signal '%s'." % (c.source, sig.name)
-                sig.disconnect(c.source)
+                sig.disconnect(c.ID, c.source)
             else:
                 #print "connect %d, %d to signal '%s'." % (c.source, data, sig.name)
-                sig.connect((c.source, data))
+                sig.connect(c.ID, c.source, ID)
         setattr(self, '_signal_' + sig.name, handler)
 
     def clientConnectionLost(self, connector, reason):
