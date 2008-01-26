@@ -321,6 +321,7 @@ class LabradServer(protocol.ClientFactory):
             yield self.initServer()
             reactor.addSystemEventTrigger('before', 'shutdown',
                                           self.stopServer)
+            # kill me with a message, so that clean-up happens nicely
             prot.addListener(987654321, lambda _: reactor.stop())
             self.serving = True
             
