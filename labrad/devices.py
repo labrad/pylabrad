@@ -189,8 +189,9 @@ class DeviceServer(LabradServer):
             alias = c['device']
             try:
                 dev = self.devices[alias]
-                if dev.locked:
+                if dev.locked and (dev._lockContext == c.ID):
                     dev.unlock()
+                dev.deselect(c)
             except KeyError:
                 pass
 
@@ -228,18 +229,38 @@ class DeviceServer(LabradServer):
             raise errors.NoSuchDeviceError
         if not dev.accessibleFrom(context.ID):
             raise DeviceLockedError()
+        
+        if 'device' in context:
+            if context['device'] != dev.guid:
+                try:
+                    oldDev = self.devices[context['device']]
+                except KeyError:
+                    pass
+                else:
+                    # we're trying to select a new device.
+                    # make sure to unlock previously selected device
+                    if oldDev.locked and (oldDev._lockContext == context.ID):
+                        oldDev.unlock(context.ID)
+                    oldDev.deselect(context)
+                context['device'] = dev.guid
+                dev.select(context)
+        else:
+            context['device'] = dev.guid
+            dev.select(context)
+        return dev
+
+    def deselectDevice(self, context):
         if 'device' in context:
             try:
                 oldDev = self.devices[context['device']]
             except KeyError:
                 pass
             else:
-                if oldDev != dev:
-                    # we're trying to select a new device.
-                    # make sure to unlock previously selected device
+                # unlock and deselect device
+                if oldDev.locked and (oldDev._lockContext == context.ID):
                     oldDev.unlock(context.ID)
-        context['device'] = dev.guid
-        return dev
+                oldDev.deselect(context)
+            del context['device']
 
     def getDevice(self, context, key=None):
         if len(self.devices) == 0:
@@ -273,7 +294,13 @@ class DeviceServer(LabradServer):
         dev = self.selectDevice(c, key=key)
         return dev.name
 
-    @setting(3, 'Refresh Devices', returns=['*(ws)'])
+    @setting(3, 'Deselect Device', returns=[''])
+    def deselect_device(self, c):
+        """Select a device for the current context."""
+        dev = self.deselectDevice(c)
+        return
+    
+    @setting(4, 'Refresh Devices', returns=['*(ws)'])
     def refresh_devices(self, c):
         """Refresh the list of available devices."""
         yield self.refreshDeviceList()
