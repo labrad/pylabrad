@@ -86,7 +86,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                 # we don't add '' if the list of accepted types is empty,
                 # since this would make '' the ONLY accepted type
                 if len(accepts_t) and T.LRNone() not in accepts_t:
-                    accepts_s.append(': call with defaults [%s=%r]' \
+                    accepts_s.append(': defaults [%s=%r]' \
                                      % (args[0], defaults[0]))
                     accepts_t.append(T.LRNone())
                 
@@ -153,8 +153,8 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                 # add information about default values of unused params
                 if len(group) < Nparams:
                     defstr = ', '.join('%s=%r' % (args[n], defaults[n])
-                                       for n in range(0, Nparams - len(group)))
-                    s = s + ': call with defaults [%s]' % defstr
+                                       for n in range(len(group), Nparams))
+                    s = s + ': defaults [%s]' % defstr
                 accepts_t.append(t)
                 accepts_s.append(s)
 
@@ -162,7 +162,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                 if T.LRNone() not in accepts_t:
                     defstr = ', '.join('%s=%r' % (a, d)
                                        for a, d in zip(args, defaults))
-                    accepts_s.append(': call with defaults [%s]' % defstr)
+                    accepts_s.append(': defaults [%s]' % defstr)
                     accepts_t.append(T.LRNone())
                 
                 @wraps(f)

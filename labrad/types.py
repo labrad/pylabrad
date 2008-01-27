@@ -663,6 +663,8 @@ class LRCluster(LRType):
         """Flatten python tuple to LabRAD cluster."""
         if len(c) == 0:
             raise FlatteningError('Cannot flatten zero-length clusters')
+        if len(c) != len(self.items):
+            raise FlatteningError('Cannot flatten %s to %s' % (c, self.items))
         return ''.join(t.__flatten__(elem) for t, elem in zip(self.items, c))
 
 registerTypeFunc(tuple, LRCluster.__lrtype__)

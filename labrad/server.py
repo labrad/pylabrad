@@ -195,11 +195,11 @@ class Signal(object):
         self.tag = tag
         self.listeners = {}
 
-    def __call__(self, data, context=None):
+    def __call__(self, data, contexts=None):
         # TODO: remove listeners when clients disconnect
         if hasattr(self, 'parent'):
             p = self.parent.prot
-            if context is None:
+            if contexts is None:
                 # send this to everyone
                 for context, targets in self.listeners.items():
                     for target, ID in targets.items():
@@ -207,13 +207,13 @@ class Signal(object):
             else:
                 # send only to those in the specified
                 # context or list of contexts
-                if not isinstance(context, list):
-                    context = [context]
-                for ctx in context:
-                    if ctx not in self.listeners:
+                if not isinstance(contexts, list):
+                    contexts = [contexts]
+                for context in contexts:
+                    if context not in self.listeners:
                         continue
-                    for target, ID in self.listeners[ctx].items():
-                        p.message(target, (ID, data), ctx)
+                    for target, ID in self.listeners[context].items():
+                        p.message(target, (ID, data), context)
             
     def connect(self, context, target, ID):
         # TODO: use weak references here to prevent memory leaks
@@ -402,6 +402,11 @@ class LabradServer(protocol.ClientFactory):
             else:
                 #print "connect %d, %d to signal '%s'." % (c.source, data, sig.name)
                 sig.connect(c.ID, c.source, ID)
+        handler.__doc__ = """Connect/Disconnect to signal '%s'
+        
+        Passing a word ID will cause messages to be sent to setting ID
+        when this signal is fired.  Passing nothing will cancel future messages.
+        The message data will be of type '%s'.""" % (sig.name, sig.tag)
         setattr(self, '_signal_' + sig.name, handler)
 
     def clientConnectionLost(self, connector, reason):
