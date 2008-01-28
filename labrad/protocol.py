@@ -193,6 +193,7 @@ class LabradRequestProtocol(LabradProtocol):
         self._reuse = set()
         self.requests = {}
         self.listeners = {}
+        self.listener_args = {}
 
     def message(self, target, records, context=(0, 0)):
         """Send a message to the specified target."""
@@ -243,9 +244,10 @@ class LabradRequestProtocol(LabradProtocol):
             listeners = self.listeners.get(ID, []) or \
                         self.listeners.get((source, ID), [])
             for listener in listeners:
-                listener(data)
+                args, kw = self.listener_args[listener]
+                listener(data, *args, **kw)
 
-    def addListener(self, key, listener):
+    def addListener(self, key, listener, *args, **kw):
         """Add a listener for messages to the specified key.
 
         The key should be either a setting ID to handle messages
@@ -255,9 +257,11 @@ class LabradRequestProtocol(LabradProtocol):
         if DEBUG: print "listening to %s with %s" % (key, listener)
         listeners = self.listeners.setdefault(key, [])
         listeners.append(listener)
+        self.listener_args[listener] = args, kw
 
     def removeListener(self, key, listener):
         self.listeners[key].remove(listener)
+        del self.listener_args[listener]
 
 class LabradRequest:
     """Handle packets coming back from a particular request."""

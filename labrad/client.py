@@ -102,8 +102,8 @@ class SettingWrapper(object):
                                handlerargs=(), handlerkw={}):
         """Connect a local handler to this signal."""
         srv = self._server
-        handler = partial(handler, *handlerargs, **handlerkw)
-        block(srv._cxn._cxn.addListener, (srv.ID, self.ID), handler)
+        block(srv._cxn._cxn.addListener, (srv.ID, self.ID), handler,
+                                         *handlerargs, **handlerkw)
         self._num_listeners += 1
         if self._num_listeners == 1:
             # TODO: remove from listeners if this fails

@@ -55,8 +55,8 @@ class AsyncSettingWrapper(object):
     def connect(self, handler, signupargs=(), signupkw={},
                                handlerargs=(), handlerkw={}):
         srv = self._server
-        handler = partial(handler, *handlerargs, **handlerkw)
-        srv._cxn._cxn.addListener((srv.ID, self.ID), handler)
+        srv._cxn._cxn.addListener((srv.ID, self.ID), handler,
+                                  *handlerargs, **handlerkw)
         self._num_listeners += 1
         if self._num_listeners == 1:
             # TODO: remove listener if registration fails
