@@ -78,6 +78,12 @@ class DeviceWrapper:
     def shutdown(self):
         """Called when we close the connection to this device."""
 
+    def select(self, context):
+        """Select this device in a context."""
+
+    def deselect(self, context):
+        """Deselect this device in a context."""
+
 class DeviceServer(LabradServer):
     """A server for devices.
     
