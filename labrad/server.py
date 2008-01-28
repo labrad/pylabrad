@@ -336,7 +336,7 @@ class LabradServer(protocol.ClientFactory):
             yield mgr.notify_on_disconnect.connect(self.serverDisconnected)
             yield mgr.notify_on_disconnect.connect(self.pruneSignals)
             yield mgr.s__notify_on_context_expiration.connect(
-                      prot.handleExpiration, True)
+                      prot.handleExpiration, signupargs=(True,))
 
             # let the rest of the world know we're ready
             yield mgr.s__start_serving()
