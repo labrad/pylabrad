@@ -21,6 +21,8 @@ from twisted.internet import reactor, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
 
+from functools import partial
+
 class AsyncSettingWrapper(object):
     def __init__(self, server, name, labrad_name, ID):
         self.name = self.__name__ = name
@@ -50,13 +52,15 @@ class AsyncSettingWrapper(object):
             resp.addCallback(lambda resp: resp[0][1])
         return resp
     
-    def connect(self, handler, *args):
+    def connect(self, handler, signupargs=(), signupkw={},
+                               handlerargs=(), handlerkw={}):
         srv = self._server
+        handler = partial(handler, *handlerargs, **handlerkw)
         srv._cxn._cxn.addListener((srv.ID, self.ID), handler)
         self._num_listeners += 1
         if self._num_listeners == 1:
             # TODO: remove listener if registration fails
-            return self.__call__(self.ID, *args)
+            return self.__call__(self.ID, *signupargs, **signupkw)
         else:
             return defer.succeed(None)
     

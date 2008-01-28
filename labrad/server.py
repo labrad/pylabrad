@@ -226,6 +226,12 @@ class Signal(object):
             if target in cdict:
                 del cdict[target]
                 
+    def disconnectAll(self, target):
+        for context in self.listeners:
+            cdict = self.listeners[context]
+            if target in cdict:
+                del cdict[target]
+                
 class LabradServer(protocol.ClientFactory):
     """A generic labrad server."""
 
@@ -390,17 +396,15 @@ class LabradServer(protocol.ClientFactory):
         for methodName in dir(self):
             sig = getattr(self, methodName)
             if isinstance(sig, Signal):
-                sig.disconnect(ID)
+                sig.disconnectAll(ID)
 
     def handleSignalSignup(self, sig):
         #print 'server: %s, creating signal: %s' % (self.name, sig.name)
         @setting(sig.ID, sig.name, ID=['w'], returns=[''])
         def handler(self, c, ID=None):
             if ID is None:
-                #print "disconnect %d from signal '%s'." % (c.source, sig.name)
                 sig.disconnect(c.ID, c.source)
             else:
-                #print "connect %d, %d to signal '%s'." % (c.source, data, sig.name)
                 sig.connect(c.ID, c.source, ID)
         handler.__doc__ = """Connect/Disconnect to signal '%s'
         

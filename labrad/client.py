@@ -28,6 +28,7 @@ from labrad.util import indent, MultiDict, PrettyDict, extractKey
 
 from twisted.internet import reactor
 
+from functools import partial
 import getpass
 
 class NotFoundError(Error):
@@ -97,14 +98,16 @@ class SettingWrapper(object):
         # but instead only when needed later due to property access
         self._refreshed = False
 
-    def connect(self, handler, *args):
+    def connect(self, handler, signupargs=(), signupkw={},
+                               handlerargs=(), handlerkw={}):
         """Connect a local handler to this signal."""
         srv = self._server
+        handler = partial(handler, *handlerargs, **handlerkw)
         block(srv._cxn._cxn.addListener, (srv.ID, self.ID), handler)
         self._num_listeners += 1
         if self._num_listeners == 1:
             # TODO: remove from listeners if this fails
-            return self.__call__(self.ID, *args)
+            return self.__call__(self.ID, *signupargs, **signupkw)
 
     def disconnect(self, handler):
         """Disconnect a local handler from this signal."""
