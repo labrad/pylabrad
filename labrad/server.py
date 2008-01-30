@@ -90,6 +90,8 @@ class LabradServerProtocol(LabradRequestProtocol):
         input queue for this context and serving up the request.
         """
         ctxtData = self.factory.getDefaultCtxtData()
+        ctxtData.ID = context
+        self.factory.initContext(ctxtData)
         queue.ctxtData = ctxtData
         while queue.alive:
             source, request, records = yield queue.get()
@@ -351,6 +353,14 @@ class LabradServer(protocol.ClientFactory):
     def getDefaultCtxtData(self):
         return copy.deepcopy(self.defaultCtxtData)
 
+    def initContext(self, c):
+        """Called when a new context is created.
+        
+        The context object will have been initialized from the
+        defaultCtxtData.  Any further initialization should be
+        performed here.
+        """
+        
     def callHandler(self, ID, ctxtData, data):
         """Call a setting handler in context."""
         name, setting = self.settings[ID]

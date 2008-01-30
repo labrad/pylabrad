@@ -243,8 +243,7 @@ class LabradRequestProtocol(LabradProtocol):
         for ID, data in records:
             listeners = self.listeners.get(ID, []) or \
                         self.listeners.get((source, ID), [])
-            for listener in listeners:
-                args, kw = self.listener_args[listener]
+            for listener, args, kw in listeners:
                 listener(data, *args, **kw)
 
     def addListener(self, key, listener, *args, **kw):
@@ -256,12 +255,10 @@ class LabradRequestProtocol(LabradProtocol):
         """
         if DEBUG: print "listening to %s with %s" % (key, listener)
         listeners = self.listeners.setdefault(key, [])
-        listeners.append(listener)
-        self.listener_args[listener] = args, kw
+        listeners.append((listener, args, kw))
 
     def removeListener(self, key, listener):
-        self.listeners[key].remove(listener)
-        del self.listener_args[listener]
+        self.listeners[key] = [l for l in self.listeners[key] if l[0] != listener]
 
 class LabradRequest:
     """Handle packets coming back from a particular request."""
