@@ -152,7 +152,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     s = '%s{%s}' % (group[0], args[0])
                 # add information about default values of unused params
                 if len(group) < Nparams:
-                    defstr = ', '.join('%s=%r' % (args[n], defaults[n-len(group)])
+                    defstr = ', '.join('%s=%r' % (args[n], defaults[n-Nrequired])
                                        for n in range(len(group), Nparams))
                     s = s + ': defaults [%s]' % defstr
                 accepts_t.append(t)
