@@ -49,15 +49,13 @@ class LabradServerProtocol(LabradRequestProtocol):
 
     def handlePacket(self, source, context, request, records):
         if request > 0: # incoming request
-            if self.factory.serving:
-                handle = True
-                for ID, data in records:
-                    if isinstance(data, Exception):
-                        handle = False
-                        log.msg('Error in incoming request: %s, %s, %s, %s' %\
-                                (source, context, request, records))
-                if handle:
-                    self.enqueue(source, context, request, records)
+            if not self.factory.serving:
+                return
+            if any(isinstance(data, Exception) for ID, data in records):
+                log.msg('Error in incoming request: %s, %s, %s, %s' %\
+                        (source, context, request, records))
+            else:
+                self.enqueue(source, context, request, records)
 
         elif request < 0: # response to our request
             self._processRequest(source, context, request, records)
@@ -67,14 +65,13 @@ class LabradServerProtocol(LabradRequestProtocol):
 
     def enqueue(self, source, context, request, records):
         """Enqueue a packet to be served in a given context."""
-        if context not in self.queues:
+        q = self.queues.get(context, None)
+        if context is None:
             # create a new queue for contexts we have not yet seen
             q = self.queues[context] = defer.DeferredQueue()
             q.alive = True
-            server = self.serveContext(context, q)
-            server.addErrback(self._contextFailed, context)
-        else:
-            q = self.queues[context]
+            serveLoop = self.serveContext(context, q)
+            serveLoop.addErrback(self._contextFailed, context)
         q.put((source, request, records))
 
     def _contextFailed(self, failure, context):
@@ -89,9 +86,8 @@ class LabradServerProtocol(LabradRequestProtocol):
         This generator should run forever, taking packets from the
         input queue for this context and serving up the request.
         """
-        ctxtData = self.factory.getDefaultCtxtData()
-        ctxtData.ID = context
-        self.factory.initContext(ctxtData)
+        ctxtData = yield self.factory.newContext(context)
+        yield self.factory.initContext(ctxtData)
         queue.ctxtData = ctxtData
         while queue.alive:
             source, request, records = yield queue.get()
@@ -209,7 +205,8 @@ class Signal(object):
             else:
                 # send only to those in the specified
                 # context or list of contexts
-                if not isinstance(contexts, list):
+                if isinstance(contexts, tuple) and len(contexts) \
+                   and not isinstance(contexts[0], tuple):
                     contexts = [contexts]
                 for context in contexts:
                     if context not in self.listeners:
@@ -244,7 +241,6 @@ class LabradServer(protocol.ClientFactory):
     sendTracebacks = True
 
     def __init__(self):
-        self.defaultCtxtData = util.ContextDict()
         self.settingMap = {}
         self.createSignals()
         self.findAllSettings()
@@ -349,17 +345,6 @@ class LabradServer(protocol.ClientFactory):
         else:
             log.msg('%s now serving.' % self.name)
             self.startup.callback()
-
-    def getDefaultCtxtData(self):
-        return copy.deepcopy(self.defaultCtxtData)
-
-    def initContext(self, c):
-        """Called when a new context is created.
-        
-        The context object will have been initialized from the
-        defaultCtxtData.  Any further initialization should be
-        performed here.
-        """
         
     def callHandler(self, ID, ctxtData, data):
         """Call a setting handler in context."""
@@ -386,6 +371,15 @@ class LabradServer(protocol.ClientFactory):
         Called when the server is shutting down, but before we have
         closed any client connections.  Perform any cleanup operations here.
         """
+        
+    def newContext(self, ID):
+        """Create a new context object."""
+        c = util.ContextDict()
+        c.ID = ID
+        return c
+        
+    def initContext(self, c):
+        """Initialize a new context object."""
         
     def expireContext(self, c):
         """Expire Context.

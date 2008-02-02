@@ -31,7 +31,8 @@ import re
 from struct import pack, unpack
 import time
 from types import InstanceType
-from datetime import timedelta, datetime
+import datetime
+from datetime import timedelta, datetime as dt
 from itertools import chain, imap
 from operator import itemgetter
 
@@ -316,6 +317,9 @@ def evalLRData(s):
     """Evaluate LR data in a namespace with all LRTypes."""
     return eval(s)
 
+def reprLRData(s):
+    """Make a repr of LR data in a namespace with all LRTypes."""
+    return repr(s)
 
 # LabRAD type classes
 
@@ -500,8 +504,8 @@ registerType(str, LRStr())
 
 def timeOffset():
     now = time.time()
-    return datetime(1904,1,1) - datetime.utcfromtimestamp(now) \
-                              + datetime.fromtimestamp(now)
+    return dt(1904,1,1) - dt.utcfromtimestamp(now) \
+                        + dt.fromtimestamp(now)
 
 class LRTime(LRType, Singleton):
     """A timestamp in LabRAD format.
@@ -526,7 +530,7 @@ class LRTime(LRType, Singleton):
         us = long(float(diff.microseconds)/pow(10,6)*pow(2,64))
         return pack('QQ', secs, us)
 
-registerType(datetime, LRTime())
+registerType(dt, LRTime())
 
 
 class LRValue(LRType):

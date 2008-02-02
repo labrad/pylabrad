@@ -19,10 +19,9 @@ labrad.gpib
 Superclass of GPIB device servers.
 """
 
-from labrad import types as T, util, errors, constants as C
+from labrad import types as T, constants as C
 from labrad.devices import DeviceWrapper, DeviceServer
 from labrad.server import setting
-from labrad.wrappers import connectAsync
 
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -41,17 +40,20 @@ class GPIBDeviceWrapper(DeviceWrapper):
         self.gpib = gpib # wrapper for the gpib server
         self.addr = addr
         self._context = gpib.context() # create a new context for this device
-        self._timeout = T.Value(C.TIMEOUT, 'ms')
+        self._timeout = T.Value(C.TIMEOUT, 's')
         
+        # set the address and timeout in this context
         p = self.gpib.packet()
         p.address(self.addr)
         p.timeout(self._timeout)
         yield p.send(context=self._context)
+        
+        # do device-specific initialization
         yield self.initialize()
 
     def timeout(self, seconds):
         """Set the GPIB timeout for this device."""
-        self._timeout = T.Value(seconds * 1000, 'ms')
+        self._timeout = T.Value(seconds, 's')
         return self.gpib.timeout(self._timeout, context=self._context)
 
     def query(self, query, bytes=None):
@@ -90,12 +92,7 @@ class GPIBDeviceServer(DeviceServer):
     name = 'Generic GPIB Device Server'
     deviceName = 'Generic GPIB Device'
     deviceWrapper = GPIBDeviceWrapper
-
-    @inlineCallbacks
-    def initServer(self):
-        yield DeviceServer.initServer(self)
-        self.defaultCtxtData['device'] = 0
-
+        
     @inlineCallbacks
     def findDevices(self):
         cxn = self.client

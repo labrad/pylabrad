@@ -46,7 +46,7 @@ def createTypeStr(typelist):
     """Create a text list of accepted and returned types."""
     if len(typelist) == 0:
         return 'Any'
-    return '[%s]' % ', '.join([descStr(item) for item in typelist])
+    return '[%s]' % ', '.join(descStr(item) for item in typelist)
 
 def descStr(item):
     if isinstance(item, str):
