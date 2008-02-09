@@ -58,8 +58,8 @@ def randValue(t):
     if isinstance(t, T.LRWord): return genWord()
     if isinstance(t, T.LRStr): return genStr()
     if isinstance(t, T.LRTime): return genTime()
+    if isinstance(t, T.LRComplex): return genComplex(t.unit) # check complex before value
     if isinstance(t, T.LRValue): return genValue(t.unit)
-    if isinstance(t, T.LRComplex): return genComplex(t.unit)
     if isinstance(t, T.LRCluster): return genCluster(*t.items)
     if isinstance(t, T.LRList): return genList(t.elem, t.depth)
 

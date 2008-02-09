@@ -974,6 +974,10 @@ class LazyList(list):
         return list(self)
 
     @property
+    def astuple(self):
+        return tuple(self.aslist)
+        
+    @property
     def asarray(self):
         self._unflattenArray()
         return self._array

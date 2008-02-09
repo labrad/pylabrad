@@ -15,6 +15,8 @@
 
 from labrad import types as T, util
 from labrad.server import LabradServer, setting, Signal
+from labrad.util import hydrant
+
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
@@ -118,6 +120,11 @@ class TestServer(LabradServer):
     @setting(10, returns=['s'])
     def bad_return_type(self, c, data):
         return 5
+        
+    @setting(11, tag=['s'])
+    def get_random_data(self, c, tag):
+        t = T.parseTypeTag(tag)
+        return hydrant.randValue(t)
 
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')
