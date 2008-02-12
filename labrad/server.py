@@ -66,7 +66,7 @@ class LabradServerProtocol(LabradRequestProtocol):
     def enqueue(self, source, context, request, records):
         """Enqueue a packet to be served in a given context."""
         q = self.queues.get(context, None)
-        if context is None:
+        if q is None:
             # create a new queue for contexts we have not yet seen
             q = self.queues[context] = defer.DeferredQueue()
             q.alive = True
