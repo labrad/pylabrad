@@ -229,6 +229,7 @@ class ServerList(rend.Fragment):
                 else:
                     color, state, enabled = RED, 'stopped', [1, 0, 0]
             else:
+                name = baseName
                 color, state, enabled = GRAY, 'unavailable', [0, 0, 0]
             if exc is not None and \
                (exc[0] == name or exc[0] == baseName) and exc[1] == node:
