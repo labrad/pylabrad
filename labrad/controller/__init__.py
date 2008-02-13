@@ -167,7 +167,7 @@ class ServerList(rend.Fragment):
         im = IMG('arrow_refresh')
         return ctx.tag[
             T.td[T.b['server']],
-            [T.td(colspan=2)[T.b[n], E.nbsp,
+            [T.td(colspan=2, align='center')[T.b[n], E.nbsp,
              T.a(href=url.root.child('node_'+n).child('refresh_servers'))[im]]
              for n in nodes]
         ]
@@ -253,14 +253,14 @@ class ServerList(rend.Fragment):
                 controls.append(item)
             if excHere:
                 node_actions.append((
-                    T.td[T.b(title=str(exc[3]), style=color)[state]],
-                    T.td[controls]
+                    T.td(align='right')[T.b(title=str(exc[3]), style=color)[state]],
+                    T.td[controls, E.nbsp, E.nbsp, E.nbsp]
                 ))
                 excHere = False
             else:
                 node_actions.append((
-                    T.td[T.span(style=color)[state]],
-                    T.td[controls]
+                    T.td(align='right')[T.span(style=color)[state]],
+                    T.td[controls, E.nbsp, E.nbsp, E.nbsp]
                 ))
         if running_anywhere:
             name = T.a(href=instanceName)[baseName]

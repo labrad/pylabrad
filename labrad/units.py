@@ -312,7 +312,7 @@ class Value(WithUnit, float):
     _units = {}
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
-        return self.inUnitsOf(unit)
+        return self.inUnitsOf(unit).value
 WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
 WithUnit._numericTypes[long] = Value
@@ -322,7 +322,7 @@ class Complex(WithUnit, complex):
     _units = {}
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
-        return self.inUnitsOf(unit)
+        return self.inUnitsOf(unit).value
 WithUnit._numericTypes[complex] = Complex
 
 #if useNumpy:
