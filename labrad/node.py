@@ -87,7 +87,6 @@ class ServerProcess(ProcessProtocol):
 
         print "starting '%s'..." % self.name
         print "spawning process..."
-        print "env:", self.env
         print "path:", self.path
         print "executable:", self.executable
         print "args:", self.args
@@ -232,10 +231,6 @@ def getNodeConfig(nodename=None):
 class IProcNode(Interface):
     pass
 
-def traceCall(result, msg):
-    print msg, result
-    return result
-
 class ProcNode(MultiService):
     implements(IProcNode)
 
@@ -275,6 +270,7 @@ class ProcNode(MultiService):
     def _connected(self, data, srv):
         self.client = srv.client
         self.manager = srv.client.manager
+        self.password = srv.password
         self.refresh_servers()
 
     def _disconnect(self, data):
@@ -351,7 +347,8 @@ class ProcNode(MultiService):
         # the environment can be overridden in this context or this request
         environ.update(LABRADNODE=self.nodename,
                        LABRADHOST=self.host,
-                       LABRADPORT=str(self.port))
+                       LABRADPORT=str(self.port),
+                       LABRADPASSWORD=self.password)
 
         srv = cls(environ)
         srv.startup.connect(self.serverStarted)
@@ -419,12 +416,14 @@ class ProcNodeServer(LabradServer):
         self.name = node.name
         LabradServer.__init__(self)
 
+    def initContext(self, c):
+        c['environ'] = {}
+        
     @setting(1, name=['s'], environ=['*(ss)'], returns=['s'])
     def start(self, c, name, environ={}):
         """Start an instance of a server."""
-        env = c.setdefault('environ', {})
+        env = dict(c['environ']) # copy context environment
         env.update(environ)
-        env.update(LABRADPASSWORD=self.password)
         return self.node.start(name, env)
 
     @setting(2, name=['s'], returns=[''])
@@ -463,22 +462,20 @@ class ProcNodeServer(LabradServer):
 
     @setting(21, items=['(ss)', '*(ss)'], returns=['*(ss)'])
     def environ_set(self, c, items):
-        """Set an environment variable in this context."""
+        """Set environment variables in this context."""
         if isinstance(items, tuple):
             items = [items]
+        env = c['environ']
         for key, value in items:
-            if key.upper() in self.environ:
-                raise Exception("Key '%s' is protected." % key)
-            env = c.setdefault('environ', {})
             env[key.upper()] = value
         return sorted(env.items())
 
     @setting(22, keys=['s', '*s'], returns=['*(ss)'])
     def environ_del(self, c, keys):
-        """Delete and environment variable in this context."""
+        """Delete environment variables in this context."""
         if isinstance(keys, str):
             keys = [keys]
-        env = c.setdefault('environ', {})
+        env = c['environ']
         for key in keys:
             del env[key.upper()]
         return sorted(env.items())
