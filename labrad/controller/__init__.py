@@ -174,19 +174,28 @@ class ServerList(rend.Fragment):
 
     @inlineCallbacks
     def getNodeInfo(self, node):
+        newInfo = 'servers_info' in node.settings
         p = node.packet()
         p.available_servers()
         p.running_servers()
         p.local_servers()
+        if newInfo:
+            p.servers_info()
         resp = yield p.send()
         available = resp.available_servers
         running = resp.running_servers
         local = resp.local_servers
 
+        if newInfo:
+            info = resp.servers_info
+            info_dict = dict((i[0], i[1:]) for i in info)
+        else:
+            info_dict = dict((i, ('', '<unknown>')) for i in available)
         ninfo = {}
         rundict = dict(running)
         for n in available:
-            ninfo[n] = rundict.get(n, ''), n in rundict, n in local
+            descr, version = info_dict[n][:2]
+            ninfo[n] = rundict.get(n, ''), n in rundict, n in local, descr, version
         returnValue(ninfo)
     
     @inlineCallbacks
@@ -219,26 +228,32 @@ class ServerList(rend.Fragment):
         node_actions = []
         for node in nodes:
             if node in info:
-                name, running, local = info[node]
+                name, running, local, descr, version = info[node]
                 # controls are start, stop, restart
                 if running:
-                    color, state, enabled = GREEN, 'running', [0, 1, 1]
+                    color, state, enabled = GREEN, 'running', [1, 0, 1, 1]
                     instanceName = name
                 elif not local and running_anywhere:
-                    color, state, enabled = GRAY, 'running', [0, 0, 0]
+                    color, state, enabled = GRAY, 'running', [1, 0, 0, 0]
                 else:
-                    color, state, enabled = RED, 'stopped', [1, 0, 0]
+                    color, state, enabled = RED, 'stopped', [1, 1, 0, 0]
             else:
                 name = baseName
-                color, state, enabled = GRAY, 'unavailable', [0, 0, 0]
+                descr, version = '', ''
+                color, state, enabled = GRAY, 'unavailable', [0, 0, 0, 0]
             if exc is not None and \
                (exc[0] == name or exc[0] == baseName) and exc[1] == node:
                 color = RED
                 state = 'error!'
                 del ISession(ctx).fields['flash']
                 excHere = True
-            controls = []
-            for act, enabled, img in zip(['start', 'stop', 'restart'], enabled,
+            if enabled[0]:
+                onclick = 'alert("version: " + %r + ".  " + %r); return false;' % (version, descr)
+                controls = [T.a(href='#', onclick=onclick)[
+                               IMG('information', alt='version: %s.  %s' % (version, descr))]]
+            else:
+                controls = [IMG('information_gray')]
+            for act, enabled, img in zip(['start', 'stop', 'restart'], enabled[-3:],
                                          ['add', 'delete', 'arrow_refresh']):
                 if enabled:
                     ln = url.here.child(node).child(act)

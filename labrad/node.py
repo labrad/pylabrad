@@ -181,6 +181,10 @@ def createGenericServerCls(path, filename):
     # general information
     cls.name = scp.get('info', 'name', raw=True)
     cls.__doc__ = scp.get('info', 'description', raw=True)
+    if scp.has_option('info', 'version'):
+        cls.version = scp.get('info', 'version', raw=True)
+    else:
+        cls.version = '0.0'
     try:
         cls.instancename = scp.get('info', 'instancename', raw=True)
     except:
@@ -204,6 +208,10 @@ def createPythonServerCls(plugin):
 
     cls.name = plugin.name
     cls.__doc__ = plugin.__doc__
+    if hasattr(plugin, 'version'):
+        cls.version = plugin.version
+    else:
+        cls.version = '0.0'
     cls.isLocal = hasattr(plugin, 'isLocal')
     if cls.isLocal:
         cls.instancename = ' '.join(['%LABRADNODE%', cls.name])
@@ -385,6 +393,16 @@ class ProcNode(MultiService):
         """Get a list of available servers."""
         return sorted(self.servers.keys())
 
+    def servers_info(self):
+        slist = []
+        for name, cls in sorted(self.servers.items()):
+            instances = [n for n, s in self.runners.items()
+                                    if s.__class__.name == name]
+            info = (name, cls.__doc__ or '', cls.version,
+                    cls.instancename, cls.isLocal, instances)
+            slist.append(info)
+        return slist
+
     def running_servers(self):
         """Get a list of running server instances.
 
@@ -409,6 +427,13 @@ class ProcNode(MultiService):
         except KeyError:
             raise Exception("'%s' is not running." % name)
         srv.clearOutput()
+
+    def server_version(self, name):
+        try:
+            srv = self.servers[name]
+        except KeyError:
+            raise Exception("'%s' not found." % name)
+        return srv.version
 
 class ProcNodeServer(LabradServer):
     def __init__(self, node):
@@ -453,6 +478,17 @@ class ProcNodeServer(LabradServer):
     def local_servers(self, c):
         """Get a list of local servers."""
         return self.node.local_servers()
+
+    @setting(13, returns=[''])
+    def refresh_servers(self, c):
+        """Refresh the list of available servers."""
+        self.node.refresh_servers()
+
+    @setting(14, returns=['*(s{name} s{desc} s{ver} s{instname} b *s{running})'])
+    def servers_info(self, c):
+        """Get information about all servers on this node."""
+        #print self.node.servers_info()
+        return self.node.servers_info()
 
     @setting(20, returns=['*(ss)'])
     def environ(self, c):
@@ -537,11 +573,6 @@ class ProcNodeServer(LabradServer):
             self.serverMods.remove(m)
         return self.serverMods
 
-    @setting(50, returns=[''])
-    def refresh_servers(self, c):
-        """Refresh the list of available servers."""
-        self.node.refresh_servers()
-
     @setting(100, name=['s'], returns=['*(ts)'])
     def server_output(self, c, name):
         return self.node.server_output(name)
@@ -549,6 +580,10 @@ class ProcNodeServer(LabradServer):
     @setting(101, name=['s'], returns=[''])
     def clear_output(self, c, name):
         self.node.clear_output(name)
+
+    @setting(102, name=['s'], returns=['s'])
+    def server_version(self, c, name):
+        return self.node.server_version(name)
 
 registerAdapter(ProcNodeServer, IProcNode, ILabradServer)
 

@@ -20,7 +20,13 @@ from twisted.plugin import IPlugin
 from twisted.application.service import IServiceMaker
 from twisted.application import internet
 from twisted.web import server
-#from twisted.internet import ssl
+
+try:
+    from twisted.internet import ssl
+    from OpenSSL import SSL
+    useSSL = True
+except:
+    useSSL = False
 
 from nevow import appserver
 
@@ -45,10 +51,12 @@ class ControllerPlugin(object):
         page = labradNevowPage(host, port)
         site = appserver.NevowSite(page)
 
-        #contextFactory = ssl.DefaultOpenSSLContextFactory()
-        
+        #if useSSL:
+        #    contextFactory = ssl.DefaultOpenSSLContextFactory()
+        #    adminService = internet.SSLServer(C.HTTP_PORT, site, contextFactory)
+        #else:
+        #    adminService = internet.TCPServer(C.HTTP_PORT, site)
         adminService = internet.TCPServer(C.HTTP_PORT, site)
-        #adminService = internet.SSLServer(C.HTTP_PORT + 1, site, contextFactory)
         return adminService
 
 controllerService = ControllerPlugin()
