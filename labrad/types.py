@@ -822,7 +822,10 @@ class LRList(LRType):
 
     def __flatten_array__(self, a):
         """Flatten numpy array to LabRAD list."""
-        dims = pack('i' * len(a.shape), *a.shape)
+        shape = a.shape[:self.depth]
+        if len(shape) != self.depth:
+            raise Exception("Bad array shape.")
+        dims = pack('i' * len(shape), *shape)
         if a.dtype in ['bool', 'int32', 'uint32', 'float64', 'complex128']:
             pass
         elif a.dtype == dtype('int64'):

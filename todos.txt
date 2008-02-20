@@ -1,12 +1,4 @@
 SOURCEFORGE:
-	data backup
-    
-    website
-    
-    documentation
-        tutorial
-        API docs
-	
 	build script:
 		bdist_wininst
 		sdist --format=zip
@@ -19,13 +11,13 @@ GENERAL:
         templates for servers and clients
 
 	config overrides in places other than labrad.config
-        - per-user, per-session, etc.
-        - this is mostly a development issue
+        use configObj
+        model config loading on ipython/matplotlib
+        per-user, per-session, etc.
     save/load data and configuration
-        - save config in registry where possible, but allow local override
+        save config in registry where possible, but allow local override
         
-	request cancellation/context expiration
-        send context expiration when requests are cancelled (client)
+	request cancellation
 	
 	context-cloning of wrappers
     
@@ -40,16 +32,15 @@ GENERAL:
 		profiling for data flatten/unflatten operations to test speed
 		test setting decorator
         test reversible eval and repr of labrad data
-        test device model
+        test device model (in particular, locking)
     
 	logging
-        configure twisted logging (less verbose when using util.runServer)
+        configure twisted logging (less verbose when using util.runServer, by setting logPrefix)
         allow logs to be accessed and manipulated remotely
 		configurable debug/logging verbosity levels (change on the fly)
     
 	contexts:
         servers can provide custom context objects (not just dict)
-        hooks for context creation and destruction (not just deepcopy)
         access self.client through context so that contexts get
             propagated correctly (this makes cancellation work correctly)
         sign up for and handle request expiration messages
@@ -69,12 +60,20 @@ SERVERS:
 			set servers to be started on initial login
 			set servers to be auto-restarted if they die
 			make node configuration accessible/modifiable remotely
+            allow to save configuration changes made remotely
 		server config files:
 			declare dependencies to be auto-started
 
+    SUPER NODE:
+        ask for a server to be started
+            supernode looks up the location to run the server in the registry
+            dependencies will get started automatically
+            
     CONTROLLER:
         make server output visible (and clearable, etc.) in the browser
-        access all node settings remotely (e.g. directories)
+        access all node settings remotely (e.g. directories, environment variables)
+        run multiple server instances on one node (set environment variables for each, etc.)
+        ajaxify (jquery, YUI, ...)
         
     CLIENT:
         signal listeners need to be removed if a server disconnects
@@ -85,13 +84,6 @@ SERVERS:
             make request cancellation work cleanly
         some settings invisible by default (e.g. logging stuff)?
         asynchronous client use dynamic dispatch (tab-completion not needed)
-    
-    DATA VAULT:
-        add comments to sessions and datasets
-        dataset summary
-        searching/sorting
-        
-    PREAMP SERVER:
-        allow querying of state, not just setting
+
 
     

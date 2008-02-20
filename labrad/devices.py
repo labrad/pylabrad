@@ -183,12 +183,10 @@ class DeviceServer(LabradServer):
                 log.err()
 
     def serverConnected(self, ID, *a, **kw):
-        if ID != self.ID:
-            self.refreshDeviceList()
+        self.refreshDeviceList()
 
     def serverDisconnected(self, ID, *a, **kw):
-        if ID != self.ID:
-            self.refreshDeviceList()
+        self.refreshDeviceList()
 
     def expireContext(self, c):
         if 'device' in c:
