@@ -122,9 +122,18 @@ class TestServer(LabradServer):
         return 5
         
     @setting(11, tag=['s'])
-    def get_random_data(self, c, tag):
-        t = T.parseTypeTag(tag)
+    def get_random_data(self, c, tag=None):
+        """Get a random bit of data conforming to the specified type tag."""
+        if tag is None:
+            t = hydrant.randType()
+        else:
+            t = T.parseTypeTag(tag)
         return hydrant.randValue(t)
+        
+    @setting(12)
+    def get_random_tag(self, c, tag):
+        """Get a random LabRAD type tag."""
+        return str(hydrant.randType())
 
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')
