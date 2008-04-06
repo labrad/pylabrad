@@ -18,7 +18,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue, DeferredList
 from twisted.web import resource, server as webserver
 from twisted.cred import portal, checkers, credentials
 from nevow import loaders, rend, tags as T, entities as E, \
-                  url, inevow, guard, athena, static
+                  url, inevow, guard, athena, static, json
 from nevow.taglibrary import tabbedPane
 from nevow.inevow import ISession, IStatusMessage
 from zope.interface import implements
@@ -41,6 +41,8 @@ IMG = lambda name, **kw: T.img(src=url.root.child(IMAGES).child(name + '.png'),
                                style='border:0px;', **kw)
 
 LOGOUT = url.root.clear().child(guard.LOGOUT_AVATAR)
+
+JSON = lambda stuff: static.Data(json.serialize(stuff), type='application/json')
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
@@ -113,7 +115,83 @@ class ServerResource(rend.Page):
                 ]
             ]
         ])
+        
 
+        
+class NodeAPI(rend.Page):
+    @inlineCallbacks
+    def childFactory(self, ctx, name):
+        try:
+            cxn = self.realm.cxn
+            yield cxn.refresh()
+            func = getattr(self, 'remote_' + name)
+            resp = yield func(cxn, ctx)
+            result = JSON({u'result': resp})
+        except Exception, e:
+            result = JSON({u'error': unicode(e)})
+        returnValue(result)
+        
+    @inlineCallbacks
+    def remote_available_servers(self, cxn, ctx):
+        resp = yield DeferredList([cxn[node].available_servers() for node in _nodes(cxn)])
+        avail = set()
+        for success, result in resp:
+            if success:
+                avail.update(result)
+        returnValue(sorted(unicode(name) for name in avail))
+        
+    def remote_list_servers(self, cxn, ctx):
+        return [unicode(s) for s in cxn.servers.keys()]
+        
+    def remote_list_nodes(self, cxn, ctx):
+        return [unicode(s) for s in _nodes(cxn)]
+        
+    @inlineCallbacks
+    def remote_list_both(self, cxn, ctx):
+        servers = yield self.remote_available_servers(cxn, ctx)
+        nodes = yield self.remote_list_nodes(cxn, ctx)
+        
+        status_dict = {}
+        running = yield DeferredList([cxn[node].running_servers() for node in _nodes(cxn)])
+        for (success, result), node in zip(running, _nodes(cxn)):
+            if success:
+                status_dict[node] = result
+         
+        status = []
+        for server in servers:
+            row = []
+            for node in nodes:
+                if node not in status_dict:
+                    row.append([unicode(server), False])
+                else:
+                    found = False
+                    for running_server, instance in status_dict[node]:
+                        if running_server == server:
+                            row.append([unicode(instance), True])
+                            found = True
+                            break
+                    if not found:
+                        row.append([unicode(instance), False])
+            status.append(row)
+        
+        returnValue([servers, nodes, status])
+    
+    def remote_start(self, cxn, ctx):
+        node = ctx.arg('node')
+        server = ctx.arg('server')
+        return cxn[node].start(server)
+        
+    def remote_restart(self, cxn, ctx):
+        node = ctx.arg('node')
+        server = ctx.arg('server')
+        return cxn[node].restart(server)
+        
+    def remote_stop(self, cxn, ctx):
+        node = ctx.arg('node')
+        server = ctx.arg('server')
+        return cxn[node].stop(server)
+        
+        
 class ControllerPage(rend.Page):
     addSlash = True
 
@@ -136,6 +214,7 @@ class ControllerPage(rend.Page):
             returnValue(resc)
         returnValue(rend.NotFound)
 
+    
     child_images = static.File(os.path.join(HERE_DIR, IMAGES),
                                defaultType='image/png')
     child_script = static.File(os.path.join(HERE_DIR, SCRIPT),
@@ -337,7 +416,7 @@ class LoginPage(rend.Page):
     
     docFactory = loaders.stan(
         T.html[
-            T.head[ T.title['labrad Controller - Login'] ],
+            T.head[ T.title['LabRAD Controller - Login'] ],
             T.body[
                 T.form(action=guard.LOGIN_AVATAR, method='post')[
                     T.table[
@@ -355,7 +434,7 @@ class LoginPage(rend.Page):
             ]
         ])
 
-class labradRealm:
+class LabradRealm:
     """A simple implementor of cred's IRealm.
 
     For web, this checks the login and gives a login page or the
@@ -407,7 +486,14 @@ class labradRealm:
                 if avatarId is checkers.ANONYMOUS:
                     resc = LoginPage()
                 else:
-                    resc = ControllerPage(avatarId)
+                    pass
+                resc = ControllerPage(avatarId)
+                gwt = static.File(os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController'))
+                gwt.indexNames = ['NodeController.html']
+                api = NodeAPI(avatarId)
+                api.realm = self
+                resc.putChild('gwt', gwt)
+                resc.putChild('api', api)
                 resc.realm = self
                 return (inevow.IResource, resc, lambda: None)
 
@@ -416,8 +502,8 @@ class labradRealm:
 
 ### Application setup
 
-def labradNevowPage(host, port):
-    realm = labradRealm(host, port)
+def LabradNevowPage(host, port):
+    realm = LabradRealm(host, port)
     porta = portal.Portal(realm)
 
     try:
