@@ -1,5 +1,7 @@
 body { margin: 0px; }
 
+.gwt-Label-padded { padding-left: 5px; }
+
 .gwt-Label-red { color: #AA0000; width: 60px; }
 .gwt-Label-green { color: #00AA00; }
 

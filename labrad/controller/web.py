@@ -11,8 +11,8 @@ from twisted.python.failure import Failure
 from twisted.web import http, resource, static, server
 
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
-#WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
-WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
+WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
+#WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
 JSON = lambda stuff: static.Data(simplejson.dumps(stuff), type='application/json')
 
 def _nodes(cxn):
@@ -178,6 +178,31 @@ class DigestAuthRequest(server.Request):
         self.write('<html><h1>Invalid username/password!</h1></html>')
         self.finish()
         
+def makeNodeControllerSite(host, port):
+    root = static.File(WEB_DIR)
+    root.indexNames = ['NodeController.html']
+    api = NodeAPI()
+    api.cxn = AsyncClient('Node Controller')
+    api.cxn.connect(host, port)
+    root.putChild('api', api)
+    site = server.Site(root)
+    site.requestFactory = DigestAuthRequest
+
+    try:
+        passFile = ConfigFile('controller.ini')
+    except:
+        passFile = ConfigFile('controller-template.ini')
+        
+    site.users = {}
+    for section in passFile.sections():
+        try:
+            user = passFile.get(section, 'username')
+            pw = passFile.get(section, 'password')
+            site.users[user] = {'pw': pw, 'logged_in': True}
+        except Exception, e:
+            print e
+    return site
+
 if __name__ == '__main__':
     from twisted.internet import reactor
     root = static.File(WEB_DIR)

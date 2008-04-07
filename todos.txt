@@ -1,10 +1,3 @@
-SOURCEFORGE:
-	build script:
-		bdist_wininst
-		sdist --format=zip
-		sdist --format=gztar
-		upload to sourceforge
-
 GENERAL:
     framework cleanup
         mark methods that can be overridden, should not be overridden, etc.
@@ -33,6 +26,11 @@ GENERAL:
 		test setting decorator
         test reversible eval and repr of labrad data
         test device model (in particular, locking)
+        
+    units:
+        make unit objects interoperate with numpy arrays transparently
+        test unit handling and conversion
+        cache unit objects not just by parsed name, but by exponents
     
 	logging
         configure twisted logging (less verbose when using util.runServer, by setting logPrefix)

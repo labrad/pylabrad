@@ -31,7 +31,7 @@ except:
 from nevow import appserver
 
 from labrad import constants as C
-from labrad.controller import labradNevowPage
+from labrad.controller import makeNodeControllerSite
 
 class Options(usage.Options):
     optParameters = [['port', 'p', C.MANAGER_PORT, 'Manager port.'],
@@ -48,8 +48,7 @@ class ControllerPlugin(object):
         host = options['host']
         port = int(options['port'])
 
-        page = labradNevowPage(host, port)
-        site = appserver.NevowSite(page)
+        site = makeNodeControllerSite(host, port)
 
         #if useSSL:
         #    contextFactory = ssl.DefaultOpenSSLContextFactory()
