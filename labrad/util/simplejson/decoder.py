@@ -135,8 +135,8 @@ def scanstring(s, end, encoding=None, _b=BACKSLASH, _m=STRINGCHUNK.match):
     return u''.join(chunks), end
 
 # Use speedup
-if _speedups is not None:
-    scanstring = _speedups.scanstring
+#if _speedups is not None:
+#    scanstring = _speedups.scanstring
 
 def JSONString(match, context):
     encoding = getattr(context, 'encoding', None)
