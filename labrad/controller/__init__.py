@@ -13,7 +13,8 @@ from twisted.web import http, resource, static, server
 
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
 #WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
-WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
+#WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
+WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
