@@ -13,7 +13,7 @@ from twisted.web import http, resource, static, server
 
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
 #WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
-WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
+WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
@@ -50,18 +50,16 @@ class JSONPuller(resource.Resource):
         self.transport = transport
         
     def render(self, request):
-        try:
-            def get(arg):
-                return simplejson.loads(request.args[arg][0])
-            print request.args
-            id = request.args['id'][0]
-            method = request.args['method'][0]
-            args = get('args')
-            kw = get('kw')
-            self.transport.invokeMethod(id, method, *args, **kw)
+        #try:
+            content = request.content.read()
+            print content
+            data = simplejson.loads(content)
+            print data['id'], data['method'], data['args'], data['kw']
+            self.transport.invokeMethod(data['id'], data['method'],
+                                        *data['args'], **data['kw'])
             return ""
-        except Exception, e:
-            return simplejson.dumps({'error': str(e)})
+        #except Exception, e:
+        #    return simplejson.dumps({'error': str(e)})
     
 class JSONPusher(resource.Resource):
     def __init__(self, transport):
@@ -76,6 +74,9 @@ class JSONPusher(resource.Resource):
         request.setHeader('content-type', 'application/json')
         request.setHeader('content-length', len(result))
         request.write(result)
+        print 'sending responses:', result
+        print self.transport.responses
+        print
         request.finish()
     
 class JSONTransport(resource.Resource):
@@ -84,23 +85,13 @@ class JSONTransport(resource.Resource):
         self.putChild('push', JSONPuller(self)) # client pushes, we pull
         self.putChild('pull', JSONPusher(self)) # client pulls, we push
         self.responses = []
-        self.waiter = None
+        self.waiters = []
     
     def lookupMethod(self, name):
         return getattr(self, 'remote_' + name)
-        def dummy(*args, **kw):
-            from twisted.internet import reactor
-            from random import random
-            delay = 10*random()
-            d = defer.Deferred()
-            resp = dict(method=name, args=args, kw=kw, delay=delay)
-            reactor.callLater(delay, d.callback, resp)
-            return d
-        return dummy
     
     def invokeMethod(self, id, name, *args, **kw):
         """Called when the client invokes a method on the server."""
-        print "method invoked:", name, args, kw
         func = self.lookupMethod(name)
         d = defer.maybeDeferred(func, *args, **kw)
         d.addCallback(self._addResult, id)
@@ -112,10 +103,15 @@ class JSONTransport(resource.Resource):
         If no responses are waiting, return a deferred that will be
         fired later when responses become available.
         """
+        if len(self.waiters):
+            d = self.waiters.pop()
+        else:
+            d = defer.Deferred()
         if len(self.responses):
-            return defer.succeed(self._flushResponses())
-        self.waiter = defer.Deferred()
-        return self.waiter
+            reactor.callLater(0, d.callback, self._flushResponses())
+        else:
+            self.waiters.insert(0, d)
+        return d
     
     def sendMessage(self, msg, *args, **kw):
         """Called by the server to push messages out to the client."""
@@ -129,17 +125,16 @@ class JSONTransport(resource.Resource):
     
     def _addResponse(self, **kw):
         self.responses.append(kw)
-        if self.waiter:
-            waiter = self.waiter
-            self.waiter = None
-            waiter.callback(self._flushResponses())
+        if len(self.waiters):
+            d = self.waiters.pop()
+            d.callback(self._flushResponses())
     
     def _flushResponses(self):
         resp = simplejson.dumps(self.responses)
         self.responses = []
         return resp
         
-    
+class NodeProxy(JSONTransport):
     @inlineCallbacks
     def remote_available_servers(self, *args, **kw):
         cxn = self.cxn
@@ -196,37 +191,29 @@ class JSONTransport(resource.Resource):
         resp = yield p.send()
         returnValue((sorted(resp.whitelist), sorted(resp.blacklist)))
     
-    def remote_blacklist(self, cxn, request):
-        address = request.args['address'][0]
-        return cxn.manager.blacklist(address)
+    def remote_blacklist(self, address):
+        return self.cxn.manager.blacklist(str(address))
     
-    def remote_whitelist(self, cxn, request):
-        address = request.args['address'][0]
-        return cxn.manager.whitelist(address)
+    def remote_whitelist(self, address):
+        return self.cxn.manager.whitelist(str(address))
     
-    def remote_start(self, cxn, request):
-        node = request.args['node'][0]
-        server = request.args['server'][0]
-        return cxn[node].start(server)
+    def remote_start(self, node, server):
+        return self.cxn[node].start(str(server), context=self.cxn.context())
         
-    def remote_restart(self, cxn, request):
-        node = request.args['node'][0]
-        server = request.args['server'][0]
-        return cxn[node].restart(server)
+    def remote_restart(self, node, server):
+        return self.cxn[node].restart(str(server), context=self.cxn.context())
         
-    def remote_stop(self, cxn, request):
-        node = request.args['node'][0]
-        server = request.args['server'][0]
-        return cxn[node].stop(server)
+    def remote_stop(self, node, server):
+        return self.cxn[node].stop(str(server), context=self.cxn.context())
         
     
-theTransport = JSONTransport()
+theTransport = NodeProxy()
 from twisted.internet.task import LoopingCall
 def doCall():
     from datetime import datetime
     theTransport.sendMessage('timer', str(datetime.now()))
 lc = LoopingCall(doCall)
-lc.start(5, now=False)
+lc.start(100, now=False)
     
 class NodeAPI(resource.Resource):
     def getChild(self, path, request):
@@ -338,9 +325,9 @@ class DigestAuthRequest(server.Request):
     
             user = auth['username']
             status = self.channel.site.users[user]
-            if self.path == '/__logout__':
-                status['logged_in'] = False
-                return False
+            #if self.path == '/__logout__':
+            #    status['logged_in'] = False
+            #    return False
             pw = status['pw']
             ha1 = hash(user, auth['realm'], pw)
             ha2 = hash(self.method, auth['uri'])
