@@ -3,7 +3,7 @@ import hashlib
 
 import labrad
 from labrad.config import ConfigFile
-from labrad.util import simplejson
+from labrad.util import maybeTimeout, simplejson
 from labrad.wrappers import AsyncClient
 
 from twisted.internet import defer
@@ -12,9 +12,9 @@ from twisted.python.failure import Failure
 from twisted.web import http, resource, static, server
 
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
-#WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
+WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
 #WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
-WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
+#WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
@@ -32,11 +32,11 @@ class JSONResource(resource.Resource):
         def doRequest():
             try:
                 resp = yield self.func(self.cxn, request, *self.a, **self.kw)
-                result = simplejson.dumps({u'result': resp})
+                result = simplejson.dumps({'result': resp})
             except Exception, e:
                 f = Failure(e)
                 msg = f.getTraceback(elideFrameworkCode=1, detail='verbose')
-                result = simplejson.dumps({u'error': unicode(msg)})
+                result = simplejson.dumps({'error': unicode(msg)})
             request.setHeader('content-type', 'application/json')
             request.setHeader('content-length', len(result))
             if request.method != 'HEAD':
@@ -213,10 +213,41 @@ from twisted.internet.task import LoopingCall
 def doCall():
     from datetime import datetime
     theTransport.sendMessage('timer', str(datetime.now()))
-lc = LoopingCall(doCall)
-lc.start(100, now=False)
+#lc = LoopingCall(doCall)
+#lc.start(20, now=False)
     
 class NodeAPI(resource.Resource):
+    reconnectDelay = 10
+    
+    def _connect(self):
+        cxn = AsyncClient(name='Web Interface Client')
+        d = cxn.connect(self.host, self.port)
+        d.addCallbacks(self._connectionSucceeded, self._connectionFailed)
+        d = cxn.notifyOnDisconnect()
+        d.addBoth(self._connectionFailed)
+
+    def _connectionSucceeded(self, c):
+        try:
+            if c.connected:
+                self.cxn = c
+                self.connected = True
+                print 'Connected to manager %s:%d.' % (self.host, self.port)
+            else:
+                self._reconnect()
+        except Exception, e:
+            print e
+            print 'Something went wrong in connection.'
+            self._reconnect()
+
+    def _connectionFailed(self, reason):
+        print reason.getErrorMessage()
+        self._reconnect()
+        
+    def _reconnect(self):
+        self.cxn = None
+        print 'Will try to reconnect in %d seconds...' % self.reconnectDelay
+        reactor.callLater(self.reconnectDelay, self._connect)
+    
     def getChild(self, path, request):
         if path == 'transport':
             theTransport.cxn = self.cxn
@@ -353,19 +384,20 @@ class DigestAuthRequest(server.Request):
         self.finish()
         
 def makeNodeControllerSite(host, port):
-    root = static.File(WEB_DIR)
-    root.indexNames = ['NodeController.html']
-    api = NodeAPI()
-    api.cxn = AsyncClient('Node Controller')
-    api.cxn.connect(host, port)
-    root.putChild('api', api)
-    site = server.Site(root)
-    site.requestFactory = DigestAuthRequest
-
     try:
         passFile = ConfigFile('controller.ini')
     except:
         passFile = ConfigFile('controller-template.ini')
+
+    root = static.File(WEB_DIR)
+    root.indexNames = ['NodeController.html']
+    api = NodeAPI()
+    api.host = host
+    api.port = port
+    api._connect()
+    root.putChild('api', api)
+    site = server.Site(root)
+    site.requestFactory = DigestAuthRequest
         
     site.users = {}
     for section in passFile.sections():
