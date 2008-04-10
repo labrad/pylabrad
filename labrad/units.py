@@ -136,8 +136,8 @@ class WithUnit(object):
     """Mixin class for adding units to numeric types."""
 
     def __new__(cls, value, unit=None):
-        if unit is None:
-            return 1.0 * value # make sure return value is at least a float
+        #if unit is None:
+        #    return 1.0 * value # make sure return value is at least a float
         cls = cls._findClass(type(value), unit)
         return super(WithUnit, cls).__new__(cls, value)
         
@@ -165,18 +165,28 @@ class WithUnit(object):
 
     @property
     def units(self):
+        """A string representation of the unit of this value."""
+        if self.unit is None:
+            return ''
         return self.unit.name
 
     def __str__(self):
+        if self.unit is None:
+            return str(self.value)
         return '%s %s' % (self.value, self.unit)
 
     def __repr__(self):
+        if self.unit is None:
+            return '%s(%r, None)' % (self.__class__.__name__, self.value)
         return '%s(%r, %r)' % (self.__class__.__name__, self.value, self.unit.name)
 
     def _sum(self, other, sign1, sign2):
         if isinstance(other, WithUnit):
-            value = sign1 * self.value + \
-                    sign2 * other.value * other.unit.conversionFactorTo(self.unit)
+            if other.unit is not None:
+                factor = other.unit.conversionFactorTo(self.unit)
+            else:
+                factor = 1
+            value = sign1 * self.value + sign2 * other.value * factor
         else:
             value = sign1 * self.value + sign2 * other
         return WithUnit(value, self.unit)
@@ -200,6 +210,10 @@ class WithUnit(object):
         if isinstance(other, Unit):
             return WithUnit(self.value, self.unit * other)
         if isinstance(other, WithUnit):
+            if self.unit is None:
+                return WithUnit(self.value * other.value, other.unit)
+            if other.unit is None:
+                return WithUnit(self.value * other.value, self.unit)
             return WithUnit(self.value * other.value,
                             self.unit * other.unit)
         return WithUnit(self.value * other, self.unit)
@@ -210,6 +224,12 @@ class WithUnit(object):
         if isinstance(other, Unit):
             return WithUnit(self.value, self.unit / other)
         if isinstance(other, WithUnit):
+            if self.unit is None and other.unit is None:
+                return WithUnit(self.value / other.value, None)
+            if self.unit is None:
+                return WithUnit(self.value / other.value, pow(other.unit, -1))
+            if other.unit is None:
+                return WithUnit(self.value / other.value, self.unit)
             return WithUnit(self.value / other.value,
                             self.unit / other.unit)
         return WithUnit(self.value / other, self.unit)
@@ -218,6 +238,12 @@ class WithUnit(object):
         if isinstance(other, Unit):
             return WithUnit(self.value, other / self.unit)
         if isinstance(other, WithUnit):
+            if self.unit is None and other.unit is None:
+                return WithUnit(other.value / self.value, None)
+            if self.unit is None:
+                return WithUnit(other.value / self.value, other.unit)
+            if other.unit is None:
+                return WithUnit(other.value / self.value, pow(self.unit, -1))
             return WithUnit(other.value / self.value,
                             other.unit / self.unit)
         return WithUnit(other / self.value, pow(self.unit, -1))
@@ -225,12 +251,16 @@ class WithUnit(object):
     def __pow__(self, other):
         if isinstance(other, (WithUnit, Unit)) and not other.isDimensionless():
             raise TypeError('Exponents must be dimensionless')
+        if self.unit is None:
+            return WithUnit(pow(self.value, float(other)), None)
         return WithUnit(pow(self.value, float(other)),
                         pow(self.unit, other))
 
     def __rpow__(self, other):
         if not self.isDimensionless():
             raise TypeError('Exponents must be dimensionless')
+        if self.unit is None:
+            return pow(other, self.value)
         return pow(other, self.value * self.unit.factor)
 
     def __abs__(self):
@@ -264,6 +294,8 @@ class WithUnit(object):
         @raises TypeError: if any of the specified units are not compatible
         with the original unit
         """
+        if self.unit is None:
+            return WithUnit(self.value, unit)
         factor, offset = self.unit.conversionTupleTo(unit)
         return WithUnit((self.value + offset) * factor, unit)
 
@@ -274,6 +306,8 @@ class WithUnit(object):
         i.e. SI units in most cases
         @rtype: L{PhysicalQuantity}
         """
+        if self.unit is None:
+            return self
         num = ''
         denom = ''
         for unit, power in zip(_base_names, self.unit.powers) + \
@@ -299,9 +333,13 @@ class WithUnit(object):
         one of the quantity
         @rtype: C{bool}
         """
+        if self.unit is None:
+            return True
         return self.unit.isCompatible(unit)
         
     def isDimensionless(self):
+        if self.unit is None:
+            return True
         return self.unit.isDimensionless()
         
     def sqrt(self):
@@ -356,6 +394,8 @@ class Unit(object):
                 return unit.unit
             elif isinstance(unit, str):
                 return cls._parse(unit)
+            elif unit is None:
+                return None
             raise Exception('Cannot create Unit for %r' % unit)
         elif len(args) == 3 and isinstance(args[2], (Unit, WithUnit, str)):
             # construct a named unit that is equal to a
@@ -558,6 +598,8 @@ class Unit(object):
         other = Unit(other)
         if not self.isCompatible(other):
             raise TypeError('Incompatible units')
+        if other is None:
+            return self.factor
         if self.offset != other.offset and self.factor != other.factor:
             raise TypeError(('Unit conversion (%s to %s) cannot be expressed ' +
                              'as a simple multiplicative factor') % \
@@ -576,6 +618,8 @@ class Unit(object):
         other = Unit(other)
         if not self.isCompatible(other):
             raise TypeError('Incompatible units')
+        if other is None:
+            return 1.0, 0.0
 
         # let (s1,d1) be the conversion tuple from 'self' to base units
         #   (ie. (x+d1)*s1 converts a value x from 'self' to base units,
