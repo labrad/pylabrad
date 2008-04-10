@@ -2,21 +2,13 @@ GENERAL:
     framework cleanup
         mark methods that can be overridden, should not be overridden, etc.
         templates for servers and clients
-
-	config overrides in places other than labrad.config
-        use configObj
-        model config loading on ipython/matplotlib
-        per-user, per-session, etc.
-    save/load data and configuration
-        save config in registry where possible, but allow local override
-        
-	request cancellation
-	
-	context-cloning of wrappers
     
 	signals and slots (multiple dispatch, loose coupling):
 		disconnect listeners when a server disconnects
         error handling in signal/slot and messaging mechanisms
+    
+    types:
+        fix type inference and matching on complex types
     
     testing:
 		need to be able to start and stop servers from inside tests
@@ -43,6 +35,17 @@ GENERAL:
             propagated correctly (this makes cancellation work correctly)
         sign up for and handle request expiration messages
 		
+    config overrides in places other than labrad.config
+        use configObj
+        model config loading on ipython/matplotlib
+        per-user, per-session, etc.
+    save/load data and configuration
+        save config in registry where possible, but allow local override
+        
+	request cancellation
+	
+	context-cloning of wrappers
+        
     distribution
         easy_install
 		PyPI: python setup.py register
@@ -71,7 +74,6 @@ SERVERS:
         make server output visible (and clearable, etc.) in the browser
         access all node settings remotely (e.g. directories, environment variables)
         run multiple server instances on one node (set environment variables for each, etc.)
-        ajaxify (jquery, YUI, ...)
         
     CLIENT:
         signal listeners need to be removed if a server disconnects
