@@ -183,7 +183,8 @@ def registerType(cls, t):
     This is used in a case where the LabRAD type is known
     immediately from the python class.
     """
-    classes = (cls,) if not isinstance(cls, tuple) else cls
+    classes = cls if isinstance(cls, tuple) else (cls,)
+    t = parseTypeTag(t) if isinstance(t, str) else t
     for cls in classes:
         _types[cls] = t
 
@@ -195,16 +196,14 @@ def registerTypeFunc(cls, typeFunc):
     The type function takes a python object of class cls and
     returns an appropriate LabRAD type object for it.
     """
-    classes = (cls,) if not isinstance(cls, tuple) else cls
+    classes = cls if isinstance(cls, tuple) else (cls,)
     for cls in classes:
         _typeFuncs[cls] = typeFunc
 
 def typeFunc(cls):
     """Decorator for registering type functions."""
     def register(func):
-        classes = (cls,) if not isinstance(cls, tuple) else cls
-        for cls in classes:
-            _typeFuncs[cls] = func
+        registerTypeFunc(cls, func)
         return func
     return register
 
@@ -669,6 +668,20 @@ class LRCluster(LRType):
             raise FlatteningError('Cannot flatten zero-length clusters')
         if len(c) != len(self.items):
             raise FlatteningError('Cannot flatten %s to %s' % (c, self.items))
+        if LRAny() in self.items:
+            strs = []
+            items = []
+            for t, elem in zip(self.items, c):
+                if t == LRAny():
+                    s, t = flatten(elem)
+                    strs.append(s)
+                    items.append(t)
+                else:
+                    s = t.__flatten__(elem)
+                    strs.append(s)
+                    items.append(t)
+            self.items = items # warning: type mutated here
+            return ''.join(strs)
         return ''.join(t.__flatten__(elem) for t, elem in zip(self.items, c))
 
 registerTypeFunc(tuple, LRCluster.__lrtype__)
@@ -794,7 +807,7 @@ class LRList(LRType):
             else:
                 return [unflattenNDlist(s, dims[1:]) for _ in xrange(dims[0])]
         return unflattenNDlist(s, dims)
-
+        
     def __flatten__(self, L):
         """Flatten (nested) python list to LabRAD list.
 
@@ -803,9 +816,16 @@ class LRList(LRType):
         if hasattr(L, 'asList') and not hasattr(L, '_list'):
             # if we get a LazyList that hasn't been unflattened,
             # we can just return the original data unchanged
+            # if  it has been unflattened, though, then it may
+            # have been changed since lists are mutable, so we
+            # can't take this shortcut
             return L._data
         if useNumpy and isinstance(L, ndarray):
             return self.__flatten_array__(L)
+        if self.elem == LRAny():
+            print "warning: ambiguous list element type"
+            self.elem = self.__lrtype__(L).elem
+            print "element type:", self.elem
         lengths = [None] * self.depth
         def flattenNDlist(ls, n=0):
             if lengths[n] is None:
@@ -819,23 +839,34 @@ class LRList(LRType):
         flat = flattenNDlist(L)
         lengths = [l or 0 for l in lengths]
         return pack('i' * len(lengths), *lengths) + flat
-
+        
     def __flatten_array__(self, a):
         """Flatten numpy array to LabRAD list."""
         shape = a.shape[:self.depth]
         if len(shape) != self.depth:
             raise Exception("Bad array shape.")
         dims = pack('i' * len(shape), *shape)
-        if a.dtype in ['bool', 'int32', 'uint32', 'float64', 'complex128']:
-            pass
-        elif a.dtype == dtype('int64'):
-            a.dtype = 'uint32'
-            a = a.flat[::2]
+        if self.elem == LRAny():
+            self.elem = self.__lrtype_array__(a).elem
+        
+        # determine what dtype we would like to have
+        wanted_dtype = _known_dtypes.get(type(self.elem), None)
+        
+        if wanted_dtype is not None:
+            if wanted_dtype == 'uint32':
+                if a.dtype == 'int64':
+                    a = a.astype('uint32')
+            if a.dtype > dtype(wanted_dtype):
+                raise Exception("Narrowing type cast while flattening numpy array.")
+            a = a.astype(wanted_dtype)
         else:
             elems = imap(itemgetter(0), (flatten(i) for i in a.flat))
             return dims + ''.join(elems)
         return dims + a.tostring()
         
+_known_dtypes = {LRBool: 'bool', LRInt: 'int32', LRWord: 'uint32',
+                 LRValue: 'float64', LRComplex: 'complex128'}
+                 
 registerTypeFunc(list, LRList.__lrtype__)
 if useNumpy:
     registerTypeFunc(ndarray, LRList.__lrtype_array__)

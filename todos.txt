@@ -7,9 +7,6 @@ GENERAL:
 		disconnect listeners when a server disconnects
         error handling in signal/slot and messaging mechanisms
     
-    types:
-        fix type inference and matching on complex types
-    
     testing:
 		need to be able to start and stop servers from inside tests
 		quantify code converage (how?)
