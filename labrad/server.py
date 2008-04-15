@@ -187,6 +187,14 @@ class ILabradServer(Interface):
     pass
 
 class Signal(object):
+    """A Signal object is a simple publish/subscribe messaging primiive.
+    
+    Servers expose signals as settings that clients or other servers can
+    make requests to.  A request allows the client or server to sign up to
+    receive messages when this signal is fired.  All the details of managing
+    who is listening for these signals is handled here, so the application
+    does not need to worry about it.
+    """
     def __init__(self, ID, name, tag):
         self.ID = ID
         self.name = name
@@ -194,6 +202,7 @@ class Signal(object):
         self.listeners = {}
 
     def __call__(self, data, contexts=None):
+        """Fire a message with the given data to all connected listeners."""
         # TODO: remove listeners when clients disconnect
         if hasattr(self, 'parent'):
             p = self.parent.prot
@@ -215,17 +224,25 @@ class Signal(object):
                         p.message(target, (ID, data), context)
             
     def connect(self, context, target, ID):
+        """Connect a listener to this signal.
+        
+        Connections are made to a given target/message ID, in a particular
+        context.  When the signal is fired later, it can be fired to all listeners,
+        or only to those listeners signed up in particular contexts.
+        """
         # TODO: use weak references here to prevent memory leaks
         cdict = self.listeners.setdefault(context, {})
         tdict = cdict.setdefault(target, ID)
         
     def disconnect(self, context, target):
+        """Disconnect a listener from this signal."""
         if context in self.listeners:
             cdict = self.listeners[context]
             if target in cdict:
                 del cdict[target]
                 
     def disconnectAll(self, target):
+        """Disconnect all listeners pointing at a particular target."""
         for context in self.listeners:
             cdict = self.listeners[context]
             if target in cdict:

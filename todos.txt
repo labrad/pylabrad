@@ -2,16 +2,24 @@ GENERAL:
     framework cleanup
         mark methods that can be overridden, should not be overridden, etc.
         templates for servers and clients
+        make clear separation between framework and non-framework code (e.g. for servers)
+        define interfaces for various components
     
 	signals and slots (multiple dispatch, loose coupling):
 		disconnect listeners when a server disconnects
         error handling in signal/slot and messaging mechanisms
+    
+    logging
+        configure twisted logging (less verbose when using util.runServer, by setting logPrefix)
+        allow logs to be accessed and manipulated remotely
+		configurable debug/logging verbosity levels (change on the fly)
     
     testing:
 		need to be able to start and stop servers from inside tests
 		quantify code converage (how?)
 		generate lots of random data (good and mal-formed)
 		profiling for data flatten/unflatten operations to test speed
+            use this to help optimize flattening/unflattening
 		test setting decorator
         test reversible eval and repr of labrad data
         test device model (in particular, locking)
@@ -20,11 +28,6 @@ GENERAL:
         make unit objects interoperate with numpy arrays transparently
         test unit handling and conversion
         cache unit objects not just by parsed name, but by exponents
-    
-	logging
-        configure twisted logging (less verbose when using util.runServer, by setting logPrefix)
-        allow logs to be accessed and manipulated remotely
-		configurable debug/logging verbosity levels (change on the fly)
     
 	contexts:
         servers can provide custom context objects (not just dict)
@@ -40,8 +43,9 @@ GENERAL:
         save config in registry where possible, but allow local override
         
 	request cancellation
-	
-	context-cloning of wrappers
+        when a request is cancelled, a message is sent to the server.  This causes the
+        server to stop processing that request (throw an error inside the handler, or just
+        stop processing additional records)
         
     distribution
         easy_install

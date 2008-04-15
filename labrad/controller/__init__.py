@@ -1,5 +1,6 @@
 import os
 import hashlib
+import random
 
 import labrad
 from labrad.config import ConfigFile
@@ -379,9 +380,16 @@ class DigestAuthRequest(server.Request):
         self.setHeader('date', http.datetimeToString())
         self.setHeader('content-type', "text/html")
 
-        self.setHeader('WWW-Authenticate', """Digest realm="LabRAD Controller", qop="auth", nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", opaque="5ccc069c403ebaf9f0171e9517f40e41" """)
+        realm = "LabRAD Controller"
+        nonce = generateNonce()
+        opaque = generateNonce()
+        msg = '''Digest realm="%s", qop="auth", nonce="%s", opaque="%s"'''
+        self.setHeader('WWW-Authenticate', msg % (realm, nonce, opaque))
         self.write('<html><h1>Invalid username/password!</h1></html>')
         self.finish()
+
+def generateNonce():
+    return ''.join(random.choice('0123456789abcdef') for _ in range(32))
         
 def makeNodeControllerSite(host, port):
     try:

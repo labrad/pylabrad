@@ -823,9 +823,7 @@ class LRList(LRType):
         if useNumpy and isinstance(L, ndarray):
             return self.__flatten_array__(L)
         if self.elem == LRAny():
-            print "warning: ambiguous list element type"
             self.elem = self.__lrtype__(L).elem
-            print "element type:", self.elem
         lengths = [None] * self.depth
         def flattenNDlist(ls, n=0):
             if lengths[n] is None:

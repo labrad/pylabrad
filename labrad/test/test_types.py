@@ -120,6 +120,11 @@ class labradTypesTests(unittest.TestCase):
 
             # empty list gets type from hint
             ([], ['s', '*(ww)'], '*(ww)'),
+            
+            # handle unknown pieces inside clusters and lists
+            (['a', 'b'], ['*?'], '*s'),
+            ((1, 2, 'a'), ['ww?'], 'wws'),
+            ((1, 1L), ['??'], 'iw'),
         ]
         failingTests = [
             # no compatible types
