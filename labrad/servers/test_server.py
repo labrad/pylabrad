@@ -34,13 +34,11 @@ class TestServer(LabradServer):
     name = 'Python Test Server'
     testMode = True
 
-    def serverConnected(self, data):
-        print 'connected:', data
+    def serverConnected(self, ID, name):
+        print 'connected:', ID, name
 
-    def serverDisconnected(self, data):
-        print 'disconnected:', data
-
-    log = Signal(555, 'log', '(ts)')
+    def serverDisconnected(self, ID, name):
+        print 'disconnected:', ID, name
 
     @inlineCallbacks
     def stopServer(self):
@@ -65,8 +63,7 @@ class TestServer(LabradServer):
     @setting(4, delay=['v[s]', ''], returns=['v[s]'])
     def echo_delay(self, c, delay):
         """Get or set the echo delay."""
-        log.msg('Echo delay: %s' % delay)
-        self.log((datetime.now(), 'Echo delay: %s' % delay))
+        self.log('Echo delay: %s' % delay)
         if delay is not None:
             c['delay'] = float(delay)
         return c['delay']
@@ -74,8 +71,7 @@ class TestServer(LabradServer):
     @setting(40, speed=['v[m/s]', ''], returns=['v[m/s]'])
     def speed(self, c, speed):
         """Get or set the speed."""
-        log.msg('Speed: %s' % speed)
-        self.log((datetime.now(), 'Speed: %s' % speed))
+        self.log('Speed: %s' % speed)
         if speed is not None:
             c['speed'] = speed
         return c['speed']
@@ -88,17 +84,17 @@ class TestServer(LabradServer):
 
     @setting(5)
     def exc_in_handler(self, c, data):
-        log.msg('Exception in handler.')
+        self.log('Exception in handler.')
         raise Exception('Raised in handler.')
 
     @setting(6)
     def exc_in_subfunction(self, c, data):
-        log.msg('Exception in subfunction.')
+        self.log('Exception in subfunction.')
         owie()
 
     @setting(7)
     def exc_in_deferred(self, c, data):
-        log.msg('Exception in deferred.')
+        self.log('Exception in deferred.')
         d = defer.Deferred()
         d.addCallback(owie)
         reactor.callLater(1, d.callback, None)
@@ -106,14 +102,14 @@ class TestServer(LabradServer):
 
     @setting(8)
     def exc_in_errback(self, c, data):
-        log.msg('Exception from an errback.')
+        self.log('Exception from an errback.')
         d = defer.Deferred()
         reactor.callLater(1, d.errback, Exception('Raised by errback.'))
         return d
 
     @setting(9)
     def exc_in_inlinecallback(self, c, data):
-        log.msg('Exception from an inlineCallback.')
+        self.log('Exception from an inlineCallback.')
         yield util.wakeupCall(c['delay'])
         raise Exception('Raised in inlineCallback.')
 

@@ -14,7 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from twisted.internet import defer, reactor
-from twisted.python import failure
+from twisted.python import failure, log, reflect, util
 from twisted.python.util import mergeFunctionMetadata
 import copy, re, textwrap
 from labrad.util.unwrap import unwrap
@@ -56,34 +56,33 @@ def descStr(item):
     else:
         return item.__name__
 
-docStringPattern = re.compile(r'(.*)NOTES?:\s*(.*)', re.DOTALL)
+DOC_PATTERN = re.compile(r'(.*)NOTES?:\s*(.*)', re.DOTALL)
 def parseSettingDoc(s):
     if s is None:
         return '', ''
     lines = s.split('\n')
-    first, rest = lines[0], lines[1:]
-    first = first.strip()
+    first, rest = lines[0].strip(), lines[1:]
     rest = textwrap.dedent('\n'.join(rest))
     s = first + '\n' + rest
     try:
-        descr, notes = docStringPattern.search(s).groups()
+        descr, notes = DOC_PATTERN.search(s).groups()
     except:
         descr, notes = s, ''
     return unwrap(descr.strip()), unwrap(notes)
 
 
 # a list of printable representations of the ascii character codes
-FILTER=''.join([(len(repr(chr(x)))==3) and chr(x) or '.' for x in range(256)])
+FILTER = ''.join(chr(x) if len(repr(chr(x)))==3 else '.' for x in range(256))
 
 def dump(src, length=16):
     """Nicely-formatted hex dump of raw data."""
-    N=0; result=''
+    N = 0; result = ''
     while src:
-       s,src = src[:length],src[length:]
-       hexa = ' '.join(["%02X"%ord(x) for x in s])
+       s, src = src[:length], src[length:]
+       hexa = ' '.join('%02X' % ord(x) for x in s)
        s = s.translate(FILTER)
-       result += "%04X   %-*s   %s\n" % (N, length*3, hexa, s)
-       N+=length
+       result += '%04X   %-*s   %s\n' % (N, length*3, hexa, s)
+       N += length
     return result
 
 ALLOWED = 'abcdefghijklmnopqrstuvwxyz1234567890_'
@@ -98,7 +97,7 @@ def mangle(name):
 
 def indent(s, level=1):
     spc = '    '*level
-    return '\n'.join([spc + line for line in s.split('\n')])
+    return '\n'.join(spc + line for line in s.split('\n'))
 
 def linspace(star, stop, N):
     """Linearly-spaced list of numbers."""
@@ -119,15 +118,6 @@ def extractKey(d, key, default):
         return val
     else:
         return default
-
-class DefaultDict(dict):
-    """Dictionary with a default value for unknown keys."""
-    def __init__(self, default={}):
-        self.default = default
-
-    def __getitem__(self, key):
-        if key in self: return self.get(key)
-        return self.setdefault(key, copy.deepcopy(self.default))
 
 class MultiDict(dict):
     """Dictionary with multiple keys to the same value."""
@@ -176,14 +166,13 @@ class MultiDict(dict):
 
 class PrettyDict(MultiDict):
     def __repr__(self):
-        names = self.keys()
-        names.sort()
-        return '\n'.join(names)
+        return '\n'.join(sorted(self.keys()))
 
 class ContextDict(dict):
     """Subclass of dict for holding context data.
 
-    Allows us to set attributes like ID."""
+    Using a subclass allows us to set attributes: ID and source.
+    """
     pass
 
 
@@ -195,7 +184,6 @@ def runServer(srv):
     
     import sys, time
     from twisted.internet import reactor
-    from twisted.python import log
 
     class ServerOptions(usage.Options):
         optParameters = [['name', 'n', srv.name, 'Server name.'],
@@ -226,19 +214,44 @@ def runServer(srv):
         log.msg('There was an error: ' + failure.getErrorMessage())
         _ensureReactorStop()
 
-    srv.startup().addErrback(_error)
-    srv.shutdown().addCallbacks(_disconnect, _error)
+    srv.onStartup().addErrback(_error)
+    srv.onShutdown().addCallbacks(_disconnect, _error)
 
     if config['name']:
         srv.name = config['name']
-    srv.setName(localizeServerName(srv, config['node']))
+    srv.name = localizeServerName(srv, config['node'])
 
     srv.password = config['password']
 
-    log.startLogging(sys.stdout)
+    observer = MyLogObserver(sys.stdout)
+    log.startLoggingWithObserver(observer.emit)
     reactor.connectTCP(config['host'], int(config['port']), srv)
     reactor.run()
 
+class MyLogObserver(log.FileLogObserver):
+    timeFormat = '%Y/%m/%d %H:%M -'
+
+    def emit(self, eventDict):
+        edm = eventDict['message']
+        if not edm:
+            if eventDict['isError'] and eventDict.has_key('failure'):
+                text = ((eventDict.get('why') or 'Unhandled Error')
+                        + '\n' + eventDict['failure'].getTraceback())
+            elif eventDict.has_key('format'):
+                text = self._safeFormat(eventDict['format'], eventDict)
+            else:
+                # we don't know how to log this
+                return
+        else:
+            text = ' '.join(map(reflect.safe_str, edm))
+
+        timeStr = self.formatTime(eventDict['time'])
+        fmtDict = {'text': text.replace("\n", "\n\t")}
+        msgStr = self._safeFormat("%(text)s\n", fmtDict)
+
+        util.untilConcludes(self.write, timeStr + " " + msgStr)
+        util.untilConcludes(self.flush)  # Hoorj!
+    
 def localizeServerName(server, node=None):
     if node is None:
         node = getNodeName()
@@ -289,25 +302,38 @@ class DeferredSignal(object):
     def __init__(self):
         self.waiters = []
         self.listeners = []
-
+        self.fired = None
+        
     def callback(self, data=None):
-        waiters = self.waiters
-        self.waiters = []
-        for d in waiters:
-            d.callback(data)
-        for listener in self.listeners:
-            listener(data)
+        self._fire(True, data)
 
     def errback(self, reason=None):
+        self._fire(False, reason)
+
+    def _fire(self, success, data):
+        #self.fired = success, data
         waiters = self.waiters
         self.waiters = []
         for d in waiters:
-            d.errback(reason)
-
+            if success:
+                d.callback(data)
+            else:
+                d.errback(data)
+        if success:
+            for func in self.listeners:
+                func(data)
+        
     def __call__(self):
-        d = defer.Deferred()
-        self.waiters.append(d)
-        return d
+        if self.fired:
+            success, data = self.fired
+            if success:
+                return defer.succeed(data)
+            else:
+                return defer.fail(data)
+        else:
+            d = defer.Deferred()
+            self.waiters.append(d)
+            return d
     
     def connect(self, listener):
         if listener not in self.listeners:

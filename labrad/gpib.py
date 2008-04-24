@@ -92,23 +92,38 @@ class GPIBDeviceServer(DeviceServer):
     name = 'Generic GPIB Device Server'
     deviceName = 'Generic GPIB Device'
     deviceWrapper = GPIBDeviceWrapper
-        
+    
+    def serverConnected(self, ID, name):
+        """Refresh devices when a gpib server comes on line."""
+        if 'gpib' in name.lower():
+            self.refreshDevices()
+    
+    def serverDisconnected(self, ID, name):
+        """Refresh devices when a gpib server goes off line."""
+        if 'gpib' in name.lower():
+            self.refreshDevices()
+    
     @inlineCallbacks
     def findDevices(self):
-        cxn = self.client
+        """Find all available matching GPIB devices."""
+        searches = [self._findDevicesForServer(srv)
+                    for srv in _gpibServers(self.client)]
         found = []
-        for name in cxn.servers:
-            srv = cxn.servers[name]
-            if 'gpib_bus' not in name or 'list_devices' not in srv.settings:
-                continue
-            devs = yield srv.list_devices()
-            for addr, devName in devs:
-                if devName != self.deviceName:
-                    continue
-                name = _deviceName(srv.name, addr)
-                found.append((name, (srv, addr), {}))
+        for search in searches:
+            found += yield search
         returnValue(found)
 
+    @inlineCallbacks
+    def _findDevicesForServer(self, srv):
+        """Find matching devices on a given server."""
+        devices = yield srv.list_devices()
+        found = []
+        for address, deviceName in devices:
+            if deviceName == self.deviceName:
+                name = _getDeviceName(srv, address)
+                found.append((name, (srv, address), {}))
+        returnValue(found)
+        
     # server settings
 
     @setting(1001, 'GPIB Write', string=['s'], returns=['*b'])
@@ -126,5 +141,15 @@ class GPIBDeviceServer(DeviceServer):
         """Write a string over GPIB and read the response."""
         return self.selectedDevice(c).query(query)
 
-def _deviceName(serverName, deviceID):
-    return '%s - GPIB ID %d' % (serverName, deviceID)
+def _gpibServers(cxn):
+    """Get a list of available GPIB servers."""
+    gpibs = []
+    for name in cxn.servers:
+        srv = cxn.servers[name]
+        if 'gpib_bus' in name and 'list_devices' in srv.settings:
+            gpibs.append(srv)
+    return gpibs
+        
+def _getDeviceName(server, deviceID):
+    """Create a name for a device on a particular server."""
+    return '%s - GPIB ID %d' % (server.name, deviceID)

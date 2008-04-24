@@ -21,7 +21,7 @@ Contains a blocking client connection to labrad.
 
 from labrad import constants as C, types as T, thread, protocol, util
 from labrad.errors import Error
-from labrad.manager import ILabradManager
+from labrad.interfaces import ILabradManager
 from labrad.thread import blockingCallFromThread as block, DelayedResponse
 from labrad.wrappers import PacketResponse
 from labrad.util import indent, MultiDict, PrettyDict, extractKey
@@ -61,7 +61,7 @@ class SettingWrapper(object):
         elif len(args) == 1:
             args = args[0]
         resp = DelayedResponse(self._server._send,
-                               (self.ID, args, tag), **kw)
+                               [(self.ID, args, tag)], **kw)
         if wrap:
             resp.addCallback(lambda resp: resp[0][1])
         return resp.wait() if wait else resp
@@ -366,10 +366,23 @@ Data:
 class Client(HasDynamicAttrs):
     def __init__(self, name):
         HasDynamicAttrs.__init__(self)
-        self.name = name
+        self.name = name or 'Python Client (%s)' % util.getNodeName()
         self.connected = False
         self._next_context = 1
 
+    def __enter__(self):
+        """Enter the body of a with statement."""
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit the body of a with statement."""
+        # TODO: make sure this waits for the disconnection to finish
+        try:
+            self._cxn.disconnect()
+        except:
+            pass
+        return False
+        
     def _getAttrs(self):
         if not self.connected:
             return []
@@ -386,22 +399,19 @@ class Client(HasDynamicAttrs):
     def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT):
         thread.startReactor()
         def getConnection(password):
-            factory = protocol.LabradClientFactory(self.name)
+            factory = protocol.LabradClient(self.name)
             factory.password = password
             reactor.connectTCP(host, port, factory, timeout)
-            return factory.getConnection()
+            return factory.onStartup()
         prompt = 'Enter password for manager on %s:' % host
         pw = C.PASSWORD or getpass.getpass(prompt)
-        try:
-            self._cxn = block(getConnection, pw)
-        except:
-            pass
-        else:
-            C.PASSWORD = pw # save password if it worked
-            self._mgr = ILabradManager(self._cxn)
-            self.ID = self._cxn.ID
-            self.host, self.port = host, port
-            self.connected = True
+        cxn = block(getConnection, pw)
+        C.PASSWORD = pw # save password if it worked
+        self._cxn = cxn._cxn
+        self._mgr = ILabradManager(self._cxn)
+        self.ID = cxn.ID
+        self.host, self.port = host, port
+        self.connected = True
 
     def disconnect(self):
         if self.connected:
@@ -415,7 +425,7 @@ class Client(HasDynamicAttrs):
 
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
-        return self._cxn.request(target, records, *args, **kw)
+        return self._cxn.sendRequest(target, records, *args, **kw)
 
     def __repr__(self):
         if self.connected:

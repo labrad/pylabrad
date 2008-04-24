@@ -20,27 +20,25 @@ labrad module for python.
 from __future__ import with_statement
 from contextlib import contextmanager
 
-from labrad import client, constants as C, util
+from labrad import client, constants as C, manager, util
 from labrad.wrappers import connectAsync
 
 # flag that determines whether we are in tutorial mode
 tutorial_mode = False
 
-@contextmanager
-def connection(host=C.MANAGER_HOST, port=C.MANAGER_PORT,
-               name='Python Client', **kw):
-    try:
-        cxn = client.Client(name)
-        cxn.connect(host, port, **kw)
-        yield cxn
-    except KeyboardInterrupt:
-        pass # ignore keyboard interrupt exceptions
-    finally:
-        cxn.disconnect()
-    
+#@contextmanager
+#def connection(host=C.MANAGER_HOST, port=C.MANAGER_PORT,
+#               name='Python Client', **kw):
+#    try:
+#        cxn = client.Client(name)
+#        cxn.connect(host, port, **kw)
+#        yield cxn
+#    except KeyboardInterrupt:
+#        pass # ignore keyboard interrupt exceptions
+#    finally:
+#        cxn.disconnect()
 
-def connect(host=C.MANAGER_HOST, port=C.MANAGER_PORT,
-            name='Python Client', **kw):
+def connect(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name=None, **kw):
     """Create a client connection to the labrad manager."""
     cxn = client.Client(name)
     cxn.connect(host, port, **kw)
@@ -70,6 +68,8 @@ To execute requests use
 
     return cxn
 
+connection = connect
+    
 def tutorial():
     global tutorial_mode
     tutorial_mode = True

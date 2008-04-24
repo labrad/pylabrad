@@ -5,9 +5,9 @@ import random
 import labrad
 from labrad.config import ConfigFile
 from labrad.util import maybeTimeout, simplejson
-from labrad.wrappers import AsyncClient
+from labrad.wrappers import connectAsync
 
-from twisted.internet import defer
+from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, DeferredList
 from twisted.python.failure import Failure
 from twisted.web import http, resource, static, server
@@ -221,20 +221,15 @@ class NodeAPI(resource.Resource):
     reconnectDelay = 10
     
     def _connect(self):
-        cxn = AsyncClient(name='Web Interface Client')
-        d = cxn.connect(self.host, self.port)
+        d = connectAsync(self.host, self.port, name='Web Interface Client')
         d.addCallbacks(self._connectionSucceeded, self._connectionFailed)
-        d = cxn.notifyOnDisconnect()
-        d.addBoth(self._connectionFailed)
 
-    def _connectionSucceeded(self, c):
+    def _connectionSucceeded(self, cxn):
         try:
-            if c.connected:
-                self.cxn = c
-                self.connected = True
-                print 'Connected to manager %s:%d.' % (self.host, self.port)
-            else:
-                self._reconnect()
+            cxn.onShutdown().addBoth(self._connectionFailed)
+            self.cxn = cxn
+            self.connected = True
+            print 'Connected to manager %s:%d.' % (self.host, self.port)
         except Exception, e:
             print e
             print 'Something went wrong in connection.'

@@ -50,16 +50,31 @@ from zope.interface import Interface, implements
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
 
 def findEnvironmentVars(string):
+    """Find all environment variables of the form %VAR% in a string."""
     return re.findall('%([^%]+)%', string)
 
 def interpEnvironmentVars(string, env):
+    """Replace all environment variables of the form %VAR% in a string.
+    
+    Values are taken from the env variable, a dict-like object.  Variable
+    names are converted to upper case before interpolation, to maintain
+    case insensitivity.  If any required variables are not found in env,
+    this raises a KeyError.
+    """
     labels = findEnvironmentVars(string)
     for label in labels:
         tag = '%' + label + '%'
         string = string.replace(tag, env[label.upper()])
     return string
 
+class IServerProcess(Interface):
+    pass
+    
 class ServerProcess(ProcessProtocol):
+    """A class to represent a running server instance."""
+    
+    implements(IServerProcess)
+    
     timeout = 20
 
     def __init__(self, env):
@@ -121,7 +136,7 @@ class ServerProcess(ProcessProtocol):
         try:
             #self.proc.writeToChild(0, '\x03')
             self.proc.signalProcess("KILL")
-            #self.client._cxn.message(self.ID, (987654321, None))
+            #self.client._cxn.sendMessage(self.ID, [(987654321, None)])
         except:
             pass
 
@@ -267,10 +282,10 @@ class ProcNode(MultiService):
     def startConnection(self):
         print 'connecting to %s:%d...' % (self.host, self.port)
         srv = ILabradServer(self)
-        d = srv.startup()
+        d = srv.onStartup()
         d.addCallback(self._connected, srv)
         d.addErrback(self._error)
-        d = srv.shutdown()
+        d = srv.onShutdown()
         d.addCallbacks(self._disconnect, self._error)
         self.cxn = TCPClient(self.host, self.port, srv)
         self.addService(self.cxn)

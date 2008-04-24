@@ -30,6 +30,7 @@ PASSWORD = os.environ.get('LABRADPASSWORD', None)
 # settings IDs on the LabRAD manager
 SERVERS_LIST = 1
 SETTINGS_LIST = 2
+LOOKUP = 3
 HELP = 10
 
 NOTIFY_ON_CONNECT = 30L

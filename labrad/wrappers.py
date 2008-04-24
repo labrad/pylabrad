@@ -14,12 +14,15 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from labrad import constants as C, types as T, protocol, util
+from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
 from labrad.util import mangle, indent, MultiDict, extractKey
-from labrad.manager import ILabradManager
 
 from twisted.internet import reactor, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
+from twisted.python.components import registerAdapter
+
+from zope.interface import implements
 
 from functools import partial
 
@@ -47,7 +50,7 @@ class AsyncSettingWrapper(object):
             args = None
         elif len(args) == 1:
             args = args[0]
-        resp = self._server._send((self.ID, args, tag), **kw)
+        resp = self._server._send([(self.ID, args, tag)], **kw)
         if wrap:
             resp.addCallback(lambda resp: resp[0][1])
         return resp
@@ -209,125 +212,26 @@ class AsyncServerWrapper:
         """Send packet to this server."""
         return self._cxn._send(self.ID, *args, **kw)
 
-
-def connectAsync(host=C.MANAGER_HOST, port=C.MANAGER_PORT,
-                 name='Python Client'):
-    cxn = AsyncClient(name)
-    return cxn.connect(host, port)
-
-
-class AsyncClient:
-    def __init__(self, name):
-        self.name = name
-        self.connected = False
-        self.servers = MultiDict()
-        self._next_context = 1
-        self._disconnectWaiters = []
-        self._factory = protocol.LabradClientFactory(self.name)
-
-    _staticAttrs = ['connect', 'notifyOnDisconnect',
-                    'disconnect', 'refresh', 'context']
-
-    @inlineCallbacks
-    def connect(self, host, port, timeout=C.TIMEOUT):
-        """Connect to the labrad manager."""
-        reactor.connectTCP(host, port, self._factory, timeout)
-        self._cxn = yield self._factory.getConnection()
-        self._mgr = ILabradManager(self._cxn)
-        self.ID = self._cxn.ID
-
-        self.host = host
-        self.port = port
-        self.connected = True
-        yield self._refresh()
-        returnValue(self)
-
-    def notifyOnDisconnect(self):
-        return self._factory.notifyOnDisconnect()
-
-    def disconnect(self):
-        if self.connected:
-            self._cxn.disconnect()
-            self.connected = False
-
-    def refresh(self):
-        return self._refresh()
-
-    @inlineCallbacks
-    def _refresh(self):
-        """Update the list of available labrad servers."""
-        
-        # get a list of the currently-available servers
-        slist = yield self._mgr.getServersList()
-        names, labrad_names, IDs = zip(*slist)
-        names = [self._fixName(n) for n in names]
-        slist = zip(names, labrad_names, IDs)
-
-        # determine what to add, update and delete to be current
-        additions = [s for s in slist if s[0] not in self.servers]
-        refreshes = [n for n in self.servers if n in names]
-        deletions = [n for n in self.servers if n not in names]
-
-        actions = [self._addServer(*s) for s in additions] +\
-                  [self._refreshServer(n) for f in refreshes] +\
-                  [self._delServer(n) for n in deletions]
-        yield defer.DeferredList(actions, fireOnOneErrback=True)
-        returnValue(self.servers)
-
-    def _fixName(self, name):
-        if name in self._staticAttrs:
-            name = 'labrad_' + name
-        return name
-
-    @inlineCallbacks
-    def _addServer(self, name, labrad_name, ID):
-        try:
-            server = yield wrapAsync(
-                self._serverWrapper, self, name, labrad_name, ID)
-        except:
-            pass
-        else:
-            self.servers[name, labrad_name, ID] = server
-            setattr(self, name, server)
-
-    @inlineCallbacks
-    def _refreshServer(self, name):
-        if hasattr(self, name):
-            server = getattr(self, name)
-            try:
-                yield server._refresh()
-            except:
-                yield self._delServer(name)
-
-    def _delServer(self, name):
-        if hasattr(self, name):
-            delattr(self, name)
-            del self.servers[name]
-        return defer.succeed(None)
-
-    _serverWrapper = AsyncServerWrapper
-
-    def context(self):
-        context = (0, self._next_context)
-        self._next_context += 1
-        return context
-
-    def __getitem__(self, key):
-        return self.servers[key]
-            
-    def _send(self, target, records, *args, **kw):
-        """Send a packet over this connection."""
-        return self._cxn.request(target, records, *args, **kw)
+@inlineCallbacks
+def connectAsync(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name=None):
+    cxn = protocol.LabradClient(name)
+    reactor.connectTCP(host, port, cxn, C.TIMEOUT)
+    yield cxn.onStartup()
+    cxn.client.onShutdown = cxn.onShutdown
+    returnValue(cxn.client)
 
 
-class AsyncClientAdapter:
+class ClientAsync(object):
     """Adapt a LabRAD request protocol object to an asynchronous client."""
+    
+    implements(IClientAsync)
+    
     def __init__(self, prot):
         self.servers = MultiDict()
         self._cxn = prot
         self._mgr = ILabradManager(self._cxn)
         self._next_context = 1
-
+        
     _staticAttrs = ['refresh', 'context']
 
     def refresh(self):
@@ -388,8 +292,12 @@ class AsyncClientAdapter:
 
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
-        return self._cxn.request(target, records, *args, **kw)
+        return self._cxn.sendRequest(target, records, *args, **kw)
+        
+    def disconnect(self):
+        self._cxn.disconnect()
 
+registerAdapter(ClientAsync, ILabradProtocol, IClientAsync)
 
 def wrapAsync(cls, *args, **kw):
     obj = cls(*args, **kw)

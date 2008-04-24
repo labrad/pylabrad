@@ -44,7 +44,7 @@ class DeviceWrapper:
 
     def lock(self, c, timeout=None):
         """Get or renew a lock on this device."""
-        if self.locked and self._lockContext != c:
+        if not self.accessibleFrom(c):
             raise DeviceLockedError()
         self.locked = True
         self._lockContext = c
@@ -54,13 +54,10 @@ class DeviceWrapper:
         else:
             self._unlockCall.reset(timeout)
 
-    def accessibleFrom(self, c):
-        return (not self.locked) or (self._lockContext == c)
-
     def unlock(self, c=None):
         """Release the lock on this device."""
         c = c or self._lockContext
-        if self.locked and c != self._lockContext:
+        if not self.accessibleFrom(c):
             raise DeviceLockedError()
         self.locked = False
         if self._unlockCall and self._unlockCall.active():
@@ -68,6 +65,12 @@ class DeviceWrapper:
         self._unlockCall = None
         self._lockContext = None
 
+    def lockedInContext(self, c):
+        return self.locked and (self._lockContext == c)
+        
+    def accessibleFrom(self, c):
+        return (not self.locked) or (self._lockContext == c)
+        
     def connect(self, *args, **kw):
         """Connect to this device.
         
@@ -96,13 +99,11 @@ class DeviceServer(LabradServer):
     name = 'Generic Device Server'
     deviceWrapper = DeviceWrapper
 
-    @inlineCallbacks
     def initServer(self):
         self.devices = util.MultiDict() # aliases -> device
         self.device_guids = {} # name -> guid
         self._next_guid = 0
-        
-        yield self.refreshDeviceList()
+        return self.refreshDeviceList()
 
     def stopServer(self):
         if hasattr(self, 'devices'):
@@ -129,7 +130,7 @@ class DeviceServer(LabradServer):
         be able to refer to them after the refresh.
         """
         yield self.client.refresh()
-        print 'refreshing device list...'
+        log.msg('refreshing device list...')
         all_found = yield self.findDevices()
 
         # If there are devices for which we don't have wrappers,
@@ -151,9 +152,9 @@ class DeviceServer(LabradServer):
         names_found = [name for (name, args, kw) in all_found]
         deletions = [name for name in self.device_guids
                      if name in self.devices and name not in names_found]
-        print 'all_found:', all_found
-        print 'additions:', additions
-        print 'deletions:', deletions
+        self.log('all_found: %s' % all_found)
+        self.log('additions: %s' % additions)
+        self.log('deletions: %s' % deletions)
 
         # start additions
         for name, args, kw in additions:
@@ -178,23 +179,23 @@ class DeviceServer(LabradServer):
             del self.devices[name]
             try:
                 yield dev.shutdown()
-            except:
-                log.msg('Error while trying to shut down device.')
-                log.err()
+            except Exception, e:
+                self.log('Error while shutting down device "%s": %s' % (name, e))
 
-    def serverConnected(self, ID, *a, **kw):
+    def serverConnected(self, ID, name):
         self.refreshDeviceList()
 
-    def serverDisconnected(self, ID, *a, **kw):
+    def serverDisconnected(self, ID, name):
         self.refreshDeviceList()
 
     def expireContext(self, c):
+        """Release selected/locked device when context expires."""
         if 'device' in c:
             alias = c['device']
             try:
                 dev = self.devices[alias]
-                if dev.locked and (dev._lockContext == c.ID):
-                    dev.unlock()
+                if dev.lockedInContext(c):
+                    dev.unlock(c)
                 dev.deselect(c)
             except KeyError:
                 pass
@@ -208,29 +209,30 @@ class DeviceServer(LabradServer):
     def selectedDevice(self, context):
         """Get the selected device from the given context."""
         if not len(self.devices):
-            raise errors.NoDevicesAvailableError
+            raise errors.NoDevicesAvailableError()
         try:
             key = context['device']
         except KeyError:
-            raise errors.DeviceNotSelectedError
+            raise errors.DeviceNotSelectedError()
         try:
             dev = self.devices[key]
         except KeyError:
-            raise errors.NoSuchDeviceError
+            raise errors.NoSuchDeviceError()
         if not dev.accessibleFrom(context.ID):
             raise DeviceLockedError()
         return dev
 
     def selectDevice(self, context, key=None):
+        """Select a device in our current context."""
         if not len(self.devices):
-            raise errors.NoDevicesAvailableError
+            raise errors.NoDevicesAvailableError()
         if key is None:
             # use the first device
             key = sorted(self.devices.keys())[0]
         try:
             dev = self.devices[key]
         except KeyError:
-            raise errors.NoSuchDeviceError
+            raise errors.NoSuchDeviceError()
         if not dev.accessibleFrom(context.ID):
             raise DeviceLockedError()
         
@@ -243,7 +245,7 @@ class DeviceServer(LabradServer):
                 else:
                     # we're trying to select a new device.
                     # make sure to unlock previously selected device
-                    if oldDev.locked and (oldDev._lockContext == context.ID):
+                    if oldDev.lockedInContext(context.ID):
                         oldDev.unlock(context.ID)
                     oldDev.deselect(context)
                 context['device'] = dev.guid
@@ -261,21 +263,21 @@ class DeviceServer(LabradServer):
                 pass
             else:
                 # unlock and deselect device
-                if oldDev.locked and (oldDev._lockContext == context.ID):
+                if oldDev.lockedInContext(context.ID):
                     oldDev.unlock(context.ID)
                 oldDev.deselect(context)
             del context['device']
 
     def getDevice(self, context, key=None):
-        if len(self.devices) == 0:
-            raise errors.NoDevicesAvailableError
+        if not len(self.devices):
+            raise errors.NoDevicesAvailableError()
         if key is None:
             # use the first device
             key = sorted(self.devices.keys())[0]
         try:
             dev = self.devices[key]
         except KeyError:
-            raise errors.NoSuchDeviceError
+            raise errors.NoSuchDeviceError()
         if not dev.accessibleFrom(context.ID):
             raise DeviceLockedError()
         return dev
@@ -302,7 +304,6 @@ class DeviceServer(LabradServer):
     def deselect_device(self, c):
         """Select a device for the current context."""
         dev = self.deselectDevice(c)
-        return
     
     @setting(4, 'Refresh Devices', returns=['*(ws)'])
     def refresh_devices(self, c):
@@ -323,5 +324,5 @@ class DeviceServer(LabradServer):
     def release_device(self, c):
         """Release the lock on the currently-locked device."""
         dev = self.selectedDevice(c)
-        dev.unlock()
+        dev.unlock(c.ID)
 

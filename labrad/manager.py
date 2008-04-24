@@ -13,104 +13,60 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from labrad import constants as C, util, types as T
-from labrad.protocol import LabradProtocol, ILabradRequestProtocol
-from labrad.decorators import setting
+from labrad import constants as C
+from labrad.interfaces import ILabradProtocol, ILabradManager
 from labrad.util import mangle
 
-from twisted.internet import reactor, protocol as tip
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python import failure
 from twisted.python.components import registerAdapter
 
-import hashlib
+from zope.interface import Interface, implements
 
-from zope.interface import Interface
-
-class ILabradServer(Interface):
-    """The interface presented by a LabradServer to the connection
-
-    Can this be the same as that presented by a server to a user?
-    No!  The connection-visible interface contains methods that will be
-    called by the framework.  The user-visible """
-
-    def initServer(self):
-        """Initialize the server."""
-
-    def stopServer(self):
-        """Shutdown the server."""
-
-    def expireContext(self, context):
-        """Expire a messaging context."""
-
-
-class ILabradManager(Interface):
-    def getServersList(self):
-        pass
-
-    def getServerInfo(self, serverID):
-        pass
-
-    def getSettingsList(self, serverID):
-        pass
-
-    def getSettingInfo(self, serverID, settingID):
-        pass
-
-
-
-class AsyncClientManager:
+class ClientManager:
+    """Adapt client to the ILabradManager interface."""
+    
+    implements(ILabradManager)
+    
     def __init__(self, cxn):
         self.cxn = cxn
 
-    def send(self, packet, *args, **kw):
-        return self.cxn.request(C.MANAGER_ID, packet, *args, **kw)
+    def _send(self, packet, *args, **kw):
+        """Send a request to the manager."""
+        return self.cxn.sendRequest(C.MANAGER_ID, packet, *args, **kw)
 
     @inlineCallbacks
     def _getIDList(self, setting, data=None):
-        resp = yield self.send((setting, data))
-        names = [(mangle(name), name, ID) for ID, name in resp[0][1]]
+        resp = yield self._send([(setting, data)])
+        names = self._mangleIDList(resp[0][1])
         returnValue(names)
 
+    def _mangleIDList(self, L):
+        return [(mangle(name), name, ID) for ID, name in L]
+        
     def getServersList(self):
+        """Get a list of connected servers."""
         return self._getIDList(C.SERVERS_LIST)
 
     @inlineCallbacks
     def getServerInfo(self, serverID):
-        packet = [(C.SETTINGS_LIST, long(serverID)),
-                  (C.HELP, long(serverID))]
-        resp = yield self.send(packet)
-        settings = _getIDList(resp, C.SETTINGS_LIST)
-        try:
-            descr, notes = _parseResp(resp, C.HELP)
-        except:
-            descr, notes = 'No server help text.', 'No notes.'
+        """Get information about a server."""
+        packet = [(C.HELP, long(serverID)),
+                  (C.SETTINGS_LIST, long(serverID))]
+        resp = yield self._send(packet)
+        descr, notes = resp[0][1]
+        settings = self._mangleIDList(resp[1][1])
         returnValue((descr, notes, settings))
 
     def getSettingsList(self, serverID):
+        """Get a list of settings for a server."""
         return self._getIDList(C.SETTINGS_LIST, serverID)
 
     @inlineCallbacks
     def getSettingInfo(self, serverID, settingID):
+        """Get information about a setting."""
         packet = [(C.HELP, (long(serverID), long(settingID)))]
-        resp = yield self.send(packet)
+        resp = yield self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         returnValue((description, accepts, returns, notes))
 
-registerAdapter(AsyncClientManager, ILabradRequestProtocol, ILabradManager)
-
-def _getIDList(resp, ID):
-    names = _parseResp(resp, ID)
-    return [(mangle(name), name, ID) for ID, name in names]
-
-def _getStringResp(resp, ID):
-    return _parseResp(resp, ID)[0] or ''
-
-def _parseResp(resp, desiredID):
-    """Return a list of all data records for a given setting ID."""
-    for ID, data in resp:
-        if ID == desiredID:
-            return data
-
-
-
+registerAdapter(ClientManager, ILabradProtocol, ILabradManager)

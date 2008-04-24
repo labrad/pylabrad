@@ -29,6 +29,9 @@ from labrad.types import Error
 class ConnectionTimeoutError(Exception):
     """Attempt to connect to labrad took too long."""
 
+class LoginFailedError(Exception):
+    """Failed to log in to LabRAD manager."""
+    
 ## Servers
 
 class DeviceNotSelectedError(Error):
