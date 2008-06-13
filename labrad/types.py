@@ -150,7 +150,6 @@ def stripComments(s):
     Inline comments are delimited by curly brackets {} and may not be nested.
     In addition, anything after a colon : is considered a comment.
     """
-    # TODO: ignore colon inside unit strings
     return COMMENTS.sub('', s).split(':')[0]
 
 def parseNumber(s):
@@ -288,11 +287,11 @@ def flatten(obj, types=[]):
         # with the default type
         foundCompatibleType = False
         for tt in types:
-            if t <= tt:
+            if tt <= t:
+                t = tt
                 foundCompatibleType = True
                 break
-            elif tt <= t:
-                t = tt
+            elif t <= tt:
                 foundCompatibleType = True
                 break
         if foundCompatibleType:
@@ -558,9 +557,7 @@ class LRValue(LRType):
         return type(self) == type(other) and self.unit == other.unit
     
     def __le__(self, other):
-        return type(other) == LRAny or \
-               (type(self) == type(other) and \
-                (self.unit == other.unit or other.unit is None))
+        return type(other) == LRAny or type(self) == type(other)
 
     def isFullySpecified(self):
         return self.unit is not None
@@ -987,7 +984,7 @@ class LazyList(list):
     or can alternately be unflattened as a numpy array, bypassing the slow
     step of creating a large python list.
     
-    **DO NOT instantiate LazyList directly, use the List() instead.**
+    **DO NOT instantiate LazyList directly, use List() instead.**
     """
     def __init__(self, data, tag):
         self._data = data

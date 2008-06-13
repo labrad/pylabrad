@@ -34,18 +34,18 @@ class TestServer(LabradServer):
     name = 'Python Test Server'
     testMode = True
 
-    def serverConnected(self, ID, name):
-        print 'connected:', ID, name
-
-    def serverDisconnected(self, ID, name):
-        print 'disconnected:', ID, name
-
     @inlineCallbacks
     def stopServer(self):
         print 'before yield'
         yield None
         print (yield self.client.manager.convert_units(T.Value(5, 'GHz'), 'Hz'))
         print 'after yield'
+
+    def serverConnected(self, ID, name):
+        print 'server connected:', ID, name
+
+    def serverDisconnected(self, ID, name):
+        print 'server disconnected:', ID, name
     
     @setting(2)
     def delayed_echo(self, c, data):

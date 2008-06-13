@@ -26,7 +26,8 @@ from inspect import getargspec
 
 from twisted.internet.defer import inlineCallbacks
 
-from labrad import types as T
+from labrad import types as T, util
+from labrad.interfaces import implements, IRequestHandler
 
 def _isGenerator(f):
     """Check to see whether f is a generator.
@@ -40,6 +41,19 @@ def _product(lists):
     """Return the cartesian product of a list of lists."""
     if not len(lists): return [[]]
     return [[h] + t for h in lists[0] for t in _product(lists[1:])]
+
+class Setting(object):
+    implements(IRequestHandler)
+    
+    def __init__(self, func):
+        self.func = func
+    
+    def getRegistrationInfo(self):
+        return (long(self.ID), self.name, self.description,
+                self.accepts, self.returns, self.notes)
+    
+    def handleRequest(self, c, data):
+        return self.func(c, data)
 
 def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
     """Mark a server method as a remotely-accessible setting.
@@ -74,7 +88,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
             accepts_t = [T.parseTypeTag(s) for s in accepts_s]
 
             @wraps(f)
-            def unpack(self, c, data):
+            def handleRequest(self, c, data):
                 return f(self, c)
 
         elif Nparams == 1:
@@ -91,14 +105,14 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     accepts_t.append(T.LRNone())
                 
                 @wraps(f)
-                def unpack(self, c, data):
+                def handleRequest(self, c, data):
                     if data is None:
                         return f(self, c)
                     return f(self, c, data)
 
             else:
                 # nothing special to do here
-                unpack = f
+                handleRequest = f
 
         else:
             # sanity checks to make sure that we'll be able to
@@ -166,7 +180,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     accepts_t.append(T.LRNone())
                 
                 @wraps(f)
-                def unpack(self, c, data):
+                def handleRequest(self, c, data):
                     if isinstance(data, tuple):
                         return f(self, c, *data)
                     elif data is None:
@@ -175,7 +189,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                         return f(self, c, data)
             else:
                 @wraps(f)
-                def unpack(self, c, data):
+                def handleRequest(self, c, data):
                     if isinstance(data, tuple):
                         return f(self, c, *data)
                     else:
@@ -186,6 +200,15 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         f.accepts = accepts_s
         f.returns = returns
         f.isSetting = True
-        f.unpack = unpack
+        f.handleRequest = handleRequest
+        
+        # this is the data that will be sent to the manager to
+        # register this setting to be remotely callable
+        f.description, f.notes = util.parseSettingDoc(f.__doc__)
+        def getRegistrationInfo():
+            return (long(f.ID), f.name, f.description, 
+                    f.accepts, f.returns, f.notes)
+        f.getRegistrationInfo = getRegistrationInfo
+        
         return f
     return decorated

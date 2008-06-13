@@ -33,12 +33,8 @@ SETTINGS_LIST = 2
 LOOKUP = 3
 HELP = 10
 
-NOTIFY_ON_CONNECT = 30L
-NOTIFY_ON_DISCONNECT = 31L
-NOTIFY_ON_CTX_EXP = 110L
-
 # default timeout in seconds
 TIMEOUT = 30
 
-# node manager
+# node controller
 HTTP_PORT = int(os.environ.get('LABRADHTTPPORT', 7667))

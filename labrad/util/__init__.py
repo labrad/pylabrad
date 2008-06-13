@@ -96,7 +96,7 @@ def mangle(name):
     return newname
 
 def indent(s, level=1):
-    spc = '    '*level
+    spc = ' ' * (4 * level)
     return '\n'.join(spc + line for line in s.split('\n'))
 
 def linspace(star, stop, N):
@@ -112,12 +112,11 @@ def wakeupCall(delay, args=None):
     return d
 
 def extractKey(d, key, default):
-    if key in d:
-        val = d[key]
-        del d[key]
-        return val
-    else:
+    if key not in d:
         return default
+    val = d[key]
+    del d[key]
+    return val
 
 class MultiDict(dict):
     """Dictionary with multiple keys to the same value."""
@@ -173,17 +172,16 @@ class ContextDict(dict):
 
     Using a subclass allows us to set attributes: ID and source.
     """
-    pass
 
 
-from twisted.python import usage
 from labrad import constants as C
 
 def runServer(srv):
     """Run a server of the specified class."""
     
-    import sys, time
+    import os, sys, time
     from twisted.internet import reactor
+    from twisted.python import usage
 
     class ServerOptions(usage.Options):
         optParameters = [['name', 'n', srv.name, 'Server name.'],
@@ -207,7 +205,7 @@ def runServer(srv):
             pass
 
     def _disconnect(data):
-        log.msg('Disconnected Cleanly.')
+        log.msg('Disconnected cleanly.')
         _ensureReactorStop()
 
     def _error(failure):
@@ -219,14 +217,37 @@ def runServer(srv):
 
     if config['name']:
         srv.name = config['name']
-    srv.name = localizeServerName(srv, config['node'])
+    env = dict(os.environ)
+    env['LABRADNODE'] = config['node']
+    srv.name = interpEnvironmentVars(srv.name, env)
 
     srv.password = config['password']
 
-    observer = MyLogObserver(sys.stdout)
-    log.startLoggingWithObserver(observer.emit)
+    log.startLogging(sys.stdout)
+    #observer = MyLogObserver(sys.stdout)
+    #log.startLoggingWithObserver(observer.emit)
     reactor.connectTCP(config['host'], int(config['port']), srv)
     reactor.run()
+
+def findEnvironmentVars(string):
+    """Find all environment variables of the form %VAR% in a string."""
+    return re.findall('%([^%]+)%', string)
+
+def interpEnvironmentVars(string, env=None):
+    """Replace all environment variables of the form %VAR% in a string.
+    
+    Values are taken from the env variable, a dict-like object.  Variable
+    names are converted to upper case before interpolation, to maintain
+    case insensitivity.  If any required variables are not found in env,
+    this raises a KeyError.
+    """
+    if env is None:
+        import os
+        env = os.environ
+    for label in findEnvironmentVars(string):
+        tag = '%' + label + '%'
+        string = string.replace(tag, env[label.upper()])
+    return string
 
 class MyLogObserver(log.FileLogObserver):
     timeFormat = '%Y/%m/%d %H:%M -'
@@ -251,14 +272,6 @@ class MyLogObserver(log.FileLogObserver):
 
         util.untilConcludes(self.write, timeStr + " " + msgStr)
         util.untilConcludes(self.flush)  # Hoorj!
-    
-def localizeServerName(server, node=None):
-    if node is None:
-        node = getNodeName()
-    if hasattr(server, 'isLocal'):
-        return node + ' ' + server.name
-    else:
-        return server.name
 
 def getNodeName():
     import os, socket
@@ -299,6 +312,11 @@ def timing(f, n=100, **kw):
     return avg
 
 class DeferredSignal(object):
+    """An object that can create multiple deferreds on demand.
+    
+    When the signal is fired, all created deferreds will be fired
+    or have their errback method called, as appropriate.
+    """
     def __init__(self):
         self.waiters = []
         self.listeners = []

@@ -31,10 +31,7 @@ class LoopServer(LabradServer):
 
     queries = [dict(server='manager',
                     setting='servers',
-                    last=(None, datetime.now())),
-               dict(server='python_test_server',
-                    setting='echo',
-                    last=(None, datetime.now()))]
+                    last=('', datetime.now()))]
 
 
     def initServer(self):

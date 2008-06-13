@@ -130,7 +130,7 @@ class DeviceServer(LabradServer):
         be able to refer to them after the refresh.
         """
         yield self.client.refresh()
-        log.msg('refreshing device list...')
+        self.log('refreshing device list...')
         all_found = yield self.findDevices()
 
         # If there are devices for which we don't have wrappers,
@@ -183,6 +183,7 @@ class DeviceServer(LabradServer):
                 self.log('Error while shutting down device "%s": %s' % (name, e))
 
     def serverConnected(self, ID, name):
+        # TODO: don't allow multiple refreshes to happen at once
         self.refreshDeviceList()
 
     def serverDisconnected(self, ID, name):

@@ -14,25 +14,28 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from labrad import constants as C, types as T, protocol, util
+from labrad.protocol import LabradProtocol
 from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
 from labrad.util import mangle, indent, MultiDict, extractKey
 
-from twisted.internet import reactor, defer
+from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python import log
 from twisted.python.components import registerAdapter
 
 from zope.interface import implements
 
-from functools import partial
-
 class AsyncSettingWrapper(object):
+    """Represents a setting on a remote LabRAD server."""
+    
     def __init__(self, server, name, labrad_name, ID):
         self.name = self.__name__ = name
         self.ID = ID
         self._labrad_name = labrad_name
         self._server = server
+        self._cxn = server._cxn
+        self._prot = self._cxn._cxn
         self._mgr = server._mgr
+        self._num_listeners = 0
 
     def refresh(self):
         return self._refresh()
@@ -41,43 +44,54 @@ class AsyncSettingWrapper(object):
     def _refresh(self):
         info = yield self._mgr.getSettingInfo(self._server.ID, self.ID)
         self.__doc__, self.accepts, self.returns, self.notes = info
-        self._num_listeners = 0
 
     def __call__(self, *args, **kw):
-        wrap = extractKey(kw, 'wrap', True)
+        """Send a request to this setting."""
         tag = extractKey(kw, 'tag', None) or self.accepts
-        if not len(args):
+        if len(args) == 0:
             args = None
         elif len(args) == 1:
             args = args[0]
         resp = self._server._send([(self.ID, args, tag)], **kw)
-        if wrap:
-            resp.addCallback(lambda resp: resp[0][1])
+        resp.addCallback(lambda resp: resp[0][1])
         return resp
     
-    def connect(self, handler, signupargs=(), signupkw={},
-                               handlerargs=(), handlerkw={}):
-        srv = self._server
-        srv._cxn._cxn.addListener((srv.ID, self.ID), handler,
-                                  *handlerargs, **handlerkw)
+    @inlineCallbacks
+    def connect(self, handler, context=(0, 0),
+                connectargs=(), connectkw={},
+                handlerargs=(), handlerkw={}):
+        """Connect a handler to messages from this signal.
+        
+        This is only applicable if the remote setting handles
+        signal connection and disconnection.  We also keep
+        track of the number of handlers that have been added to
+        this setting.
+        """
+        self._prot.addListener(handler,
+                               source=self._server.ID, context=context, ID=self.ID,
+                               args=handlerargs, kw=handlerkw)
         self._num_listeners += 1
-        if self._num_listeners == 1:
-            # TODO: remove listener if registration fails
-            return self.__call__(self.ID, *signupargs, **signupkw)
-        else:
-            return defer.succeed(None)
+        try:
+            yield self.__call__(self.ID, context=context, *connectargs, **connectkw)
+        except:
+            self._prot.removeListener(handler,
+                                      source=self._server.ID, context=context, ID=self.ID)
+            self._num_listeners -= 1
+            raise
     
-    def disconnect(self, handler):
-        srv = self._server
-        srv._cxn._cxn.removeListener((srv.ID, self.ID), handler)
-        self._num_listeners -= 1
-        if self._num_listeners == 0:
-            return self.__call__()
-        else:
-            return defer.succeed(None)
+    def disconnect(self, handler, context=(0, 0),
+                   disconnectargs=(), disconnectkw={}):
+        """Disconnect a handler for messages from this signal.
+        
+        If the number of handlers drops to zero, we make a request to
+        tell the signal to stop sending us messages.
+        """
+        self._prot.removeListener(handler, source=self._server.ID, context=context, ID=self.ID)
+        self._num_listeners = max(self._num_listeners - 1, 0)
+        return self.__call__(context=context, *disconnectargs, **disconnectkw)
 
 class AsyncPacketWrapper(object):
-    """An object to encapsulate a labrad packet to a server."""
+    """Represents a LabRAD packet to a server."""
     
     def __init__(self, server, **kw):
         self.settings = MultiDict()
@@ -114,7 +128,7 @@ class AsyncPacketWrapper(object):
         def wrapped(*args, **kw):
             key = extractKey(kw, 'key', None)
             tag = extractKey(kw, 'tag', None) or accepts
-            if not len(args):
+            if len(args) == 0:
                 args = None
             elif len(args) == 1:
                 args = args[0]
@@ -123,6 +137,8 @@ class AsyncPacketWrapper(object):
         return wrapped
 
 class AsyncServerWrapper:
+    """Represents a remote LabRAD server."""
+    
     def __init__(self, cxn, name, labrad_name, ID, **kw):
         self._cxn = cxn
         self._mgr = cxn._mgr
@@ -157,7 +173,17 @@ class AsyncServerWrapper:
         yield defer.DeferredList(actions, fireOnOneErrback=True)
         returnValue(self.settings)
 
-    _staticAttrs = ['settings', 'refresh', 'context', 'packet']
+    _staticAttrs = ['settings', 'refresh', 'context', 'packet',
+                    'sendMessage']
+    
+    def sendMessage(self, ID, *args, **kw):
+        """Send a message to this server."""
+        tag = extractKey(kw, 'tag', [])
+        if len(args) == 0:
+            args = None
+        elif len(args) == 1:
+            args = args[0]
+        self._cxn._sendMessage(self.ID, [(ID, args, tag)], **kw)
     
     def _fixName(self, name):
         if name in self._staticAttrs:
@@ -194,9 +220,11 @@ class AsyncServerWrapper:
     _packetWrapper = AsyncPacketWrapper
 
     def context(self):
+        """Create a new context for talking to this server."""
         return self._cxn.context()
 
     def packet(self, **kw):
+        """Create a new packet for this server."""
         return self._packetWrapper(self, **kw)
 
     def __call__(self):
@@ -213,13 +241,33 @@ class AsyncServerWrapper:
         return self._cxn._send(self.ID, *args, **kw)
 
 @inlineCallbacks
-def connectAsync(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name=None):
-    cxn = protocol.LabradClient(name)
-    reactor.connectTCP(host, port, cxn, C.TIMEOUT)
-    yield cxn.onStartup()
-    cxn.client.onShutdown = cxn.onShutdown
-    returnValue(cxn.client)
+def getConnection(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client", password=None):
+    """Connect to LabRAD and return a deferred that fires the protocol object."""
+    if password is None:
+        password = protocol.getPassword()
+    p = yield protocol.factory.connectTCP(host, port, C.TIMEOUT)
+    yield p.loginClient(password, name)
+    returnValue(p)
 
+@inlineCallbacks
+def connectAsync(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client", password=None):
+    """Connect to LabRAD and return a deferred that fires the client object."""
+    p = yield getConnection(host, port, name, password)
+    cxn = IClientAsync(p)
+    yield cxn.refresh()
+    cxn.onDisconnect = p.onDisconnect
+    returnValue(cxn)
+
+def runAsync(func, *args, **kw):
+    from twisted.internet import reactor
+    @inlineCallbacks
+    def runIt():
+        try:
+            yield func(*args, **kw)
+        finally:
+            reactor.stop()
+    reactor.callWhenRunning(runIt)
+    reactor.run()
 
 class ClientAsync(object):
     """Adapt a LabRAD request protocol object to an asynchronous client."""
@@ -232,14 +280,15 @@ class ClientAsync(object):
         self._mgr = ILabradManager(self._cxn)
         self._next_context = 1
         
-    _staticAttrs = ['refresh', 'context']
+    _staticAttrs = ['servers', 'refresh', 'context']
 
     def refresh(self):
+        """Refresh the cache of available servers and their settings."""
         return self._refresh()
 
     @inlineCallbacks
     def _refresh(self):
-        """Update the list of available labrad servers."""
+        """Update the cache of available LabRAD servers."""
         
         # get a list of the currently-available servers
         slist = yield self._mgr.getServersList()
@@ -283,6 +332,7 @@ class ClientAsync(object):
     _serverWrapper = AsyncServerWrapper
 
     def context(self):
+        """Create a new communication context for this connection."""
         context = (0, self._next_context)
         self._next_context += 1
         return context
@@ -293,6 +343,10 @@ class ClientAsync(object):
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
         return self._cxn.sendRequest(target, records, *args, **kw)
+        
+    def _sendMessage(self, target, records, *args, **kw):
+        """Send a message over this connection."""
+        return self._cxn.sendMessage(target, records, *args, **kw)
         
     def disconnect(self):
         self._cxn.disconnect()
@@ -307,10 +361,16 @@ def wrapAsync(cls, *args, **kw):
 
 
 class PacketResponse(object):
-    """Wrapper for response packets from labrad servers.
+    """Wrapper for response packets from LabRAD servers.
 
-    Methods are added to access the records in this response packet
-    coming from each setting.
+    Attributes are added to access the records in this
+    response packet coming from each setting.  For each
+    setting called by the packet, we add an attribute to
+    the access the response from that setting.  If a setting
+    is called more than once, all responses from that setting
+    are collected into a list.  Responses can be accessed
+    by name or ID, unless a key was specified for the call,
+    in which case the response is accessible via the key only.
     """
     def __init__(self, resp, server, packet):
         self.settings = MultiDict()
@@ -319,8 +379,8 @@ class PacketResponse(object):
             setting = server.settings[ID]
             name, labrad_name = setting.name, setting._labrad_name
             # if this record has a key, index by key only
-            # otherwise by setting name, labrad name and ID
-            if key:
+            # otherwise by setting name, LabRAD name and ID
+            if key is not None:
                 name = labrad_name = ID = key
             if hasattr(self, name):
                 l = getattr(self, name)

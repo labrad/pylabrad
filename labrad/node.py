@@ -34,6 +34,7 @@ from ConfigParser import SafeConfigParser
 from labrad import util
 from labrad.config import ConfigFile
 from labrad.server import ILabradServer, LabradServer, setting
+from labrad.util import findEnvironmentVars, interpEnvironmentVars
 
 from twisted.application.service import IService, MultiService
 from twisted.application.internet import TCPClient
@@ -48,24 +49,6 @@ from twisted.plugin import getPlugins
 from zope.interface import Interface, implements
 
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
-
-def findEnvironmentVars(string):
-    """Find all environment variables of the form %VAR% in a string."""
-    return re.findall('%([^%]+)%', string)
-
-def interpEnvironmentVars(string, env):
-    """Replace all environment variables of the form %VAR% in a string.
-    
-    Values are taken from the env variable, a dict-like object.  Variable
-    names are converted to upper case before interpolation, to maintain
-    case insensitivity.  If any required variables are not found in env,
-    this raises a KeyError.
-    """
-    labels = findEnvironmentVars(string)
-    for label in labels:
-        tag = '%' + label + '%'
-        string = string.replace(tag, env[label.upper()])
-    return string
 
 class IServerProcess(Interface):
     pass
@@ -165,7 +148,7 @@ class ServerProcess(ProcessProtocol):
         print "'%s': lost stderr." % self.name
         self.kill()
 
-    def serverConnected(self, data):
+    def serverConnected(self, c, data):
         ID, name = data
         print 'server connected:', name
         if name == self.name:

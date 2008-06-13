@@ -1,6 +1,7 @@
 import os
 import hashlib
 import random
+from operator import itemgetter
 
 import labrad
 from labrad.config import ConfigFile
@@ -13,8 +14,8 @@ from twisted.python.failure import Failure
 from twisted.web import http, resource, static, server
 
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
-WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
-#WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
+#WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
+WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
 #WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
 
 def _nodes(cxn):
@@ -29,22 +30,25 @@ class JSONResource(resource.Resource):
         self.kw = kw
         
     def render(self, request):
-        @inlineCallbacks
-        def doRequest():
-            try:
-                resp = yield self.func(self.cxn, request, *self.a, **self.kw)
-                result = simplejson.dumps({'result': resp})
-            except Exception, e:
-                f = Failure(e)
-                msg = f.getTraceback(elideFrameworkCode=1, detail='verbose')
-                result = simplejson.dumps({'error': unicode(msg)})
-            request.setHeader('content-type', 'application/json')
-            request.setHeader('content-length', len(result))
-            if request.method != 'HEAD':
-                request.write(result)
-            request.finish()
-        doRequest()
+        d = defer.maybeDeferred(self.func, self.cxn, request, *self.a, **self.kw)
+        d.addCallback(self._dumpResult)
+        d.addErrback(self._dumpError)
+        d.addBoth(self._finishRequest, request)
         return server.NOT_DONE_YET
+    
+    def _dumpResult(self, result):
+        return simplejson.dumps({'result': result})
+    
+    def _dumpError(self, failure):
+        msg = failure.getTraceback(elideFrameworkCode=1, detail='verbose')
+        return simplejson.dumps({'error': unicode(msg)})
+    
+    def _finishRequest(self, result, request):
+        request.setHeader('content-type', 'application/json')
+        request.setHeader('content-length', len(result))
+        if request.method != 'HEAD':
+            request.write(result)
+        request.finish()
             
     
 class JSONPuller(resource.Resource):
@@ -226,7 +230,7 @@ class NodeAPI(resource.Resource):
 
     def _connectionSucceeded(self, cxn):
         try:
-            cxn.onShutdown().addBoth(self._connectionFailed)
+            cxn.onDisconnect().addBoth(self._connectionFailed)
             self.cxn = cxn
             self.connected = True
             print 'Connected to manager %s:%d.' % (self.host, self.port)
@@ -261,10 +265,10 @@ class NodeAPI(resource.Resource):
         returnValue(sorted(unicode(name) for name in avail))
         
     def remote_list_servers(self, cxn, request):
-        return [unicode(s) for s in cxn.servers.keys()]
+        return [s for s in cxn.servers.keys()]
         
     def remote_list_nodes(self, cxn, request):
-        return [unicode(s) for s in _nodes(cxn)]
+        return [s for s in _nodes(cxn)]
         
     @inlineCallbacks
     def remote_list_both(self, cxn, request):
@@ -297,12 +301,50 @@ class NodeAPI(resource.Resource):
         returnValue([servers, nodes, status])
     
     @inlineCallbacks
+    def remote_status(self, cxn, request):
+        yield cxn.refresh()
+        servers = yield self.remote_available_servers(cxn, request)
+        nodes = yield self.remote_list_nodes(cxn, request)
+        yield DeferredList([cxn[node].refresh_servers() for node in nodes], fireOnOneErrback=True)
+        
+        status_dict = {}
+        info = yield DeferredList([cxn[node].servers_info() for node in nodes])
+        for (success, result), node in zip(info, _nodes(cxn)):
+            if success:
+                status_dict[node] = result
+        
+        status = []
+        for server in servers:
+            row = []
+            for node in nodes:
+                if node not in status_dict:
+                    row.append([server, "unavailable", False, False, False])
+                else:
+                    found = False
+                    for name, desc, ver, inst, isLocal, instances in status_dict[node]:
+                        if name == server:
+                            running = len(instances) > 0
+                            row.append([inst, "Version: " + ver, True, running, isLocal])
+                            found = True
+                            break
+                    if not found:
+                        row.append([server, "unavailable", False, False, False])
+            status.append(row)
+        
+        print [servers, nodes, status]
+        returnValue([servers, nodes, status])
+    
+    @inlineCallbacks
     def remote_iplists(self, cxn, request):
         p = cxn.manager.packet()
         p.whitelist()
         p.blacklist()
         resp = yield p.send()
-        returnValue((sorted(resp.whitelist), sorted(resp.blacklist)))
+        ips = [(addr, True) for addr in resp.whitelist] + \
+              [(addr, False) for addr in resp.blacklist]
+        ips.sort(key=itemgetter(0))
+        print 'ip list:', ips
+        returnValue(ips)
     
     def remote_blacklist(self, cxn, request):
         address = request.args['address'][0]

@@ -23,7 +23,7 @@ from labrad import constants as C, types as T, thread, protocol, util
 from labrad.errors import Error
 from labrad.interfaces import ILabradManager
 from labrad.thread import blockingCallFromThread as block, DelayedResponse
-from labrad.wrappers import PacketResponse
+from labrad.wrappers import PacketResponse, getConnection
 from labrad.util import indent, MultiDict, PrettyDict, extractKey
 
 from twisted.internet import reactor
@@ -102,8 +102,8 @@ class SettingWrapper(object):
                                handlerargs=(), handlerkw={}):
         """Connect a local handler to this signal."""
         srv = self._server
-        block(srv._cxn._cxn.addListener, (srv.ID, self.ID), handler,
-                                         *handlerargs, **handlerkw)
+        block(srv._cxn._cxn.addListener, handler, source=srv.ID, ID=self.ID,
+                                         args=handlerargs, kw=handlerkw)
         self._num_listeners += 1
         if self._num_listeners == 1:
             # TODO: remove from listeners if this fails
@@ -112,7 +112,7 @@ class SettingWrapper(object):
     def disconnect(self, handler):
         """Disconnect a local handler from this signal."""
         srv = self._server
-        block(srv._cxn._cxn.removeListener, (srv.ID, self.ID), handler)
+        block(srv._cxn._cxn.removeListener, handler, source=srv.ID, ID=self.ID)
         self._num_listeners -= 1
         if self._num_listeners == 0:
             return self.__call__()
@@ -396,20 +396,12 @@ class Client(HasDynamicAttrs):
         self._refresh()
         return self._attrs
 
-    def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT):
+    def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
         thread.startReactor()
-        def getConnection(password):
-            factory = protocol.LabradClient(self.name)
-            factory.password = password
-            reactor.connectTCP(host, port, factory, timeout)
-            return factory.onStartup()
-        prompt = 'Enter password for manager on %s:' % host
-        pw = C.PASSWORD or getpass.getpass(prompt)
-        cxn = block(getConnection, pw)
-        C.PASSWORD = pw # save password if it worked
-        self._cxn = cxn._cxn
+        name = 'Python Client (%s)' % util.getNodeName()
+        self._cxn = block(getConnection, host, port, name, password)
         self._mgr = ILabradManager(self._cxn)
-        self.ID = cxn.ID
+        self.ID = self._cxn.ID
         self.host, self.port = host, port
         self.connected = True
 

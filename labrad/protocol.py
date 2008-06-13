@@ -22,10 +22,10 @@ authenticating.
 """
 
 from labrad import errors, types as T, util, constants as C
-from labrad.interfaces import ILabradProtocol, ILabradClient, IClientAsync
+from labrad.interfaces import ILabradProtocol, IClientAsync, IMessageContext
 
 from twisted.internet import reactor, protocol, defer
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionDone
 from twisted.python import failure, log
 from zope.interface import Interface, implements
@@ -40,8 +40,6 @@ DEBUG_RECV = 0
 HEADER_TYPE = T.parseTypeTag('(ww)iww')
 PACKET_TYPE = T.parseTypeTag('(ww)iws')
 RECORD_TYPE = T.parseTypeTag('wss')
-
-LOGIN, RUN, STOP = range(3)
 
 def packetStream(packetHandler):
     """A generator that assembles packets.
@@ -65,22 +63,16 @@ def packetStream(packetHandler):
         s, buf = buf[:length], buf[length:]
 
         # unflatten the data
-        try:
-            records = []
-            s = T.Buffer(s)
-            while len(s):
-                ID, tag, data = T.unflatten(s, RECORD_TYPE)
-                rec = ID, T.unflatten(data, tag)
-                records.append(rec)
-        except:
-            # something went wrong in the unflattening
-            log.err()
-        else:
-            # packet complete.  Call the handler
-            packetHandler(source, context, request, records)
+        records = []
+        s = T.Buffer(s)
+        while len(s):
+            ID, tag, data = T.unflatten(s, RECORD_TYPE)
+            rec = ID, T.unflatten(data, tag)
+            records.append(rec)
+        packetHandler(source, context, request, records)
 
 def _flattenPacket(target, context, request, records):
-    """Send a packet to the specified target."""
+    """Flatten a packet to the specified target."""
     data = ''.join(_flattenRecord(*rec) for rec in records)
     return PACKET_TYPE.__flatten__((context, request, target, data))
 
@@ -95,21 +87,37 @@ class LabradProtocol(protocol.Protocol):
     implements(ILabradProtocol)
     
     def __init__(self):
-        self.authenticated = False
+        self.disconnected = False
         self._nextRequest = 1
         self._reuse = set()
         self.requests = {}
         self.listeners = {}
+        self.clearCache()
     
         # create a generator to assemble the packets
         self.packetStream = packetStream(self.packetReceived)
         self.packetStream.next() # start the packet stream
+        
+        self.onDisconnect = util.DeferredSignal()
 
     # network events
-    def connectionMade(self):
-        self.factory.clientConnectionMade(self)
+    def connectionLost(self, reason):
+        """Called when the network connection is lost.
+        
+        This can be due to the disconnect() method being
+        called, or because of some network error.
+        """
+        self.disconnected = True
+        for d in self.requests.values():
+            d.errback(Exception('Connection lost.'))
+        if reason == protocol.connectionDone:
+            self.onDisconnect.callback(None)
+        else:
+            self.onDisconnect.errback(reason)
         
     def disconnect(self):
+        """Close down the connection to LabRAD."""
+        self.disconnected = True
         self.transport.loseConnection()
     
     # sending
@@ -117,18 +125,86 @@ class LabradProtocol(protocol.Protocol):
         """Send a raw packet to the specified target."""
         raw = _flattenPacket(target, context, request, records)
         self.transport.write(raw)
-            
+    
+    @inlineCallbacks        
     def sendMessage(self, target, records, context=(0, 0)):
         """Send a message to the specified target."""
+        target, records = yield self._lookupNames(target, records)
         self.sendPacket(target, context, 0, records)
 
+    @inlineCallbacks
     def sendRequest(self, target, records, context=(0, 0), timeout=None):
         """Send a request to the given target server.
 
         Returns a deferred that will fire the resulting data packet when
         the request is completed, or will errback if the request times out
-        or errors are returned from labrad.
+        or errors are returned from labrad.  The target server and settings
+        may be given either as word IDs or string names.  If necessary,
+        any string names will be looked up before the request is sent.
+        Lookup results are cached to avoid lookup overhead on subsequent
+        requests to the same server or settings.
         """
+        target, records = yield self._lookupNames(target, records)
+        resp = yield self._sendRequestNoLookup(target, records, context, timeout)
+        returnValue(resp)
+            
+    @inlineCallbacks
+    def _lookupNames(self, server, records):
+        """Translate server and setting names into IDs.
+
+        We first attempt to look up these names in the local cache.
+        If any are not found there, we fire off a request to the
+        Manager to lookup the necessary IDs, and then cache the
+        result.
+        """
+        records = list(records)
+        
+        # try to lookup server in cache
+        if isinstance(server, str) and server in self._serverCache:
+            server = self._serverCache[server]
+            
+        # try to lookup settings in cache
+        if server in self._settingCache:
+            settings = self._settingCache[server]
+            for i, rec in enumerate(records):
+                name = rec[0]
+                if isinstance(name, str) and name in settings:
+                    records[i] = (settings[name],) + tuple(rec[1:]) 
+        
+        # check to see whether there is still anything to look up
+        settingLookups = [(i, rec[0]) for i, rec in enumerate(records)
+                                      if isinstance(rec[0], str)]
+        if isinstance(server, str) or len(settingLookups):
+            # need to do additional lookup here
+            if len(settingLookups):
+                indices, names = zip(*settingLookups)
+            else:
+                indices, names = [], []
+            # send the actual lookup request
+            recs = [(C.LOOKUP, (server, names), ['w*s', 's*s'])]
+            resp = yield self._sendRequestNoLookup(C.MANAGER_ID, recs)
+            serverID, IDs = resp[0][1]
+            # cache the results
+            if isinstance(server, str):
+                self._serverCache[server] = serverID
+            server = serverID
+            settings = self._settingCache.setdefault(server, {})
+            settings.update(zip(names, IDs))
+            # update the records for the packet
+            for index, ID in zip(indices, IDs):
+                records[index] = (ID,) + tuple(records[index][1:])
+
+        returnValue((server, records))
+
+    def clearCache(self):
+        """Clear the cache of looked-up server and settings IDs."""
+        self._serverCache = {}
+        self._settingCache = {}
+
+    def _sendRequestNoLookup(self, target, records, context=(0, 0), timeout=None):
+        """Send a request without doing any lookups of server or setting IDs."""
+        if self.disconnected:
+            raise Exception('Already disconnected.')
         if len(self._reuse):
             n = self._reuse.pop()
         else:
@@ -176,124 +252,99 @@ class LabradProtocol(protocol.Protocol):
         """Process incoming response."""
         if -request in self.requests: # reply has request number negated
             d = self.requests[-request]
-            errors = [rec[1] for rec in records if isinstance(rec[1], Exception)]
+            errors = [r[1] for r in records if isinstance(r[1], Exception)]
             if errors:
                 # fail on the first error
                 d.errback(errors[0])
             else:
                 d.callback(records)
-        #else:
-        #    # probably a response for a request that has already
-        #    # timed out.  If not, something bad has happened.
-        #    log.msg('invalid response: %s, %s, %s, %s' % (source, context, request, records))
+        else:
+            # probably a response for a request that has already
+            # timed out.  If not, something bad has happened.
+            log.msg('Invalid response: %s, %s, %s, %s' % \
+                    (source, context, request, records))
 
     def messageReceived(self, source, context, records):
         """Process incoming messages."""
         for ID, data in records:
-            listeners = self.listeners.get(ID, []) or \
-                        self.listeners.get((source, ID), [])
-            for listener, args, kw in listeners:
-                listener(data, *args, **kw)
-
+            msgCtx = MessageContext(source, context, ID)
+            keys = ((s, c, i) for s in (source, None)
+                              for c in (context, None)
+                              for i in (ID, None))
+            for key in keys:
+                if key in self.listeners:
+                    for listener, args, kw in self.listeners[key]:
+                        listener(msgCtx, data, *args, **kw)
+                        
     # message handling
-    def addListener(self, key, listener, *args, **kw):
+    def addListener(self, listener, source=None, context=None, ID=None, args=(), kw={}):
         """Add a listener for messages to the specified key.
 
         The key should be either a setting ID to handle messages
         from any source to the specified ID, or a tuple of
         (source, setting ID) to handle messages from a single source.
         """
-        if DEBUG: print "listening to %s with %s" % (key, listener)
+        key = (source, context, ID)
         listeners = self.listeners.setdefault(key, [])
         listeners.append((listener, args, kw))
 
-    def removeListener(self, key, listener):
+    def removeListener(self, listener, source=None, context=None, ID=None):
+        """Remove a listener for messages."""
+        key = (source, context, ID)
         self.listeners[key] = [l for l in self.listeners[key] if l[0] != listener]
 
-# factory
-class LabradClient(protocol.ClientFactory):
-    """A client connection to LabRAD."""
+    # login protocol
+    def loginClient(self, password, name):
+        """Log in as a client."""
+        return self._doLogin(password, name)
     
-    implements(ILabradClient)
-    
-    protocol = LabradProtocol
+    def loginServer(self, password, name, descr, notes):
+        """Log in as a server."""
+        return self._doLogin(password, name, descr, notes)
 
-    def __init__(self, name=None):
-        self.name = name or 'Python Client (%s)' % util.getNodeName()
-        self.started = False
-        self.onStartup = util.DeferredSignal()
-        self.onShutdown = util.DeferredSignal()
-
-    def getPassword(self):
-        if getattr(self, 'password', None) is not None:
-            pw = self.password
-        elif C.PASSWORD is not None:
-            pw = C.PASSWORD
-        else:
-            pw = getpass.getpass('Enter LabRAD password: ')
-        return pw
-
-    def getIdentification(self):
-        return (self.name,)
-    
-    # login/authentication protocol
     @inlineCallbacks
-    def clientConnectionMade(self, protocol):
+    def _doLogin(self, password, *ident):
         """Implements the LabRAD login protocol."""
+        # send login packet
+        resp = yield self.sendRequest(C.MANAGER_ID, [])
+        challenge = resp[0][1] # get password challenge
+    
+        # send password response
+        m = hashlib.md5()
+        m.update(challenge)
+        m.update(password)
         try:
-            # send login packet
-            resp = yield protocol.sendRequest(C.MANAGER_ID, [])
-            challenge = resp[0][1] # get password challenge
+            resp = yield self.sendRequest(C.MANAGER_ID, [(0L, m.digest())])
+        except:
+            raise errors.LoginFailedError('Incorrect password.')
+        self.password = C.PASSWORD = password # save password, since it worked
+        self.loginMessage = resp[0][1] # get welcome message
+    
+        # send identification
+        try:
+            resp = yield self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)])
+        except:
+            raise errors.LoginFailedError('Bad identification.')
+        self.ID = resp[0][1] # get assigned ID
 
-            # send password response
-            password = self.getPassword()
-            m = hashlib.md5()
-            m.update(challenge)
-            m.update(password)
-            try:
-                # hack to get an error message to show up for incorrect password
-                self._error = errors.LoginFailedError('incorrect password.')
-                resp = yield protocol.sendRequest(C.MANAGER_ID, [(0L, m.digest())])
-                del self._error
-            except:
-                self.password = C.PASSWORD = None
-                raise
-            message = resp[0][1] # get welcome message
-            self.password = C.PASSWORD = password
 
-            # send identification
-            ident = (1L,) + tuple(self.getIdentification())
-            resp = yield protocol.sendRequest(C.MANAGER_ID, [(0L, ident)])
-            self.ID = resp[0][1] # get assigned ID
-            
-            addr = protocol.transport.getPeer()
-            self.mgr_host, self.mgr_port = addr.host, addr.port
-            self._cxn = protocol
-            self.client = IClientAsync(protocol)
-            yield self.client.refresh()
-            yield self.loginSucceeded(message)
-            self.started = True
-            self.onStartup.callback(self)
-        except Exception, e:
-            self.disconnect(e)
+def getPassword():
+    """Get a password, either from the environment, or the command line."""
+    if C.PASSWORD is not None:
+        pw = C.PASSWORD
+    else:
+        pw = getpass.getpass('Enter LabRAD password: ')
+    return pw
+
+class MessageContext(object):
+    """Object to be passed as the first argument to message handlers."""
     
-    def loginSucceeded(self, message):
-        """Called by the protocol when we have successfully logged in."""
+    implements(IMessageContext)
     
-    def disconnect(self, error=None):
-        if error:
-            self._error = failure.Failure(error)
-        self._cxn.disconnect()
-    
-    def clientConnectionFailed(self, connector, reason):
-        self.onStartup.errback(reason)
-        
-    def clientConnectionLost(self, connector, reason):
-        reason = getattr(self, '_error', reason)
-        if not self.started:
-            self.onStartup.errback(reason)
-        else:
-            if reason.check(ConnectionDone):
-                self.onShutdown.callback()
-            else:
-                self.onShutdown.errback(reason)
+    def __init__(self, source, context, ID):
+        self.source = source
+        self.context = context
+        self.ID = ID
+
+# factory for churning out LabRAD connections
+factory = protocol.ClientCreator(reactor, LabradProtocol)
