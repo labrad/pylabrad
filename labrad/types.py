@@ -284,14 +284,14 @@ def flatten(obj, types=[]):
         s = t.__flatten__(obj)
     else:
         # check the list of allowed types for one compatible
-        # with the default type
+        # with the computed type
         foundCompatibleType = False
         for tt in types:
-            if tt <= t:
-                t = tt
+            if t <= tt:
                 foundCompatibleType = True
                 break
-            elif t <= tt:
+            elif tt <= t:
+                t = tt
                 foundCompatibleType = True
                 break
         if foundCompatibleType:
@@ -557,7 +557,15 @@ class LRValue(LRType):
         return type(self) == type(other) and self.unit == other.unit
     
     def __le__(self, other):
-        return type(other) == LRAny or type(self) == type(other)
+        # this method is a bit funky.  The <= relationship determines
+        # which types are allowed to be coerced in flattening.  If the
+        # other type is also a value, we allow this if we have a unit,
+        # or the other value does not.  In other words, the only case
+        # disallowed is the case where we have no unit but the other
+        # type does.  This prevents the unit from getting lost in the coercion.
+        return type(other) == LRAny or \
+               (type(self) == type(other) and \
+                (self.unit is not None or other.unit is None))
 
     def isFullySpecified(self):
         return self.unit is not None

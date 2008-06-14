@@ -143,3 +143,17 @@ class labradTypesTests(unittest.TestCase):
         ]
         for data, tag in tests:
             self.assertEquals(T.flatten(data)[1], T.parseTypeTag(tag))
+            
+    def testUnitTypes(self):
+        """Test flattening with units.
+        
+        The flattening code should not do unit conversion,
+        but should leave that up to the LabRAD manager to handle.
+        Basically, for purposes of flattening, a unit is a unit.
+        """
+        tests = [
+            (5.0, ['v[m]'], 'v[m]'),
+            (T.Value(5.0, 'ft'), ['v[m]'], 'v[ft]'),
+        ]
+        for data, hints, tag in tests:
+            self.assertEquals(T.flatten(data, hints)[1], T.parseTypeTag(tag))
