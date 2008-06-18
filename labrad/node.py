@@ -34,7 +34,7 @@ from ConfigParser import SafeConfigParser
 from labrad import util
 from labrad.config import ConfigFile
 from labrad.server import ILabradServer, LabradServer, setting
-from labrad.util import findEnvironmentVars, interpEnvironmentVars
+from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 
 from twisted.application.service import IService, MultiService
 from twisted.application.internet import TCPClient
@@ -79,10 +79,7 @@ class ServerProcess(ProcessProtocol):
     def start(self):
         if self.running:
             return
-
-        mgr = self.manager
-        yield mgr.notify_on_connect.connect(self.serverConnected)
-
+        
         print "starting '%s'..." % self.name
         print "spawning process..."
         print "path:", self.path
@@ -91,6 +88,7 @@ class ServerProcess(ProcessProtocol):
 
         startd = self.startup()
         self.starting = True
+        dispatcher.connect(self.serverConnected, "serverConnected")
         self.proc = reactor.spawnProcess(self, self.executable, self.args,
                                          env=self.env, path=self.path)
         timeoutCall = reactor.callLater(self.timeout, self.kill)
@@ -100,8 +98,8 @@ class ServerProcess(ProcessProtocol):
             self.starting = False
             if timeoutCall.active():
                 timeoutCall.cancel()
-            yield mgr.notify_on_connect.disconnect(self.serverConnected)
-
+            dispatcher.disconnect(self.serverConnected, "serverConnected")
+        
     @inlineCallbacks
     def restart(self):
         yield self.stop()
@@ -148,8 +146,7 @@ class ServerProcess(ProcessProtocol):
         print "'%s': lost stderr." % self.name
         self.kill()
 
-    def serverConnected(self, c, data):
-        ID, name = data
+    def serverConnected(self, ID, name):
         print 'server connected:', name
         if name == self.name:
             self.ID = ID
@@ -210,11 +207,14 @@ def createPythonServerCls(plugin):
         cls.version = plugin.version
     else:
         cls.version = '0.0'
-    cls.isLocal = hasattr(plugin, 'isLocal')
-    if cls.isLocal:
-        cls.instancename = ' '.join(['%LABRADNODE%', cls.name])
+    if hasattr(plugin, 'instanceName'):
+        cls.instancename = plugin.instanceName
     else:
-        cls.instancename = cls.name
+        cls.instancename = plugin.name
+    environVars = findEnvironmentVars(cls.instancename)
+    cls.isLocal = len(environVars) > 0
+    
+    # startup
     cls.cmdline = ' '.join([sys.executable, '-m', plugin.__module__])
     cls.path = os.path.split(sys.modules[plugin.__module__].__file__)[0]
     return cls
@@ -319,7 +319,7 @@ class ProcNode(MultiService):
         for dirname in self.serverDirs:
             for path, dirs, files in os.walk(dirname):
                 for f in files:
-                    if not f.endswith('.ini'):
+                    if not f.lower().endswith('.ini'):
                         continue
                     try:
                         p = createGenericServerCls(path, f)
@@ -376,6 +376,7 @@ class ProcNode(MultiService):
         except KeyError:
             raise Exception("'%s' is not running." % name)
         yield srv.stop()
+        returnValue(srv.name)
 
     @inlineCallbacks
     def restart(self, name):
@@ -442,6 +443,9 @@ class ProcNodeServer(LabradServer):
     def initContext(self, c):
         c['environ'] = {}
         
+    def serverConnected(self, ID, name):
+        dispatcher.send("serverConnected", ID=ID, name=name)
+        
     @setting(1, name=['s'], environ=['*(ss)'], returns=['s'])
     def start(self, c, name, environ={}):
         """Start an instance of a server."""
@@ -449,7 +453,7 @@ class ProcNodeServer(LabradServer):
         env.update(environ)
         return self.node.start(name, env)
 
-    @setting(2, name=['s'], returns=[''])
+    @setting(2, name=['s'], returns=['s'])
     def stop(self, c, name):
         """Stop a running server instance."""
         return self.node.stop(name)
@@ -573,15 +577,29 @@ class ProcNodeServer(LabradServer):
 
     @setting(100, name=['s'], returns=['*(ts)'])
     def server_output(self, c, name):
+        """Get output from a server's stdout."""
         return self.node.server_output(name)
 
     @setting(101, name=['s'], returns=[''])
     def clear_output(self, c, name):
+        """Clear the stdout buffer of a server."""
         self.node.clear_output(name)
 
     @setting(102, name=['s'], returns=['s'])
     def server_version(self, c, name):
+        """Get version information for a server."""
         return self.node.server_version(name)
+    
+    @setting(1000, returns=['*(ss)'])
+    def node_version(self, c):
+        """Return a list of key-value tuples containing info about this node."""
+        import socket, sys
+        info = {'hostname': socket.gethostname(),
+                'python version': sys.version,
+                'labrad version': labrad.__version__,
+                'labrad revision': labrad.__revision__,
+                'labrad date': labrad.__date__}
+        return list(info.items())
 
 registerAdapter(ProcNodeServer, IProcNode, ILabradServer)
 

@@ -220,6 +220,8 @@ def runServer(srv):
     env = dict(os.environ)
     env['LABRADNODE'] = config['node']
     srv.name = interpEnvironmentVars(srv.name, env)
+    if hasattr(srv, 'instanceName'):
+        srv.instanceName = interpEnvironmentVars(srv.instanceName, env)
 
     srv.password = config['password']
 

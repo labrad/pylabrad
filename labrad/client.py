@@ -98,24 +98,24 @@ class SettingWrapper(object):
         # but instead only when needed later due to property access
         self._refreshed = False
 
-    def connect(self, handler, signupargs=(), signupkw={},
-                               handlerargs=(), handlerkw={}):
-        """Connect a local handler to this signal."""
-        srv = self._server
-        block(srv._cxn._cxn.addListener, handler, source=srv.ID, ID=self.ID,
-                                         args=handlerargs, kw=handlerkw)
-        self._num_listeners += 1
-        if self._num_listeners == 1:
-            # TODO: remove from listeners if this fails
-            return self.__call__(self.ID, *signupargs, **signupkw)
+    #def connect(self, handler, signupargs=(), signupkw={},
+    #                           handlerargs=(), handlerkw={}):
+    #    """Connect a local handler to this signal."""
+    #    srv = self._server
+    #    block(srv._cxn._cxn.addListener, handler, source=srv.ID, ID=self.ID,
+    #                                     args=handlerargs, kw=handlerkw)
+    #    self._num_listeners += 1
+    #    if self._num_listeners == 1:
+    #        # TODO: remove from listeners if this fails
+    #        return self.__call__(self.ID, *signupargs, **signupkw)
 
-    def disconnect(self, handler):
-        """Disconnect a local handler from this signal."""
-        srv = self._server
-        block(srv._cxn._cxn.removeListener, handler, source=srv.ID, ID=self.ID)
-        self._num_listeners -= 1
-        if self._num_listeners == 0:
-            return self.__call__()
+    #def disconnect(self, handler):
+    #    """Disconnect a local handler from this signal."""
+    #    srv = self._server
+    #    block(srv._cxn._cxn.removeListener, handler, source=srv.ID, ID=self.ID)
+    #    self._num_listeners -= 1
+    #    if self._num_listeners == 0:
+    #        return self.__call__()
 
     def __repr__(self):
         return """\
@@ -252,11 +252,15 @@ class ServerWrapper(HasDynamicAttrs):
     def __init__(self, cxn, name, labrad_name, ID, **kw):
         HasDynamicAttrs.__init__(self)
         self._cxn = cxn
-        self._mgr = cxn._mgr
+        #self._mgr = cxn._mgr
         self.name = name
         self._labrad_name = labrad_name
         self.ID = ID
         self._kw = kw
+
+    @property
+    def _mgr(self):
+        return self._cxn._mgr
 
     _staticAttrs = ['settings', 'context', 'packet', 'clone']
     _wrapAttr = SettingWrapper

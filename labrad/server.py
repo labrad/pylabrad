@@ -60,7 +60,6 @@ class ServerProtocol(LabradProtocol):
             # a valid LabRAD packet
             self.sendPacket(source, context, -request, [(0, e)])
 
-
 class Signal(object):
     """A Signal object is a simple publish/subscribe messaging primitive.
     
@@ -94,7 +93,6 @@ class Signal(object):
             # this little hack allows one to specify contexts
             # as either a single context tuple, or an iterable of
             # multiple context tuples.
-            # TODO: get rid of this and require an iterable of contexts.
             if isinstance(contexts, tuple) and len(contexts) \
                and not isinstance(contexts[0], tuple):
                 contexts = [contexts]
@@ -348,7 +346,8 @@ class LabradServer(ClientFactory):
             addr = protocol.transport.getPeer()
             log.msg('connected to %s:%s' % (addr.host, addr.port))
             self.mgr_host, self.mgr_port = addr.host, addr.port
-            yield protocol.loginServer(self._getPassword(), self.name,
+            name = getattr(self, 'instanceName', self.name)
+            yield protocol.loginServer(self._getPassword(), name,
                                        self.description, self.notes)
             self.password = protocol.password
             self._cxn = protocol

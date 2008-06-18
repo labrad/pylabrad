@@ -270,11 +270,11 @@ class LabradProtocol(protocol.Protocol):
             msgCtx = MessageContext(source, context, ID)
             keys = ((s, c, i) for s in (source, None)
                               for c in (context, None)
-                              for i in (ID, None))
+                              for i in (ID, None)
+                              if (s, c, i) in self.listeners)
             for key in keys:
-                if key in self.listeners:
-                    for listener, args, kw in self.listeners[key]:
-                        listener(msgCtx, data, *args, **kw)
+                for listener, args, kw in self.listeners[key]:
+                    listener(msgCtx, data, *args, **kw)
                         
     # message handling
     def addListener(self, listener, source=None, context=None, ID=None, args=(), kw={}):
@@ -291,7 +291,11 @@ class LabradProtocol(protocol.Protocol):
     def removeListener(self, listener, source=None, context=None, ID=None):
         """Remove a listener for messages."""
         key = (source, context, ID)
-        self.listeners[key] = [l for l in self.listeners[key] if l[0] != listener]
+        listeners = [l for l in self.listeners[key] if l[0] != listener]
+        if len(listeners):
+            self.listeners[key] = listeners
+        else:
+            del self.listeners[key]
 
     # login protocol
     def loginClient(self, password, name):

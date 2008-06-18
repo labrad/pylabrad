@@ -14,13 +14,13 @@ from twisted.python.failure import Failure
 from twisted.web import http, resource, static, server
 
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
-#WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
-WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
+WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
+#WEB_DIR = r'U:\Matthew\projects\NodeController\www\org.labrad.NodeController'
 #WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
-    return [s for s in servers if s.startswith('node')]
+    return [s for s in servers if s.startswith('node') and hasattr(cxn[s], 'available_servers')]
 
 class JSONResource(resource.Resource):
     def __init__(self, cxn, func, *a, **kw):
@@ -81,7 +81,7 @@ class JSONPusher(resource.Resource):
         request.setHeader('content-length', len(result))
         request.write(result)
         print 'sending responses:', result
-        print self.transport.responses
+        print 'responses left:', self.transport.responses
         print
         request.finish()
     
@@ -91,7 +91,7 @@ class JSONTransport(resource.Resource):
         self.putChild('push', JSONPuller(self)) # client pushes, we pull
         self.putChild('pull', JSONPusher(self)) # client pulls, we push
         self.responses = []
-        self.waiters = []
+        self.waiter = None
     
     def lookupMethod(self, name):
         return getattr(self, 'remote_' + name)
@@ -109,14 +109,13 @@ class JSONTransport(resource.Resource):
         If no responses are waiting, return a deferred that will be
         fired later when responses become available.
         """
-        if len(self.waiters):
-            d = self.waiters.pop()
-        else:
-            d = defer.Deferred()
+        d = defer.Deferred()
         if len(self.responses):
             reactor.callLater(0, d.callback, self._flushResponses())
         else:
-            self.waiters.insert(0, d)
+            self.waiter = d
+            timeoutCall = reactor.callLater(10, self._finishWaiter)
+            d.addBoth(self._cancelTimeout, timeoutCall)
         return d
     
     def sendMessage(self, msg, *args, **kw):
@@ -131,9 +130,18 @@ class JSONTransport(resource.Resource):
     
     def _addResponse(self, **kw):
         self.responses.append(kw)
-        if len(self.waiters):
-            d = self.waiters.pop()
-            d.callback(self._flushResponses())
+        self._finishWaiter()
+    
+    def _finishWaiter(self):
+        if self.waiter:
+            d = self.waiter
+            self.waiter = None
+            reactor.callLater(0, d.callback, self._flushResponses())
+            
+    def _cancelTimeout(self, result, timeoutCall):
+        if timeoutCall.active():
+            timeoutCall.cancel()
+        return result
     
     def _flushResponses(self):
         resp = simplejson.dumps(self.responses)
@@ -152,50 +160,67 @@ class NodeProxy(JSONTransport):
         returnValue(sorted(unicode(name) for name in avail))
         
     def remote_list_servers(self, *args, **kw):
-        return [unicode(s) for s in self.cxn.servers.keys()]
+        return self.cxn.servers.keys()
         
     def remote_list_nodes(self, *args, **kw):
-        return [unicode(s) for s in _nodes(self.cxn)]
-        
+        return _nodes(self.cxn)
+    
     @inlineCallbacks
-    def remote_list_both(self, *args, **kw):
+    def remote_status(self, *args, **kw):
         cxn = self.cxn
-        servers = yield self.remote_available_servers(*args, **kw)
-        nodes = yield self.remote_list_nodes(*args, **kw)
+        yield cxn.refresh()
+        servers = yield self.remote_available_servers()
+        nodes = yield self.remote_list_nodes()
+        yield DeferredList([cxn[node].refresh_servers() for node in nodes], fireOnOneErrback=True)
         
         status_dict = {}
-        running = yield DeferredList([cxn[node].running_servers() for node in _nodes(cxn)])
-        for (success, result), node in zip(running, _nodes(cxn)):
+        info = yield DeferredList([cxn[node].servers_info() for node in nodes])
+        for (success, result), node in zip(info, _nodes(cxn)):
             if success:
                 status_dict[node] = result
-         
+        
         status = []
         for server in servers:
             row = []
             for node in nodes:
                 if node not in status_dict:
-                    row.append([unicode(server), False])
+                    row.append([server, "unavailable", False, False, False])
                 else:
                     found = False
-                    for running_server, instance in status_dict[node]:
-                        if running_server == server:
-                            row.append([unicode(instance), True])
+                    for name, desc, ver, inst, isLocal, instances in status_dict[node]:
+                        if name == server:
+                            running = len(instances) > 0
+                            row.append([inst, "Version: " + ver, True, running, isLocal])
                             found = True
                             break
                     if not found:
-                        row.append([unicode(server), False])
+                        row.append([server, "unavailable", False, False, False])
             status.append(row)
         
+        print [servers, nodes, status]
         returnValue([servers, nodes, status])
     
     @inlineCallbacks
-    def remote_iplists(self, *args, **kw):
+    def remote_available_servers(self):
         cxn = self.cxn
-        p = cxn.manager.packet()
+        resp = yield DeferredList([cxn[node].available_servers() for node in _nodes(cxn)])
+        avail = set()
+        for success, result in resp:
+            if success:
+                avail.update(result)
+        returnValue(sorted(unicode(name) for name in avail))
+    
+    @inlineCallbacks
+    def remote_iplist(self, *args, **kw):
+        p = self.cxn.manager.packet()
         p.whitelist()
         p.blacklist()
         resp = yield p.send()
-        returnValue((sorted(resp.whitelist), sorted(resp.blacklist)))
+        ips = [(addr, True) for addr in resp.whitelist] + \
+              [(addr, False) for addr in resp.blacklist]
+        ips.sort(key=itemgetter(0))
+        print 'ip list:', ips
+        returnValue(ips)
     
     def remote_blacklist(self, address):
         return self.cxn.manager.blacklist(str(address))
@@ -220,6 +245,7 @@ def doCall():
     theTransport.sendMessage('timer', str(datetime.now()))
 #lc = LoopingCall(doCall)
 #lc.start(20, now=False)
+transports = {}
     
 class NodeAPI(resource.Resource):
     reconnectDelay = 10
@@ -250,10 +276,16 @@ class NodeAPI(resource.Resource):
     
     def getChild(self, path, request):
         if path == 'transport':
-            theTransport.cxn = self.cxn
-            return theTransport
+            ID = request.args['ID'][0]
+            return transports[ID]
         func = getattr(self, 'remote_' + path)
         return JSONResource(self.cxn, func)
+        
+    def remote_get_transport_ID(self, cxn, request):
+        ID = generateNonce()
+        t = transports.setdefault(ID, NodeProxy())
+        t.cxn = self.cxn
+        return ID
         
     @inlineCallbacks
     def remote_available_servers(self, cxn, request):
@@ -286,16 +318,16 @@ class NodeAPI(resource.Resource):
             row = []
             for node in nodes:
                 if node not in status_dict:
-                    row.append([unicode(server), False])
+                    row.append([server, False])
                 else:
                     found = False
                     for running_server, instance in status_dict[node]:
                         if running_server == server:
-                            row.append([unicode(instance), True])
+                            row.append([instance, True])
                             found = True
                             break
                     if not found:
-                        row.append([unicode(server), False])
+                        row.append([server, False])
             status.append(row)
         
         returnValue([servers, nodes, status])
