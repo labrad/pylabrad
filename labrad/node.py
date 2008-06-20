@@ -89,11 +89,13 @@ class ServerProcess(ProcessProtocol):
         startd = self.startup()
         self.starting = True
         dispatcher.connect(self.serverConnected, "serverConnected")
+        dispatcher.send("server_starting", server=self.name)
         self.proc = reactor.spawnProcess(self, self.executable, self.args,
                                          env=self.env, path=self.path)
         timeoutCall = reactor.callLater(self.timeout, self.kill)
         try:
             yield startd
+            dispatcher.send("server_started", server=self.name)
         finally:
             self.starting = False
             if timeoutCall.active():
@@ -105,13 +107,16 @@ class ServerProcess(ProcessProtocol):
         yield self.stop()
         yield self.start()
 
+    @inlineCallbacks
     def stop(self):
         if not self.running:
-            return defer.succeed(None)
+            return
         print "stopping '%s'..." % self.name
+        dispatcher.send("server_stopping", server=self.name)
         d = self.shutdown()
         self.kill()
-        return d
+        yield d
+        dispatcher.send("server_stopped", server=self.name)
 
     def kill(self):
         try:
@@ -439,6 +444,19 @@ class ProcNodeServer(LabradServer):
         self.node = node
         self.name = node.name
         LabradServer.__init__(self)
+
+    def initServer(self):
+        # set up message relaying so other clients can
+        # keep track of what happens on this node
+        messages = ["server_starting", "server_started",
+                    "server_stopping", "server_stopped"]
+        for message in messages:
+            dispatcher.connect(self._relayMessage, message)
+
+    def _relayMessage(self, signal, sender, **kw):
+        """Relay a locally-dispatched message out over LabRAD."""
+        kw['node'] = self.name
+        self.client.manager.send_named_message("node." + signal, tuple(kw.items()))
 
     def initContext(self, c):
         c['environ'] = {}

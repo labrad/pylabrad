@@ -14,8 +14,8 @@ from twisted.python.failure import Failure
 from twisted.web import http, resource, static, server
 
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
-WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
-#WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
+#WEB_DIR = os.path.join(HERE_DIR, 'www', 'org.labrad.NodeController')
+WEB_DIR = 'U:/Matthew/projects/NodeController/www/org.labrad.NodeController'
 #WEB_DIR = 'U:/projects/NodeController/www/org.labrad.NodeController'
 
 def _nodes(cxn):
@@ -78,9 +78,6 @@ class JSONPusher(resource.Resource):
         request.setHeader('content-type', 'application/json')
         request.setHeader('content-length', len(result))
         request.write(result)
-        print 'sending responses:', result
-        print 'responses left:', self.transport.responses
-        print
         request.finish()
     
 class JSONTransport(resource.Resource):
@@ -194,8 +191,6 @@ class NodeProxy(JSONTransport):
                     if not found:
                         row.append([server, "unavailable", False, False, False])
             status.append(row)
-        
-        print [servers, nodes, status]
         returnValue([servers, nodes, status])
     
     def remote_start(self, node, server):
@@ -216,7 +211,6 @@ class NodeProxy(JSONTransport):
         ips = [(addr, True) for addr in resp.whitelist] + \
               [(addr, False) for addr in resp.blacklist]
         ips.sort(key=itemgetter(0))
-        print 'ip list:', ips
         returnValue(ips)
     
     def remote_blacklist(self, address):
@@ -226,6 +220,11 @@ class NodeProxy(JSONTransport):
         return self.cxn.manager.whitelist(str(address))
         
 transports = {}
+    
+def printIt(c, data, **kw):
+    source, payload = data
+    kw.update(payload)
+    print "message received:", kw
     
 class NodeAPI(resource.Resource):
     reconnectDelay = 10
@@ -240,6 +239,22 @@ class NodeAPI(resource.Resource):
             self.cxn = cxn
             self.connected = True
             print 'Connected to manager %s:%d.' % (self.host, self.port)
+            
+            # sign up for named messages
+            def relay(c, data, message):
+                source, payload = data
+                kw = dict(payload)
+                for t in transports.values():
+                    t.sendMessage(message, **kw)
+            src = cxn.manager.ID
+            cxn._cxn.addListener(relay, source=src, ID=1, kw=dict(message='server_starting'))
+            cxn._cxn.addListener(relay, source=src, ID=2, kw=dict(message='server_started'))
+            cxn._cxn.addListener(relay, source=src, ID=3, kw=dict(message='server_stopping'))
+            cxn._cxn.addListener(relay, source=src, ID=4, kw=dict(message='server_stopped'))
+            cxn.manager.subscribe_to_named_message("node.server_starting", 1, True)
+            cxn.manager.subscribe_to_named_message("node.server_started", 2, True)
+            cxn.manager.subscribe_to_named_message("node.server_stopping", 3, True)
+            cxn.manager.subscribe_to_named_message("node.server_stopped", 4, True)
         except Exception, e:
             print e
             print 'Something went wrong in connection.'
@@ -257,7 +272,9 @@ class NodeAPI(resource.Resource):
     def getChild(self, path, request):
         if path == 'transport':
             ID = request.args['ID'][0]
-            return transports[ID]
+            t = transports[ID]
+            t.cxn = self.cxn
+            return t
         func = getattr(self, 'remote_' + path)
         return JSONResource(self.cxn, func)
         
