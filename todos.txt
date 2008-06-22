@@ -3,14 +3,14 @@ GENERAL:
 		make self.log work in a reasonable way before servers have started serving
         allow logs to be accessed and manipulated remotely
 		configurable debug/logging verbosity levels (change on the fly)
-		
+    
     move configuration into the LabRAD registry as much as possible
-        
+    
     distribution:
         easy_install
 		PyPI: python setup.py register
 			http://docs.python.org/dist/postinstallation-script.html
-		
+    
     code/API documentation (epydoc, pydoctor/lore, pydoc)
     
 SERVERS:
@@ -19,29 +19,18 @@ SERVERS:
 
     NODE:
 		node configuration:
-			set servers to be started on initial login
-			set servers to be auto-restarted if they die
-            move node configuration into the registry (which will be internal to manager)
-		server config files:
-			declare dependencies to be auto-started
-			(see upstart, launchd, etc.)
+            move node configuration into the registry
 		emit signals for servers starting, stopping, etc.
 
     SUPER NODE:
         ask for a server to be started
             supernode looks up the location to run the server in the registry
-            dependencies will get started automatically
-            
+    
     CONTROLLER:
-    	show error messages (on startup or shutdown)
     	show servers that are not running on a node
         make server output visible (and clearable, etc.) in the browser
         access all node settings remotely (e.g. directories, environment variables)
         run multiple server instances on one node (set environment variables for each, etc.)
-        
-    CLIENT:
-        signal listeners need to be removed if a server disconnects
-        asynchronous client use dynamic dispatch (tab-completion not needed)
-
-
     
+    CLIENT:
+        asynchronous client use dynamic dispatch (tab-completion not needed)

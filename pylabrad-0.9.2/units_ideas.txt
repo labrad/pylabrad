@@ -1,0 +1,35 @@
+units:
+
+_unitClassDict = {} # stores unit types that have been created
+_valueClassDict = {} # stores types inheriting from numeric type _and_ unit type
+
+def makeQuantity(value, unit=None):
+	if isinstance(unit, basestring):
+		lookup in dictionary of units
+	if isinstance(value, PhysicalUnit):
+		return value
+	# create a new class which inherits from two classes,
+	# the numeric class of the value, and the unit class
+	cls = type(name, (ValueWithUnits, type(value)), {'__slots__': []})
+	# store this
+
+options:
+    has-a value, has-a unit (Scientific Python approach)
+    is-a value, has-a unit
+    is-a value, is-a thingWithUnits, has-a unit
+	is-a value, is-a thingWithUnits >> subclass with units stored in class *
+
++ we can use isinstance to determine what the PQs are.
++ no extra storage on instances
++ easy to do unit operations
+
+- multiple inheritance
+- how do we get at the unit itself? (inst.unit)
+- new units are classes...ick!
+
+
+makeValue(5, 'm')
+
+U(5, 'm')
+
+5 * U['m']

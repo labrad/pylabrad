@@ -380,9 +380,9 @@ class Client(HasDynamicAttrs):
         
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit the body of a with statement."""
-        # TODO: make sure this waits for the disconnection to finish
+        # TODO: check context management for synchronous client
         try:
-            self._cxn.disconnect()
+            self.disconnect()
         except:
             pass
         return False
@@ -411,6 +411,9 @@ class Client(HasDynamicAttrs):
 
     def disconnect(self):
         if self.connected:
+            def doDisconnect():
+                self._factory.disconnect()
+                return self._factory.onShutdown()
             block(self._cxn.disconnect)
             self.connected = False
 

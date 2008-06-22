@@ -419,7 +419,8 @@ class LabradServer(ClientFactory):
                 pass
             # remove the event trigger, so we don't get
             # called again if the reactor shuts down later
-            reactor.removeSystemEventTrigger(self._shutdownID)
+            if hasattr(self, '_shutdownID'):
+                reactor.removeSystemEventTrigger(self._shutdownID)
     
     def clientConnectionFailed(self, connector, reason):
         """Called when we fail to establish a network to LabRAD."""

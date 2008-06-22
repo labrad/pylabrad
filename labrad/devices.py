@@ -25,6 +25,7 @@ from labrad.errors import Error
 
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.python import log
 
 LOCK_TIMEOUT = 10
 

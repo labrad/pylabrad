@@ -1,0 +1,15 @@
+Metadata-Version: 1.1
+Name: pylabrad
+Version: 0.9.2
+Summary: LabRAD interface for python
+Home-page: http://sourceforge.net/projects/pylabrad/
+Author: Matthew Neeley
+Author-email: maffoo@users.sourceforge.net
+License: UNKNOWN
+Description: LabRAD is a system for quickly and easily building distributed
+        instrument control and data analysis applications.  pylabrad
+        provides a python interface to LabRAD.
+        
+Platform: UNKNOWN
+Requires: twisted (>=2.5)
+Provides: labrad

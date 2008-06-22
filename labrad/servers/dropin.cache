@@ -1,0 +1,24 @@
+Ä}q(Utest_serverqctwisted.plugin
+CachedDropin
+q)Åq}q(U
+moduleNameqUlabrad.servers.test_serverqUdescriptionqNUpluginsq	]q
+ctwisted.plugin
+CachedPlugin
+q)Åq}q(Uprovidedq]q(ctwisted.plugin
+IPlugin
+qclabrad.server
+ILabradServer
+qctwisted.internet.interfaces
+IProtocolFactory
+qeUdropinqhUnameqU
+__server__qhU¡Server to test labrad from python.
+
+    This server provides a number of settings that
+    are useful for testing labrad code, network profiling,
+    and testing the python labrad library.
+    qubaubU
+super_nodeqh)Åq}q(hUlabrad.servers.super_nodeqhUH
+Super Node
+
+This labrad server finds and controls all available nodes.
+qh	]qh)Åq}q(h]q(hhhehhhhhU"A server mapping nodes to devices.q ubaubUloop_serverq!h)Åq"}q#(hUlabrad.servers.loop_serverq$hNh	]q%h)Åq&}q'(h]q((hhhehh"hhhNubaubu.

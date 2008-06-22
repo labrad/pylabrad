@@ -84,16 +84,19 @@ class TestServer(LabradServer):
 
     @setting(5)
     def exc_in_handler(self, c, data):
+        """Raises an exception directly in the handler."""
         self.log('Exception in handler.')
         raise Exception('Raised in handler.')
 
     @setting(6)
     def exc_in_subfunction(self, c, data):
+        """Raises an exception in a subfunction."""
         self.log('Exception in subfunction.')
         owie()
 
     @setting(7)
     def exc_in_deferred(self, c, data):
+        """Returns a deferred that fires an exception."""
         self.log('Exception in deferred.')
         d = defer.Deferred()
         d.addCallback(owie)
@@ -102,6 +105,7 @@ class TestServer(LabradServer):
 
     @setting(8)
     def exc_in_errback(self, c, data):
+        """Returns a deferred whose errback will be called."""
         self.log('Exception from an errback.')
         d = defer.Deferred()
         reactor.callLater(1, d.errback, Exception('Raised by errback.'))
@@ -109,12 +113,14 @@ class TestServer(LabradServer):
 
     @setting(9)
     def exc_in_inlinecallback(self, c, data):
+        """Raises an exception in an inlineCallback."""
         self.log('Exception from an inlineCallback.')
         yield util.wakeupCall(c['delay'])
         raise Exception('Raised in inlineCallback.')
 
     @setting(10, returns=['s'])
     def bad_return_type(self, c, data):
+        """Returns a value that does not match the declared return type."""
         return 5
         
     @setting(11, tag=['s'])
