@@ -4,23 +4,12 @@ GENERAL:
         allow logs to be accessed and manipulated remotely
 		configurable debug/logging verbosity levels (change on the fly)
     
-    move configuration into the LabRAD registry as much as possible
-    
-    distribution:
-        easy_install
-		PyPI: python setup.py register
-			http://docs.python.org/dist/postinstallation-script.html
-    
-    code/API documentation (epydoc, pydoctor/lore, pydoc)
-    
 SERVERS:
 	GENERAL:
 		emit log messages and allow setting log levels
 
     NODE:
-		node configuration:
-            move node configuration into the registry
-		emit signals for servers starting, stopping, etc.
+        move node configuration into the registry
 
     SUPER NODE:
         ask for a server to be started
@@ -31,6 +20,4 @@ SERVERS:
         make server output visible (and clearable, etc.) in the browser
         access all node settings remotely (e.g. directories, environment variables)
         run multiple server instances on one node (set environment variables for each, etc.)
-    
-    CLIENT:
-        asynchronous client use dynamic dispatch (tab-completion not needed)
+

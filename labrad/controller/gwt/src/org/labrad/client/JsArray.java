@@ -1,20 +1,14 @@
 package org.labrad.client;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.google.gwt.core.client.JavaScriptObject;
 
 public class JsArray<T> extends JavaScriptObject {
     public static native <T> JsArray<T> create() /*-{
         return [];
     }-*/;
-    
-    @SuppressWarnings("unchecked")
-    public static <T> T[] toArray(JsArray<T> orig) {
-        T[] array = (T[]) new Object[orig.size()];
-        for (int i = 0; i < orig.size(); i++) {
-            array[i] = orig.get(i);
-        }
-        return array;
-    }
 
     protected JsArray() {
     }
@@ -30,4 +24,12 @@ public class JsArray<T> extends JavaScriptObject {
     public final native void put(int index, T value) /*-{
         this[index] = value;
     }-*/;
+
+	public static <T> List<T> toList(JsArray<T> arr) {
+		List<T> list = new ArrayList<T>();
+		for (int i = 0; i < arr.size(); i++) {
+			list.add(arr.get(i));
+		}
+		return list;
+	}
 }

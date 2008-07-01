@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Vector;
 
 import com.google.gwt.core.client.JavaScriptObject;
 import com.google.gwt.http.client.Request;
@@ -25,20 +24,18 @@ public class JSONTransport {
 	private VerticalPanel logger;
 	private Command pull;
 	private int nextId;
-	private String ID;
     private Map<String, JSONRequestCallback> requestHandlers;
     private Map<String, List<JSONMessageListener>> messageListeners;
-    private RequestBuilder pullRequest, pushRequest;
+    private RequestBuilder pullRequester, pushRequester;
 	
 	public JSONTransport(String url, String ID) {
 		baseurl = url;
 		nextId = 1;
-		this.ID = ID;
         requestHandlers = new HashMap<String, JSONRequestCallback>();
         messageListeners = new HashMap<String, List<JSONMessageListener>>();
         
-        pullRequest = new RequestBuilder(RequestBuilder.POST, baseurl + "/pull?ID=" + ID);
-        pushRequest = new RequestBuilder(RequestBuilder.POST, baseurl + "/push?ID=" + ID);
+        pullRequester = new RequestBuilder(RequestBuilder.POST, baseurl + "/pull?ID=" + ID);
+        pushRequester = new RequestBuilder(RequestBuilder.POST, baseurl + "/push?ID=" + ID);
         
         // start pulling down responses
 		pull = new Command() {
@@ -59,14 +56,13 @@ public class JSONTransport {
     
 	private void pullResponses() {
 		try {
-            pullRequest.sendRequest(null, new RequestCallback() {
+            pullRequester.sendRequest(null, new RequestCallback() {
                 public void onError(Request request, Throwable exception) {
                     //
                 }
     
                 public void onResponseReceived(Request request, Response response) {
-                    JsArray<JsResponse> responses =
-                        (JsArray<JsResponse>) JsEvaluator.eval(response.getText());
+                    JsArray<JsResponse> responses = JsEvaluator.eval(response.getText()).cast();
                     for (int i = 0; i < responses.size(); i++) {
                     	handleResponse(responses.get(i));
                     }
@@ -82,21 +78,19 @@ public class JSONTransport {
 	    if (!messageListeners.containsKey(message)) {
 	        messageListeners.put(message, new ArrayList<JSONMessageListener>());
 	    }
-	    List<JSONMessageListener> listeners = messageListeners.get(message);
-	    listeners.add(listener);
+	    messageListeners.get(message).add(listener);
 	}
 	
 	public void removeMessageListener(String message, JSONMessageListener listener) {
 	    if (messageListeners.containsKey(message)) {
-	        List<JSONMessageListener> listeners = messageListeners.get(message);
-	        listeners.remove(listener);
+	        messageListeners.get(message).remove(listener);
 	    }
 	}
 	
 	private void handleResponse(JsResponse response) {
 		if (response.isMessage()) {
 			String message = response.getString("message");
-			JsArray<JavaScriptObject> args = (JsArray<JavaScriptObject>) response.get("args");
+			JsArray<JavaScriptObject> args = response.get("args").cast();
 			JavaScriptObject kw = response.get("kw");
 			handleMessage(message, args, kw);
 			
@@ -139,7 +133,7 @@ public class JSONTransport {
 	
 	private void handleError(String id, String error) {
 		log("Error (" + id + "): " + error);
-        JSONRequestCallback callback = (JSONRequestCallback)requestHandlers.get(id);
+        JSONRequestCallback callback = requestHandlers.get(id);
         requestHandlers.remove(id);
         if (callback != null) callback.onError(new Exception(error));
 	}
@@ -170,7 +164,7 @@ public class JSONTransport {
         data.put("kw", kw);
 
         try {
-            pushRequest.sendRequest(data.toString(), new RequestCallback() {
+            pushRequester.sendRequest(data.toString(), new RequestCallback() {
                 public void onError(Request request, Throwable exception) {
                     if (requestHandlers.containsKey(id)) {
                         requestHandlers.remove(id);
@@ -189,37 +183,18 @@ public class JSONTransport {
 	}
     
 	private static class JsResponse extends JavaScriptObject {
-    	protected JsResponse() {
-        }
+    	protected JsResponse() {}
         
-    	public final native boolean isMessage() /*-{
-            return "message" in this;
-        }-*/;
-    	
-    	public final native boolean isResult() /*-{
-            return "result" in this;
-        }-*/;
-    	
-        public final native boolean isError() /*-{
-            return "error" in this;
-        }-*/;
-        
-        public final native JavaScriptObject get(String key) /*-{
-            return this[key];
-        }-*/;
-        
-        public final native String getString(String key) /*-{
-            return this[key];
-        }-*/;
-        
-        public final native <T> T get(String key, Class<T> cls) /*-{
-            return this[key];
-        }-*/;
+    	public final native boolean isMessage() /*-{ return "message" in this; }-*/;
+    	public final native boolean isResult() /*-{ return "result" in this; }-*/;
+        public final native boolean isError() /*-{ return "error" in this; }-*/;
+        public final native JavaScriptObject get(String key) /*-{ return this[key]; }-*/;
+        public final native String getString(String key) /*-{ return this[key]; }-*/;
+        public final native <T> T get(String key, Class<T> cls) /*-{ return this[key]; }-*/;
 	}
 	
 	private static class JsObject extends JavaScriptObject {
-	    protected JsObject() {
-        }
+	    protected JsObject() {}
         
         public final native JsArray<String> getKeys() /*-{
             var keys = [];
@@ -229,9 +204,7 @@ public class JSONTransport {
             return keys;
         }-*/;
         
-        public final native String get(String key) /*-{
-            return this[key];
-        }-*/;
+        public final native String get(String key) /*-{ return this[key]; }-*/;
 	}
 	
     public interface JSONRequestCallback {

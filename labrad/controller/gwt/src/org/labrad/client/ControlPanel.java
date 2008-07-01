@@ -1,56 +1,29 @@
 package org.labrad.client;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.google.gwt.core.client.JavaScriptObject;
-import com.google.gwt.json.client.JSONArray;
-import com.google.gwt.json.client.JSONBoolean;
-import com.google.gwt.json.client.JSONString;
-import com.google.gwt.json.client.JSONValue;
 import com.google.gwt.user.client.ui.FlowPanel;
 import com.google.gwt.user.client.ui.Grid;
 import com.google.gwt.user.client.ui.Widget;
 
 public class ControlPanel extends FlowPanel {
     private static class ServerInfo extends JavaScriptObject {
-        protected ServerInfo() {
-        }
-    
-        public final native String getInstanceName() /*-{
-            return this[0];
-        }-*/;
-    
-        public final native String getVersion() /*-{
-            return this[1];
-        }-*/;
-        
-        public final native boolean isAvailable() /*-{
-            return this[2];
-        }-*/;
-    
-        public final native boolean isRunning() /*-{
-            return this[3];
-        }-*/;
-        
-        public final native boolean isLocal() /*-{
-            return this[4];
-        }-*/;
-        
+        protected ServerInfo() {}
+        public final native boolean isAvailable() /*-{ return this[0]; }-*/;        
+        public final native String getDescription() /*-{ return this[1]; }-*/;
+        public final native String getVersion() /*-{ return this[2]; }-*/;
+        public final native String getInstanceName() /*-{ return this[3]; }-*/;
+        public final native JsArray<String> getEnvironmentVars() /*-{ return this[4]; }-*/;
+        public final native JsArray<String> getInstances() /*-{ return this[5]; }-*/;
     }
     
     private static class InfoResponse extends JavaScriptObject {
-        protected InfoResponse() {
-        }
-        
-        public final native JsArray<String> getServers() /*-{
-            return this[0];
-        }-*/;
-        
-        public final native JsArray<String> getNodes() /*-{
-            return this[1];
-        }-*/;
-        
-        public final native JsArray<JsArray<ServerInfo>> getServerInfo() /*-{
-            return this[2];
-        }-*/;
+        protected InfoResponse() {}
+        public final native JsArray<String> getServers() /*-{ return this[0]; }-*/;
+        public final native JsArray<String> getNodes() /*-{ return this[1]; }-*/;
+        public final native JsArray<JsArray<ServerInfo>> getServerInfo() /*-{ return this[2]; }-*/;
     }
     
     public void fetchTable() {
@@ -60,58 +33,42 @@ public class ControlPanel extends FlowPanel {
             }
 
             public void onResponseReceived(JavaScriptObject response) {
-                
                 InfoResponse ir = (InfoResponse) response;
                 
-                JsArray<String> jservers = ir.getServers();
-                String[] serverNames = new String[jservers.size()];
-                for (int i = 0; i < jservers.size(); i++) {
-                    serverNames[i] = jservers.get(i);
-                }
-                
-                JsArray<String> jnodes = ir.getNodes();
-                String[] nodeNames = new String[jnodes.size()];
-                for (int i = 0; i < jnodes.size(); i++) {
-                    nodeNames[i] = jnodes.get(i);
-                }
+                List<String> serverNames = JsArray.toList(ir.getServers());
+                List<String> nodeNames = JsArray.toList(ir.getNodes());
                 
                 JsArray<JsArray<ServerInfo>> jstatus = ir.getServerInfo();
-                JsArray<ServerInfo> rowarry = jstatus.get(0);
-                ServerInfo[][] info = new ServerInfo[jstatus.size()][rowarry.size()];
-                
+                List<List<ServerInfo>> info = new ArrayList<List<ServerInfo>>();
                 for (int row = 0; row < jstatus.size(); row++) {
-                    rowarry = jstatus.get(row);
-                    for (int col = 0; col < rowarry.size(); col++) {
-                        info[row][col] = rowarry.get(col);
-                    }
+                	info.add(JsArray.toList(jstatus.get(row)));
                 }
-                
                 makeTable(serverNames, nodeNames, info);
             }
         });
     }
     
-    public void makeTable(String[] servers, String[] nodes, ServerInfo[][] info) {
-        table = new Grid(servers.length+1, nodes.length+1);
+    public void makeTable(List<String> servers, List<String> nodes, List<List<ServerInfo>> info) {
+        table = new Grid(servers.size()+1, nodes.size()+1);
         
         int row, col;
         
-        for (col = 0; col < nodes.length; col++) {
-            table.setText(0, col+1, nodes[col]);
+        for (col = 0; col < nodes.size(); col++) {
+            table.setText(0, col+1, nodes.get(col));
             table.getCellFormatter().addStyleName(0, col+1, "centered-cell");
         }
-        for (row = 0; row < servers.length; row++) {
-            table.setText(row+1, 0, servers[row]);
+        for (row = 0; row < servers.size(); row++) {
+            table.setText(row+1, 0, servers.get(row));
         }
-        for (row = 0; row < servers.length; row++) {
+        for (row = 0; row < servers.size(); row++) {
             // create a control for each instance
-            String server = servers[row];
-            for (col = 0; col < nodes.length; col++) {
-                String node = nodes[col];
-                ServerInfo si = info[row][col];
+            String server = servers.get(row);
+            for (col = 0; col < nodes.size(); col++) {
+                String node = nodes.get(col);
+                ServerInfo si = info.get(row).get(col);
                 InstanceController ic = new InstanceController(this, transport,
-                        node, server, si.getInstanceName(), si.getVersion(),
-                        si.isAvailable(), si.isRunning(), si.isLocal());
+                        node, server, si.getInstanceName(), si.getVersion(), si.isAvailable(),
+                        JsArray.toList(si.getInstances()), JsArray.toList(si.getEnvironmentVars()));
                 table.setWidget(row+1, col+1, ic);
                 table.getCellFormatter().addStyleName(row+1, col+1, "padded-cell");
             }

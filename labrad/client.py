@@ -262,7 +262,7 @@ class ServerWrapper(HasDynamicAttrs):
     def _mgr(self):
         return self._cxn._mgr
 
-    _staticAttrs = ['settings', 'context', 'packet', 'clone']
+    _staticAttrs = ['settings', 'context', 'packet']
     _wrapAttr = SettingWrapper
 
     def _getAttrs(self):
@@ -284,11 +284,11 @@ class ServerWrapper(HasDynamicAttrs):
     def __call__(self, **kw):
         return self
 
-    def clone(self, **kw):
+    #def clone(self, **kw):
         # TODO: this should make a clone that can have different
         # default keyword args, and, in particular, should talk
         # to the server in a different context
-        pass
+    #    pass
 
     def _send(self, *args, **kw):
         return self._cxn._send(self.ID, *args, **kw)

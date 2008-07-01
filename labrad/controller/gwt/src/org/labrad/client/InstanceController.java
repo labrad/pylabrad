@@ -1,19 +1,18 @@
 package org.labrad.client;
 
+import java.util.List;
+
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.JavaScriptObject;
 import com.google.gwt.json.client.JSONArray;
 import com.google.gwt.json.client.JSONString;
-import com.google.gwt.json.client.JSONValue;
 import com.google.gwt.user.client.ui.ClickListener;
 import com.google.gwt.user.client.ui.DeckPanel;
 import com.google.gwt.user.client.ui.HasHorizontalAlignment;
-import com.google.gwt.user.client.ui.PopupPanel;
-import com.google.gwt.user.client.ui.PushButton;
 import com.google.gwt.user.client.ui.HorizontalPanel;
 import com.google.gwt.user.client.ui.Image;
 import com.google.gwt.user.client.ui.Label;
-import com.google.gwt.user.client.ui.RichTextArea;
+import com.google.gwt.user.client.ui.PushButton;
 import com.google.gwt.user.client.ui.VerticalPanel;
 import com.google.gwt.user.client.ui.Widget;
 
@@ -43,7 +42,6 @@ public class InstanceController extends HorizontalPanel {
     public enum Status {
         STOPPED, STARTING, RUNNING, RESTARTING, STOPPING,
         UNAVAILABLE, RUNNING_ELSEWHERE
-        
     }
     
     public final static int UNAVAILABLE = 1;
@@ -68,16 +66,20 @@ public class InstanceController extends HorizontalPanel {
     
     public InstanceController(ControlPanel parent, JSONTransport transport,
                               String node, String server, String instance, String version,
-                              boolean available, boolean running, boolean isLocal) {
+                              boolean available, List<String> runningInstances, List<String> environmentVars) {
         this.transport = transport;
         this.parent = parent;
         this.node = node;
         this.server = server;
-        this.instance = instance;
+        if (runningInstances.size() > 0) {
+            this.instance = runningInstances.get(0);
+        } else {
+            this.instance = instance;
+        }
         this.version = version;
         this.available = available;
-        this.running = running;
-        this.isLocal = isLocal;
+        this.running = runningInstances.size() > 0;
+        this.isLocal = environmentVars.size() > 0;
         this.color = Color.GRAY;
         
         info = new PushButton(images.serverInfoIcon().createImage());
@@ -121,13 +123,10 @@ public class InstanceController extends HorizontalPanel {
         buttons.add(start);
         buttons.add(stop);
         buttons.add(restart);
-        //buttons.setHorizontalAlignment(HasHorizontalAlignment.ALIGN_CENTER);
-        //buttons.setWidth("48px");
         
         VerticalPanel throbber = new VerticalPanel();
         throbber.add(new Image("throbber.gif"));
         throbber.setHorizontalAlignment(HasHorizontalAlignment.ALIGN_CENTER);
-        //throbber.setWidth("48px");
         
         stuff = new DeckPanel();
         stuff.add(buttons);
@@ -138,9 +137,9 @@ public class InstanceController extends HorizontalPanel {
         add(stuff);
         
         if (available) {
-            setStatus(running ? Status.RUNNING : Status.STOPPED);
+            setStatus(running ? Status.RUNNING : Status.STOPPED, false);
         } else {
-            setStatus(Status.UNAVAILABLE);
+            setStatus(Status.UNAVAILABLE, false);
         }
     }
     
@@ -190,7 +189,9 @@ public class InstanceController extends HorizontalPanel {
     }
     
     public void setRunningElsewhere(boolean running) {
-        if (isLocal || !available) return;
+        if (isLocal || !available) {
+        	return;
+        }
         setStatus(running ? Status.RUNNING_ELSEWHERE : Status.STOPPED, false);
     }
     

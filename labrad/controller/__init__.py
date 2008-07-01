@@ -167,14 +167,14 @@ class NodeProxy(JSONTransport):
                 avail.update(result)
         returnValue(sorted(avail))
         
-    def remote_list_servers(self, *args, **kw):
+    def remote_list_servers(self):
         return self.cxn.servers.keys()
         
-    def remote_list_nodes(self, *args, **kw):
+    def remote_list_nodes(self):
         return _nodes(self.cxn)
     
     @inlineCallbacks
-    def remote_status(self, *args, **kw):
+    def remote_status(self):
         cxn = self.cxn
         yield cxn.refresh()
         servers = yield self.remote_available_servers()
@@ -192,17 +192,16 @@ class NodeProxy(JSONTransport):
             row = []
             for node in nodes:
                 if node not in status_dict:
-                    row.append([server, "unavailable", False, False, False])
+                    row.append([False, "", "unavailable", server, [], []])
                 else:
                     found = False
-                    for name, desc, ver, inst, isLocal, instances in status_dict[node]:
+                    for name, desc, ver, inst, vars, instances in status_dict[node]:
                         if name == server:
-                            running = len(instances) > 0
-                            row.append([inst, "Version: " + ver, True, running, isLocal])
+                            row.append([True, desc, "Version: " + ver, inst, vars, instances])
                             found = True
                             break
                     if not found:
-                        row.append([server, "unavailable", False, False, False])
+                        row.append([False, "", "unavailable", server, [], []])
             status.append(row)
         returnValue([servers, nodes, status])
     
@@ -216,7 +215,7 @@ class NodeProxy(JSONTransport):
         return self.cxn[node].stop(str(server), context=self.cxn.context())
     
     @inlineCallbacks
-    def remote_iplist(self, *args, **kw):
+    def remote_iplist(self):
         p = self.cxn.manager.packet()
         p.whitelist()
         p.blacklist()

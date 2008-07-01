@@ -575,6 +575,7 @@ class LabradServer(ClientFactory):
 class LabradService(internet.TCPClient):
     def __init__(self, server):
         internet.TCPClient.__init__(self, server.host, server.port, server)
+        self.server = server
         self.setName(server.name)
         self.onStartup = server.onStartup
         self.onShutdown = server.onShutdown

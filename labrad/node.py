@@ -81,7 +81,6 @@ class ServerProcess(ProcessProtocol):
             return
         
         print "starting '%s'..." % self.name
-        print "spawning process..."
         print "path:", self.path
         print "executable:", self.executable
         print "args:", self.args
@@ -89,34 +88,52 @@ class ServerProcess(ProcessProtocol):
         startd = self.startup()
         self.starting = True
         dispatcher.connect(self.serverConnected, "serverConnected")
-        dispatcher.send("server_starting", server=self.name)
+        dispatcher.send("server_starting", sender=self, server=self.name)
         self.proc = reactor.spawnProcess(self, self.executable, self.args,
                                          env=self.env, path=self.path)
         timeoutCall = reactor.callLater(self.timeout, self.kill)
         try:
             yield startd
-            dispatcher.send("server_started", server=self.name)
+            dispatcher.send("server_started", sender=self, server=self.name)
         finally:
             self.starting = False
             if timeoutCall.active():
                 timeoutCall.cancel()
             dispatcher.disconnect(self.serverConnected, "serverConnected")
         
-    @inlineCallbacks
-    def restart(self):
-        yield self.stop()
-        yield self.start()
+    def serverConnected(self, ID, name):
+        """Called when a server connects to LabRAD.
+        
+        We check if the server name matches the name we are looking for.
+        """
+        if name == self.name:
+            self.ID = ID
+            self.running = True
+            self.startup.callback(self)
+
+    def processEnded(self, reason):
+        if isinstance(reason.value, ProcessDone):
+            print "'%s': process closed cleanly." % self.name
+        elif isinstance(reason.value, ProcessTerminated):
+            print "'%s': process terminated: %s" % (self.name, reason.value)
+        else:
+            print "'%s': process ended: %s" % (self.name, reason)
+        self.running = False
+        if self.starting:
+            self.startup.errback(Exception('Startup failed.'))
+        else:
+            self.shutdown.callback(self)
 
     @inlineCallbacks
     def stop(self):
         if not self.running:
             return
         print "stopping '%s'..." % self.name
-        dispatcher.send("server_stopping", server=self.name)
+        dispatcher.send("server_stopping", sender=self, server=self.name)
         d = self.shutdown()
         self.kill()
         yield d
-        dispatcher.send("server_stopped", server=self.name)
+        dispatcher.send("server_stopped", sender=self, server=self.name)
 
     def kill(self):
         try:
@@ -125,6 +142,11 @@ class ServerProcess(ProcessProtocol):
             #self.client._cxn.sendMessage(self.ID, [(987654321, None)])
         except:
             pass
+
+    @inlineCallbacks
+    def restart(self):
+        yield self.stop()
+        yield self.start()
 
     def outReceived(self, data):
         self.output.append((datetime.now(), data))
@@ -151,26 +173,6 @@ class ServerProcess(ProcessProtocol):
         print "'%s': lost stderr." % self.name
         self.kill()
 
-    def serverConnected(self, ID, name):
-        print 'server connected:', name
-        if name == self.name:
-            self.ID = ID
-            self.running = True
-            self.startup.callback(self)
-
-    def processEnded(self, reason):
-        if isinstance(reason.value, ProcessDone):
-            print "'%s': process closed cleanly." % self.name
-        elif isinstance(reason.value, ProcessTerminated):
-            print "'%s': process terminated: %s" % (self.name, reason.value)
-        else:
-            print "'%s': process ended: %s" % (self.name, reason)
-        self.running = False
-        if self.starting:
-            self.startup.errback(Exception('Startup failed.'))
-        else:
-            self.shutdown.callback(self)
-
 def createGenericServerCls(path, filename):
     scp = SafeConfigParser()
     scp.read(os.path.join(path, filename))
@@ -189,8 +191,8 @@ def createGenericServerCls(path, filename):
         cls.instancename = scp.get('info', 'instancename', raw=True)
     except:
         cls.instancename = cls.name
-    environVars = findEnvironmentVars(cls.instancename)
-    cls.isLocal = len(environVars) > 0
+    cls.environVars = findEnvironmentVars(cls.instancename)
+    cls.isLocal = len(cls.environVars) > 0
 
     # startup
     cls.cmdline = scp.get('startup', 'cmdline', raw=True)
@@ -216,8 +218,8 @@ def createPythonServerCls(plugin):
         cls.instancename = plugin.instanceName
     else:
         cls.instancename = plugin.name
-    environVars = findEnvironmentVars(cls.instancename)
-    cls.isLocal = len(environVars) > 0
+    cls.environVars = findEnvironmentVars(cls.instancename)
+    cls.isLocal = len(cls.environVars) > 0
     
     # startup
     cls.cmdline = ' '.join([sys.executable, '-m', plugin.__module__])
@@ -247,44 +249,25 @@ class ProcNode(MultiService):
 
     reconnectDelay = 10
 
-    def __init__(self, nodename, host, port):
+    def __init__(self, name, host, port):
         MultiService.__init__(self)
-        self.nodename = nodename
+        self.name = name
         self.host = host
         self.port = port
-        self.name = 'node %s' % nodename
-
-        self.servers = {}
-        self.runners = {}
-        self.cxn = None
-
-        self.serverMods, self.serverDirs = getNodeConfig()
 
     def startService(self):
         MultiService.startService(self)
         self.startConnection()
 
-    def stopService(self):
-        return self.stopAll()
-
     def startConnection(self):
         print 'connecting to %s:%d...' % (self.host, self.port)
-        srv = ILabradServer(self)
-        d = srv.onStartup()
-        d.addCallback(self._connected, srv)
-        d.addErrback(self._error)
-        d = srv.onShutdown()
-        d.addCallbacks(self._disconnect, self._error)
-        self.cxn = TCPClient(self.host, self.port, srv)
+        node = ProcNodeServer(self.name, self.host, self.port)
+        node.onStartup().addErrback(self._error)
+        node.onShutdown().addCallbacks(self._disconnected, self._error)
+        self.cxn = TCPClient(self.host, self.port, node)
         self.addService(self.cxn)
 
-    def _connected(self, data, srv):
-        self.client = srv.client
-        self.manager = srv.client.manager
-        self.password = srv.password
-        self.refresh_servers()
-
-    def _disconnect(self, data):
+    def _disconnected(self, data):
         log.msg('Node disconnected from manager.')
         return self._reconnect()
 
@@ -293,15 +276,45 @@ class ProcNode(MultiService):
         return self._reconnect()
 
     def _reconnect(self):
-        stopAll = self.stopAll()
-        if self.cxn is not None:
+        if hasattr(self, 'cxn'):
             self.removeService(self.cxn)
-            self.cxn = None
+            del self.cxn
         reactor.callLater(self.reconnectDelay, self.startConnection)
         print 'Will try to reconnect in %d seconds...' % self.reconnectDelay
-        return stopAll
 
-    def refresh_servers(self):
+
+class ProcNodeServer(LabradServer):
+    name = 'node %LABRADNODE%'
+
+    def __init__(self, nodename, host, port):
+        LabradServer.__init__(self)
+        self.nodename = nodename
+        self.name = 'node %s' % nodename
+        self.host = host
+        self.port = port
+
+    def initServer(self):
+        self.servers = {}
+        self.runners = {}
+        self.initMessages()
+        self.refreshServers()
+        
+    def initMessages(self):
+        """Set up messages to be dispatched locally and sent out over LabRAD."""
+        # set up messages to be relayed out over LabRAD
+        def _relayMessage(self, signal, sender, **kw):
+            kw['node'] = self.name
+            self.client.manager.send_named_message('node.' + signal, tuple(kw.items()))
+        messages = ['server_starting', 'server_started',
+                    'server_stopping', 'server_stopped']
+        for message in messages:
+            dispatcher.connect(_relayMessage, message)
+            
+        # set up message handlers for subprocess
+        dispatcher.connect(self.subprocessStarted, 'server_started')
+        dispatcher.connect(self.subprocessStopped, 'server_stopped')
+
+    def refreshServers(self):
         """Refresh the list of available servers."""
         found = {}
 
@@ -314,9 +327,9 @@ class ProcNode(MultiService):
                 __import__(module)
                 for plugin in getPlugins(ILabradServer, sys.modules[module]):
                     p = createPythonServerCls(plugin)
-                    p.manager = self.manager
                     p.client = self.client
-                    found[p.name] = p
+                    if p.name not in found:
+                        found[p.name] = p
             except Exception, e:
                 print e
 
@@ -328,163 +341,76 @@ class ProcNode(MultiService):
                         continue
                     try:
                         p = createGenericServerCls(path, f)
-                        p.manager = self.manager
                         p.client = self.client
-                        found[p.name] = p
+                        if p.name not in found:
+                            found[p.name] = p
                     except Exception, e:
                         print e
 
-        # add new servers to list
+        # add new servers and remove old ones
         self.servers.update(found)
-
-        # delete servers that are no longer found
-        deletions = [name for name in self.servers if name not in found]
-        for name in deletions:
-            del self.servers[name]
-
-    def stopAll(self):
-        # stop any running servers
-        stoppages = [srv.stop() for srv in self.runners.values()]
-        return defer.DeferredList(stoppages)
-
-    @inlineCallbacks
-    def start(self, name, environ={}):
-        """Start an instance of a server."""
-        try:
-            cls = self.servers[name]
-        except KeyError:
-            raise Exception("Unknown server: '%s'." % name)
-
-        # the environment can be overridden in this context or this request
-        environ.update(LABRADNODE=self.nodename,
-                       LABRADHOST=self.host,
-                       LABRADPORT=str(self.port),
-                       LABRADPASSWORD=self.password)
-
-        srv = cls(environ)
-        srv.startup.connect(self.serverStarted)
-        srv.shutdown.connect(self.serverStopped)
-        yield srv.start()
-        returnValue(srv.name)
-
-    def serverStarted(self, srv):
-        self.runners[srv.name] = srv
-
-    def serverStopped(self, srv):
-        del self.runners[srv.name]
-
-    @inlineCallbacks
-    def stop(self, name):
-        """Stop a running server instance."""
-        try:
-            srv = self.runners[name]
-        except KeyError:
-            raise Exception("'%s' is not running." % name)
-        yield srv.stop()
-        returnValue(srv.name)
-
-    @inlineCallbacks
-    def restart(self, name):
-        """Restart a running server instance."""
-        try:
-            srv = self.runners[name]
-        except KeyError:
-            raise Exception("'%s' is not running." % name)
-        yield srv.restart()
-        returnValue(srv.name)
-
-    def available_servers(self):
-        """Get a list of available servers."""
-        return sorted(self.servers.keys())
-
-    def servers_info(self):
-        slist = []
-        for name, cls in sorted(self.servers.items()):
-            instances = [n for n, s in self.runners.items()
-                                    if s.__class__.name == name]
-            info = (name, cls.__doc__ or '', cls.version,
-                    cls.instancename, cls.isLocal, instances)
-            slist.append(info)
-        return slist
-
-    def running_servers(self):
-        """Get a list of running server instances.
-
-        Returns a list of tuples of server name and instance name.
-        """
-        return sorted((s.__class__.name, n) for n, s in self.runners.items())
-
-    def local_servers(self):
-        """Get a list of local servers."""
-        return sorted(n for n, s in self.servers.items() if s.isLocal)
-
-    def server_output(self, name):
-        try:
-            srv = self.runners[name]
-        except KeyError:
-            raise Exception("'%s' is not running." % name)
-        return srv.output
-
-    def clear_output(self, name):
-        try:
-            srv = self.runners[name]
-        except KeyError:
-            raise Exception("'%s' is not running." % name)
-        srv.clearOutput()
-
-    def server_version(self, name):
-        try:
-            srv = self.servers[name]
-        except KeyError:
-            raise Exception("'%s' not found." % name)
-        return srv.version
-
-class ProcNodeServer(LabradServer):
-    def __init__(self, node):
-        self.node = node
-        self.name = node.name
-        LabradServer.__init__(self)
-
-    def initServer(self):
-        # set up message relaying so other clients can
-        # keep track of what happens on this node
-        messages = ["server_starting", "server_started",
-                    "server_stopping", "server_stopped"]
-        for message in messages:
-            dispatcher.connect(self._relayMessage, message)
-
-    def _relayMessage(self, signal, sender, **kw):
-        """Relay a locally-dispatched message out over LabRAD."""
-        kw['node'] = self.name
-        self.client.manager.send_named_message("node." + signal, tuple(kw.items()))
+        for name in self.servers:
+            if name not in found:
+                del self.servers[name]
 
     def initContext(self, c):
         c['environ'] = {}
         
     def serverConnected(self, ID, name):
-        dispatcher.send("serverConnected", ID=ID, name=name)
+        """Called when a server connects to LabRAD."""
+        dispatcher.send('serverConnected', ID=ID, name=name)
+        
+    def subprocessStarted(self, sender):
+        """Called when a subprocess successfully connects."""
+        self.runners[sender.name] = sender
+
+    def subprocessStopped(self, sender):
+        """Called when a subprocess successfully disconnects."""
+        del self.runners[sender.name]
+        
+    def stopServer(self):
+        """Stop this node by killing all subprocesses."""
+        stoppages = [srv.stop() for srv in self.runners.values()]
+        return defer.DeferredList(stoppages)
         
     @setting(1, name=['s'], environ=['*(ss)'], returns=['s'])
     def start(self, c, name, environ={}):
         """Start an instance of a server."""
         env = dict(c['environ']) # copy context environment
         env.update(environ)
-        return self.node.start(name, env)
+        environ.update(LABRADNODE=self.nodename,
+                       LABRADHOST=self.host,
+                       LABRADPORT=str(self.port),
+                       LABRADPASSWORD=self.password)
+        
+        if name not in self.servers:
+            raise Exception("Unknown server: '%s'." % name)
+        srv = self.servers[name](environ)
+        yield srv.start()
+        returnValue(srv.name)
 
     @setting(2, name=['s'], returns=['s'])
     def stop(self, c, name):
         """Stop a running server instance."""
-        return self.node.stop(name)
+        if name not in self.runners:
+            raise Exception("'%s' is not running." % name)
+        srv = self.runners[name]
+        yield srv.stop()
+        returnValue(srv.name)
 
     @setting(3, name=['s'], returns=['s'])
     def restart(self, c, name):
         """Restart a running server instance."""
-        return self.node.restart(name)
+        if name not in self.runners:
+            raise Exception("'%s' is not running." % name)
+        srv = self.runners[name]
+        yield srv.restart()
+        returnValue(srv.name)
 
     @setting(10, returns=['*s'])
     def available_servers(self, c):
         """Get a list of available servers."""
-        return self.node.available_servers()
+        return sorted(self.servers.keys())
 
     @setting(11, returns=['*(ss)'])
     def running_servers(self, c):
@@ -492,23 +418,27 @@ class ProcNodeServer(LabradServer):
 
         Returns a list of tuples of server name and instance name.
         """
-        return self.node.running_servers()
+        return sorted((s.__class__.name, n) for n, s in self.runners.items())
 
     @setting(12, returns=['*s'])
     def local_servers(self, c):
         """Get a list of local servers."""
-        return self.node.local_servers()
+        return sorted(n for n, s in self.servers.items() if s.isLocal)
 
     @setting(13, returns=[''])
     def refresh_servers(self, c):
         """Refresh the list of available servers."""
-        self.node.refresh_servers()
+        self.refreshServers()
 
-    @setting(14, returns=['*(s{name} s{desc} s{ver} s{instname} b *s{running})'])
+    @setting(14, returns=['*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})'])
     def servers_info(self, c):
         """Get information about all servers on this node."""
-        #print self.node.servers_info()
-        return self.node.servers_info()
+        def info(name, cls):
+            instances = [n for n, s in self.runners.items()
+                                    if s.__class__.name == name]
+            return (name, cls.__doc__ or '', cls.version,
+                    cls.instancename, cls.environVars, instances)
+        return [info(*item) for item in sorted(self.servers.items())]
 
     @setting(20, returns=['*(ss)'])
     def environ(self, c):
@@ -536,10 +466,6 @@ class ProcNodeServer(LabradServer):
             del env[key.upper()]
         return sorted(env.items())
 
-    @property
-    def serverDirs(self):
-        return self.node.serverDirs
-
     @setting(40, returns=['*s'])
     def path(self, c):
         """Get a list of directories that will be searched for servers."""
@@ -563,10 +489,6 @@ class ProcNodeServer(LabradServer):
         for d in dirs:
             self.serverDirs.remove(d)
         return self.serverDirs
-
-    @property
-    def serverMods(self):
-        return self.node.serverMods
 
     @setting(45, returns=['*s'])
     def modules(self, c):
@@ -596,17 +518,23 @@ class ProcNodeServer(LabradServer):
     @setting(100, name=['s'], returns=['*(ts)'])
     def server_output(self, c, name):
         """Get output from a server's stdout."""
-        return self.node.server_output(name)
+        if name not in self.runners:
+            raise Exception("'%s' is not running." % name)
+        return self.runners[name].output
 
     @setting(101, name=['s'], returns=[''])
     def clear_output(self, c, name):
         """Clear the stdout buffer of a server."""
-        self.node.clear_output(name)
+        if name not in self.runners:
+            raise Exception("'%s' is not running." % name)
+        self.runners[name].clearOutput()
 
     @setting(102, name=['s'], returns=['s'])
     def server_version(self, c, name):
         """Get version information for a server."""
-        return self.node.server_version(name)
+        if name not in self.servers:
+            raise Exception("'%s' not found." % name)
+        return self.servers[name].version
     
     @setting(1000, returns=['*(ss)'])
     def node_version(self, c):
@@ -618,6 +546,3 @@ class ProcNodeServer(LabradServer):
                 'labrad revision': labrad.__revision__,
                 'labrad date': labrad.__date__}
         return list(info.items())
-
-registerAdapter(ProcNodeServer, IProcNode, ILabradServer)
-
