@@ -88,6 +88,19 @@ class ClientTests(unittest.TestCase):
         resp = pkt2.send()
         self.assertEquals(resp.two, TEST_STR)
         
+    def testTupleKeys(self):
+        # allow the use of tuples as packet keys
+        pts = self._get_tester()
+        
+        pkt = pts.packet()
+        pkt.echo(1, key='a')
+        pkt.echo(2, key=(1,2))
+        r = repr(pkt)
+        s = str(pkt)
+        resp = pkt.send()
+        self.assertEquals(resp.a, 1)
+        self.assertEquals(resp['a'], 1)
+        self.assertEquals(resp[(1,2)], 2)
 
     def testExceptions(self):
         pts = self._get_tester()
