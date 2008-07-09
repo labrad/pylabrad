@@ -331,7 +331,7 @@ class DeferredSignal(object):
         self._fire(False, reason)
 
     def _fire(self, success, data):
-        #self.fired = success, data
+        self.fired = success, data
         waiters = self.waiters
         self.waiters = []
         for d in waiters:
