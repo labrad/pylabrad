@@ -20,7 +20,8 @@ public class InstanceController extends HorizontalPanel {
     private String node;
     private String server;
     private String instance;
-    private String version;
+    @SuppressWarnings("unused")
+	private String version;
     private PushButton info;
     private PushButton start;
     private PushButton stop;
