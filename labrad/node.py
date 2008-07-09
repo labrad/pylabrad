@@ -349,14 +349,14 @@ class NodeServer(LabradServer):
 
     def refreshServers(self):
         """Refresh the list of available servers."""
-        def _finishRefresh(result):
-            del self.onRefresh
+        def finishRefresh(result):
+            del self._onRefresh
             return result
         if not hasattr(self, 'onRefresh'):
-            self.onRefresh = util.DeferredSignal()
+            self._onRefresh = util.DeferredSignal()
             d = self._doRefresh()
-            d.addBoth(_finishRefresh)
-            d.chainDeferred(self.onRefresh)
+            d.addBoth(finishRefresh)
+            d.chainDeferred(self._onRefresh)
         return self.onRefresh()
             
     @inlineCallbacks

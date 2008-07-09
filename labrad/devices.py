@@ -130,6 +130,19 @@ class DeviceServer(LabradServer):
         clients that have selected devices in context will still
         be able to refer to them after the refresh.
         """
+        def finishRefresh(result):
+            del self._onRefresh
+            return result
+        if not hasattr(self, '_onRefresh'):
+            self._onRefresh = util.DeferredSignal()
+            d = self._doRefresh()
+            d.addBoth(finishRefresh)
+            d.chainDeferred(self._onRefresh)
+        return self._onRefresh()
+        
+    @inlineCallbacks
+    def _doRefresh(self):
+        """Do the actual refreshing."""
         yield self.client.refresh()
         self.log('refreshing device list...')
         all_found = yield self.findDevices()
@@ -184,7 +197,6 @@ class DeviceServer(LabradServer):
                 self.log('Error while shutting down device "%s": %s' % (name, e))
 
     def serverConnected(self, ID, name):
-        # TODO: don't allow multiple refreshes to happen at once
         self.refreshDeviceList()
 
     def serverDisconnected(self, ID, name):
