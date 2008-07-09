@@ -355,7 +355,7 @@ class PacketWrapper(HasDynamicAttrs):
                 self._packet[i] = ID, value, accepts, key
 
     def _recordRepr(self, ID, data, types, key):
-        key_str = "" if key is None else " (key='%s')" % key
+        key_str = "" if key is None else " (key=%s)" % (key,)
         return "%s%s: %s" % (self._server.settings[ID].name, key_str, data)
 
     def __repr__(self):

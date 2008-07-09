@@ -382,18 +382,20 @@ class PacketResponse(object):
             # otherwise by setting name, LabRAD name and ID
             if key is not None:
                 name = labrad_name = ID = key
-            if hasattr(self, name):
-                l = getattr(self, name)
+            if name in self.settings:
+                l = self.settings[name]
             else:
                 l = []
-                setattr(self, name, l)
+                if isinstance(name, str):
+                    setattr(self, name, l)
                 self.settings[name, labrad_name, ID] = l
             l.append(data)
         # if setting has only one response, unwrap it from the list
         for name, resp in self.settings.items():
             if len(resp) == 1:
-                setattr(self, name, resp[0])
-                self.settings[name] = resp[0]
+                if isinstance(name, str):
+                    setattr(self, name, resp[0])
+                self.settings[(name,)] = resp[0]
 
     def __getitem__(self, key):
         return self.settings[key]

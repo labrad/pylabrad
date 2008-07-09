@@ -55,9 +55,7 @@ class IServerProcess(Interface):
     
 class ServerProcess(ProcessProtocol):
     """A class to represent a running server instance."""
-    
     implements(IServerProcess)
-    
     timeout = 20
 
     def __init__(self, env):
@@ -136,6 +134,7 @@ class ServerProcess(ProcessProtocol):
         dispatcher.send("server_stopped", sender=self, server=self.name)
 
     def kill(self):
+        # TODO: implement custom shutdown methods
         try:
             #self.proc.writeToChild(0, '\x03')
             self.proc.signalProcess("KILL")
@@ -198,7 +197,7 @@ def createGenericServerCls(path, filename):
     cls.cmdline = scp.get('startup', 'cmdline', raw=True)
     cls.path = path
     try:
-        cls.timeout = scp.getint('startup', 'timeout')
+        cls.timeout = float(scp.getint('startup', 'timeout'))
     except:
         pass
 
@@ -226,21 +225,6 @@ def createPythonServerCls(plugin):
     cls.path = os.path.split(sys.modules[plugin.__module__].__file__)[0]
     return cls
 
-def getNodeConfig(nodename=None):
-    try:
-        conf = ConfigFile('node')
-    except:
-        conf = ConfigFile('node-template')
-    if conf.has_section(nodename):
-        section = nodename
-    else:
-        section = 'default'
-    # filter gets rid of empty strings
-    parse = lambda string: filter(None, [s.strip() for s in string.split(';')])
-    mods = parse(conf.get(section, 'modules'))
-    dirs = parse(conf.get(section, 'directories'))
-    return mods, dirs
-
 class IProcNode(Interface):
     pass
 
@@ -260,8 +244,8 @@ class ProcNode(MultiService):
         self.startConnection()
 
     def startConnection(self):
-        print 'connecting to %s:%d...' % (self.host, self.port)
-        node = ProcNodeServer(self.name, self.host, self.port)
+        print 'Connecting to %s:%d...' % (self.host, self.port)
+        node = NodeServer(self.name, self.host, self.port)
         node.onStartup().addErrback(self._error)
         node.onShutdown().addCallbacks(self._disconnected, self._error)
         self.cxn = TCPClient(self.host, self.port, node)
@@ -282,8 +266,38 @@ class ProcNode(MultiService):
         reactor.callLater(self.reconnectDelay, self.startConnection)
         print 'Will try to reconnect in %d seconds...' % self.reconnectDelay
 
+class NodeConfig(object):
+    def __init__(self, registry, nodename, dirs, mods):
+        self.registry = registry
+        self.nodename = nodename
+        self.dirs = dirs
+        self.mods = mods
+        
+    @classmethod
+    @inlineCallbacks
+    def load(cls, registry, nodename='__default__', create=False):
+        p = registry.packet()
+        p.cd(['', 'Nodes', nodename], create)
+        if create:
+            p.set('directories', [])
+            p.set('packages', ['labrad.servers'])
+        p.get('directories', key='dirs')
+        p.get('packages', key='mods')
+        resp = yield p.send()
+        returnValue(cls(registry, nodename, resp.dirs, resp.mods))
+        
+    @inlineCallbacks
+    def save(self, nodename=None):
+        if nodename is None:
+            nodename = self.nodename
+        p = self.registry.packet()
+        p.cd(['', 'Nodes', nodename], True)
+        p.set('directories', self.dirs)
+        p.set('packages', self.mods)
+        yield p.send()
 
-class ProcNodeServer(LabradServer):
+
+class NodeServer(LabradServer):
     name = 'node %LABRADNODE%'
 
     def __init__(self, nodename, host, port):
@@ -293,11 +307,12 @@ class ProcNodeServer(LabradServer):
         self.host = host
         self.port = port
 
+    @inlineCallbacks
     def initServer(self):
         self.servers = {}
         self.runners = {}
         self.initMessages()
-        self.refreshServers()
+        yield self.refreshServers()
         
     def initMessages(self):
         """Set up messages to be dispatched locally and sent out over LabRAD."""
@@ -314,12 +329,42 @@ class ProcNodeServer(LabradServer):
         dispatcher.connect(self.subprocessStarted, 'server_started')
         dispatcher.connect(self.subprocessStopped, 'server_stopped')
 
+    @inlineCallbacks
+    def loadConfig(self):
+        """Load configuration for this node from the registry."""
+        reg = self.client.registry
+        p = reg.packet()
+        p.cd(['', 'Nodes'], True)
+        p.dir()
+        resp = yield p.send()
+        dirs, keys = resp.dir
+        if self.nodename not in dirs:
+            config = yield NodeConfig.load(reg, create=('__default__' not in dirs))
+            config.save(self.nodename)
+        else:
+            config = yield NodeConfig.load(reg, self.nodename)
+        # filter gets rid of empty strings
+        self.serverMods = filter(None, config.mods)
+        self.serverDirs = filter(None, config.dirs)
+
     def refreshServers(self):
         """Refresh the list of available servers."""
+        def _finishRefresh(result):
+            del self.onRefresh
+            return result
+        if not hasattr(self, 'onRefresh'):
+            self.onRefresh = util.DeferredSignal()
+            d = self._doRefresh()
+            d.addBoth(_finishRefresh)
+            d.chainDeferred(self.onRefresh)
+        return self.onRefresh()
+            
+    @inlineCallbacks
+    def _doRefresh(self):
         found = {}
 
         # refresh list of directories to search
-        self.serverMods, self.serverDirs = getNodeConfig()
+        yield self.loadConfig()
 
         # look for python plugins
         for module in self.serverMods:
@@ -428,7 +473,7 @@ class ProcNodeServer(LabradServer):
     @setting(13, returns=[''])
     def refresh_servers(self, c):
         """Refresh the list of available servers."""
-        self.refreshServers()
+        yield self.refreshServers()
 
     @setting(14, returns=['*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})'])
     def servers_info(self, c):

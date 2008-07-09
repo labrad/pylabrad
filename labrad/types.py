@@ -716,7 +716,9 @@ class LRList(LRType):
         n, elem = self.depth, self.elem
         dims = unpack('i'*n, s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
-        if elem.isFixedWidth:
+        if elem is None:
+            width = 0
+        elif elem.isFixedWidth:
             width = size * elem.width
         else:
             newBuf = Buffer(s)
