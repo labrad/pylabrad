@@ -21,7 +21,7 @@ from distutils.core import setup
 doclines = __doc__.split('\n')
 
 setup(name='pylabrad',
-      version='0.9.2',
+      version='0.10.0',
       author='Matthew Neeley',
       author_email='maffoo@users.sourceforge.net',
       
@@ -44,8 +44,7 @@ setup(name='pylabrad',
                 'labrad.util.simplejson'],
       package_data={'labrad': ['LICENSE.txt'],
                     'labrad.config': ['*.ini'],
-                    'labrad.controller': ['images/*.png',
-                                          'www/org.labrad.NodeController/*.*']},
+                    'labrad.controller': ['gwt/www/org.labrad.NodeController/*.*']},
       py_modules=['twisted.plugins.labrad_controller',
                   'twisted.plugins.labrad_node'],
       scripts=['labrad_postinstall.py'],
