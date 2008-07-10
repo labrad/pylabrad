@@ -4,12 +4,13 @@ GENERAL:
         allow logs to be accessed and manipulated remotely
 		configurable debug/logging verbosity levels (change on the fly)
     
+    message handling:
+    	declarative message handling for servers and clients
+    	do this with decorators, similar to @setting
+    
 SERVERS:
 	GENERAL:
 		emit log messages and allow setting log levels
-
-    NODE:
-        move node configuration into the registry
 
     SUPER NODE:
         ask for a server to be started
