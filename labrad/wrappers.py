@@ -174,7 +174,7 @@ class AsyncServerWrapper:
         returnValue(self.settings)
 
     _staticAttrs = ['settings', 'refresh', 'context', 'packet',
-                    'sendMessage']
+                    'sendMessage', 'addListener', 'removeListener']
     
     def sendMessage(self, ID, *args, **kw):
         """Send a message to this server."""
@@ -184,6 +184,16 @@ class AsyncServerWrapper:
         elif len(args) == 1:
             args = args[0]
         self._cxn._sendMessage(self.ID, [(ID, args, tag)], **kw)
+    
+    def addListener(self, listener, **kw):
+        """Add a listener for messages from this server."""
+        kw['source'] = self.ID
+        self._cxn._addListener(listener, **kw)
+        
+    def removeListener(self, listener, **kw):
+        """Remove a listener for messages from this server."""
+        kw['source'] = self.ID
+        self._cxn._removeListener(listener, **kw)
     
     def _fixName(self, name):
         if name in self._staticAttrs:
@@ -350,6 +360,14 @@ class ClientAsync(object):
         
     def disconnect(self):
         self._cxn.disconnect()
+    
+    @property
+    def _addListener(self):
+        return self._cxn.addListener
+    
+    @property
+    def _removeListener(self):
+        return self._cxn.removeListener
 
 registerAdapter(ClientAsync, ILabradProtocol, IClientAsync)
 

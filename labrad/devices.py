@@ -121,7 +121,6 @@ class DeviceServer(LabradServer):
         """
         return []
 
-    @inlineCallbacks
     def refreshDeviceList(self):
         """Refresh the list of available devices.
         

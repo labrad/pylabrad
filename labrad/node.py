@@ -31,7 +31,7 @@ import sys
 from datetime import datetime
 from ConfigParser import SafeConfigParser
 
-from labrad import util
+from labrad import util, types as T
 from labrad.config import ConfigFile
 from labrad.server import ILabradServer, LabradServer, setting
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
@@ -72,9 +72,23 @@ class ServerProcess(ProcessProtocol):
         self.startup = util.DeferredSignal()
         self.shutdown = util.DeferredSignal()
         self.output = []
-
-    @inlineCallbacks
+        
+    def doOnce(self, func, attr, *a, **kw):
+        def done(result):
+            delattr(self, attr)
+            return result
+        if not hasattr(self, attr):
+            setattr(self, attr, util.DeferredSignal())
+            d = func(*a, **kw)
+            d.addBoth(done)
+            d.chainDeferred(getattr(self, attr))
+        return getattr(self, attr)()
+        
     def start(self):
+        return self.doOnce(self._doStart, '_onStartup')
+        
+    @inlineCallbacks
+    def _doStart(self):
         if self.running:
             return
         
@@ -118,12 +132,15 @@ class ServerProcess(ProcessProtocol):
             print "'%s': process ended: %s" % (self.name, reason)
         self.running = False
         if self.starting:
-            self.startup.errback(Exception('Startup failed.'))
+            self.startup.errback(T.Error('Startup failed.', payload=self.output))
         else:
             self.shutdown.callback(self)
 
-    @inlineCallbacks
     def stop(self):
+        return self.doOnce(self._doStop, '_onShutdown')
+
+    @inlineCallbacks
+    def _doStop(self):
         if not self.running:
             return
         print "stopping '%s'..." % self.name
@@ -142,8 +159,11 @@ class ServerProcess(ProcessProtocol):
         except:
             pass
 
-    @inlineCallbacks
     def restart(self):
+        return self.doOnce(self._doRestart, '_onRestart')
+
+    @inlineCallbacks
+    def _doRestart(self):
         yield self.stop()
         yield self.start()
 
@@ -310,23 +330,29 @@ class NodeServer(LabradServer):
     @inlineCallbacks
     def initServer(self):
         self.servers = {}
-        self.runners = {}
+        self.starting = {}
+        self.running = {}
+        self.stopping = {}
         self.initMessages()
         yield self.refreshServers()
         
     def initMessages(self):
         """Set up messages to be dispatched locally and sent out over LabRAD."""
         # set up messages to be relayed out over LabRAD
-        def _relayMessage(self, signal, sender, **kw):
+        def _relayMessage(signal, sender, **kw):
             kw['node'] = self.name
+            #print 'sending message:', 'node.'+signal, tuple(kw.items())
             self.client.manager.send_named_message('node.' + signal, tuple(kw.items()))
         messages = ['server_starting', 'server_started',
-                    'server_stopping', 'server_stopped']
+                    'server_stopping', 'server_stopped',
+                    'list_updated']
         for message in messages:
-            dispatcher.connect(_relayMessage, message)
+            dispatcher.connect(_relayMessage, message, weak=False)
             
         # set up message handlers for subprocess
+        dispatcher.connect(self.subprocessStarting, 'server_starting')
         dispatcher.connect(self.subprocessStarted, 'server_started')
+        dispatcher.connect(self.subprocessStopping, 'server_stopping')
         dispatcher.connect(self.subprocessStopped, 'server_stopped')
 
     @inlineCallbacks
@@ -352,12 +378,12 @@ class NodeServer(LabradServer):
         def finishRefresh(result):
             del self._onRefresh
             return result
-        if not hasattr(self, 'onRefresh'):
+        if not hasattr(self, '_onRefresh'):
             self._onRefresh = util.DeferredSignal()
             d = self._doRefresh()
             d.addBoth(finishRefresh)
             d.chainDeferred(self._onRefresh)
-        return self.onRefresh()
+        return self._onRefresh()
             
     @inlineCallbacks
     def _doRefresh(self):
@@ -393,10 +419,16 @@ class NodeServer(LabradServer):
                         print e
 
         # add new servers and remove old ones
-        self.servers.update(found)
-        for name in self.servers:
-            if name not in found:
-                del self.servers[name]
+        additions = [s for s in found.values() if s.name not in self.servers]
+        deletions = [s for s in self.servers.values() if s.name not in found]
+        for s in additions:
+            self.servers[s.name] = s
+        for s in deletions:
+            del self.servers[s.name]
+        
+        addmsg = [self.serverInfo(s) for s in additions]
+        delmsg = [self.serverInfo(s) for s in deletions]
+        dispatcher.send('list_updated', added=addmsg, removed=delmsg)        
 
     def initContext(self, c):
         c['environ'] = {}
@@ -405,17 +437,32 @@ class NodeServer(LabradServer):
         """Called when a server connects to LabRAD."""
         dispatcher.send('serverConnected', ID=ID, name=name)
         
+    def subprocessStarting(self, sender):
+        """Called when a subprocess begins connecting."""
+        self.starting[sender.name] = sender
+
     def subprocessStarted(self, sender):
         """Called when a subprocess successfully connects."""
-        self.runners[sender.name] = sender
+        if sender.name in self.starting:
+            del self.starting[sender.name]
+        self.running[sender.name] = sender
+
+    def subprocessStopping(self, sender):
+        """Called when a subprocess successfully disconnects."""
+        if sender.name in self.running:
+            del self.running[sender.name]
+        self.stopping[sender.name] = sender
 
     def subprocessStopped(self, sender):
         """Called when a subprocess successfully disconnects."""
-        del self.runners[sender.name]
+        if sender.name in self.running:
+            del self.running[sender.name]
+        if sender.name in self.stopping:
+            del self.stopping[sender.name]
         
     def stopServer(self):
         """Stop this node by killing all subprocesses."""
-        stoppages = [srv.stop() for srv in self.runners.values()]
+        stoppages = [srv.stop() for srv in self.running.values()]
         return defer.DeferredList(stoppages)
         
     @setting(1, name=['s'], environ=['*(ss)'], returns=['s'])
@@ -437,18 +484,18 @@ class NodeServer(LabradServer):
     @setting(2, name=['s'], returns=['s'])
     def stop(self, c, name):
         """Stop a running server instance."""
-        if name not in self.runners:
+        if name not in self.running:
             raise Exception("'%s' is not running." % name)
-        srv = self.runners[name]
+        srv = self.running[name]
         yield srv.stop()
         returnValue(srv.name)
 
     @setting(3, name=['s'], returns=['s'])
     def restart(self, c, name):
         """Restart a running server instance."""
-        if name not in self.runners:
+        if name not in self.running:
             raise Exception("'%s' is not running." % name)
-        srv = self.runners[name]
+        srv = self.running[name]
         yield srv.restart()
         returnValue(srv.name)
 
@@ -463,7 +510,7 @@ class NodeServer(LabradServer):
 
         Returns a list of tuples of server name and instance name.
         """
-        return sorted((s.__class__.name, n) for n, s in self.runners.items())
+        return sorted((s.__class__.name, n) for n, s in self.running.items())
 
     @setting(12, returns=['*s'])
     def local_servers(self, c):
@@ -478,12 +525,13 @@ class NodeServer(LabradServer):
     @setting(14, returns=['*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})'])
     def servers_info(self, c):
         """Get information about all servers on this node."""
-        def info(name, cls):
-            instances = [n for n, s in self.runners.items()
-                                    if s.__class__.name == name]
-            return (name, cls.__doc__ or '', cls.version,
-                    cls.instancename, cls.environVars, instances)
-        return [info(*item) for item in sorted(self.servers.items())]
+        return [self.serverInfo(item[1]) for item in sorted(self.servers.items())]
+
+    def serverInfo(self, cls):
+        instances = [n for n, s in self.running.items()
+                                if s.__class__.name == cls.name]
+        return (cls.name, cls.__doc__ or '', cls.version,
+                cls.instancename, cls.environVars, instances)
 
     @setting(20, returns=['*(ss)'])
     def environ(self, c):
@@ -563,16 +611,16 @@ class NodeServer(LabradServer):
     @setting(100, name=['s'], returns=['*(ts)'])
     def server_output(self, c, name):
         """Get output from a server's stdout."""
-        if name not in self.runners:
+        if name not in self.running:
             raise Exception("'%s' is not running." % name)
-        return self.runners[name].output
+        return self.running[name].output
 
     @setting(101, name=['s'], returns=[''])
     def clear_output(self, c, name):
         """Clear the stdout buffer of a server."""
-        if name not in self.runners:
+        if name not in self.running:
             raise Exception("'%s' is not running." % name)
-        self.runners[name].clearOutput()
+        self.running[name].clearOutput()
 
     @setting(102, name=['s'], returns=['s'])
     def server_version(self, c, name):

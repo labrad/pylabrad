@@ -16,7 +16,6 @@
 import os
 import hashlib
 import random
-from operator import itemgetter
 
 import labrad
 from labrad.config import ConfigFile
@@ -33,7 +32,9 @@ WEB_DIR = os.path.join(HERE_DIR, 'gwt', 'www', 'org.labrad.NodeController')
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
-    return [s for s in servers if s.startswith('node') and hasattr(cxn[s], 'available_servers')]
+    return [s for s in servers \
+              if s.lower().startswith('node') \
+                 and hasattr(cxn[s], 'available_servers')]
 
 class JSONResource(resource.Resource):
     def __init__(self, cxn, func, *a, **kw):
@@ -64,21 +65,21 @@ class JSONResource(resource.Resource):
         request.finish()
             
     
-class JSONPuller(resource.Resource):
+class PushHandler(resource.Resource):
     def __init__(self, transport):
         self.transport = transport
         
     def render(self, request):
-        #try:
+        try:
             content = request.content.read()
             data = simplejson.loads(content)
             self.transport.invokeMethod(data['id'], data['method'],
                                         *data['args'], **data['kw'])
-            return ""
-        #except Exception, e:
-        #    return simplejson.dumps({'error': str(e)})
+            return ''
+        except Exception, e:
+            return simplejson.dumps({'error': str(e)})
     
-class JSONPusher(resource.Resource):
+class PullHandler(resource.Resource):
     def __init__(self, transport):
         self.transport = transport
         
@@ -96,8 +97,8 @@ class JSONPusher(resource.Resource):
 class JSONTransport(resource.Resource):
     def __init__(self):
         self.children = {}
-        self.putChild('push', JSONPuller(self)) # client pushes, we pull
-        self.putChild('pull', JSONPusher(self)) # client pulls, we push
+        self.putChild('push', PushHandler(self))
+        self.putChild('pull', PullHandler(self))
         self.responses = []
         self.waiter = None
     
@@ -157,6 +158,10 @@ class JSONTransport(resource.Resource):
         return resp
         
 class NodeProxy(JSONTransport):
+    def __init__(self, cxn):
+        JSONTransport.__init__(self)
+        self.cxn = cxn
+    
     @inlineCallbacks
     def remote_available_servers(self):
         cxn = self.cxn
@@ -205,6 +210,11 @@ class NodeProxy(JSONTransport):
             status.append(row)
         returnValue([servers, nodes, status])
     
+    @inlineCallbacks
+    def remote_refresh_servers(self, node):
+        yield self.cxn[node].refresh_servers(context=self.cxn.context())
+        returnValue('%s refreshed' % node)
+    
     def remote_start(self, node, server):
         return self.cxn[node].start(str(server), context=self.cxn.context())
         
@@ -220,9 +230,8 @@ class NodeProxy(JSONTransport):
         p.whitelist()
         p.blacklist()
         resp = yield p.send()
-        ips = [(addr, True) for addr in resp.whitelist] + \
-              [(addr, False) for addr in resp.blacklist]
-        ips.sort(key=itemgetter(0))
+        ips = sorted([(addr, True) for addr in resp.whitelist] + \
+                     [(addr, False) for addr in resp.blacklist])
         returnValue(ips)
     
     def remote_blacklist(self, address):
@@ -233,11 +242,6 @@ class NodeProxy(JSONTransport):
         
 transports = {}
     
-def printIt(c, data, **kw):
-    source, payload = data
-    kw.update(payload)
-    print "message received:", kw
-    
 class NodeAPI(resource.Resource):
     reconnectDelay = 10
     
@@ -245,6 +249,7 @@ class NodeAPI(resource.Resource):
         d = connectAsync(self.host, self.port, name='Web Interface Client')
         d.addCallbacks(self._connectionSucceeded, self._connectionFailed)
 
+    @inlineCallbacks
     def _connectionSucceeded(self, cxn):
         try:
             cxn.onDisconnect().addBoth(self._connectionFailed)
@@ -258,15 +263,33 @@ class NodeAPI(resource.Resource):
                 kw = dict(payload)
                 for t in transports.values():
                     t.sendMessage(message, **kw)
-            src = cxn.manager.ID
-            cxn._cxn.addListener(relay, source=src, ID=1, kw=dict(message='server_starting'))
-            cxn._cxn.addListener(relay, source=src, ID=2, kw=dict(message='server_started'))
-            cxn._cxn.addListener(relay, source=src, ID=3, kw=dict(message='server_stopping'))
-            cxn._cxn.addListener(relay, source=src, ID=4, kw=dict(message='server_stopped'))
-            cxn.manager.subscribe_to_named_message("node.server_starting", 1, True)
-            cxn.manager.subscribe_to_named_message("node.server_started", 2, True)
-            cxn.manager.subscribe_to_named_message("node.server_stopping", 3, True)
-            cxn.manager.subscribe_to_named_message("node.server_stopped", 4, True)
+            messages = ['node.server_starting', 'node.server_started',
+                        'node.server_stopping', 'node.server_stopped',
+                        'node.list_updated', 'Server Connected', 'Server Disconnected']
+            p = cxn.manager.packet()
+            for ID, message in enumerate(messages):
+                cxn.manager.addListener(relay, ID=ID+1234, kw=dict(message=message))
+                p.subscribe_to_named_message(message, ID+1234, True)
+            yield p.send()
+                
+            # sign up for server connect/disconnect messages
+            self._serverNames = dict((yield cxn.manager.servers()))
+            
+            def serverConnected(c, data):
+                ID, name = data
+                self._serverNames[ID] = name
+                for t in transports.values():
+                    t.sendMessage('Server Connected', name=name)
+            yield cxn.manager.notify_on_connect.connect(serverConnected)
+            
+            def serverDisconnected(c, data):
+                ID = data
+                if ID in self._serverNames:
+                    name = self._serverNames[ID]
+                    for t in transports.values():
+                        t.sendMessage('Server Disconnected', name=name)
+            yield cxn.manager.notify_on_disconnect.connect(serverDisconnected)
+            
         except Exception, e:
             print e
             print 'Something went wrong in connection.'
@@ -291,9 +314,11 @@ class NodeAPI(resource.Resource):
         return JSONResource(self.cxn, func)
         
     def remote_get_transport_ID(self, cxn, request):
-        ID = generateNonce()
-        t = transports.setdefault(ID, NodeProxy())
-        t.cxn = self.cxn
+        while 1:
+            ID = generateNonce()
+            if ID not in transports:
+                break
+        transports[ID] = NodeProxy(self.cxn)
         return ID
 
 class DigestAuthRequest(server.Request):
