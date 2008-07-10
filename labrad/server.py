@@ -224,7 +224,6 @@ class LabradServer(ClientFactory):
         self.settings = {}
         self.signals = []
         self.contexts = {}
-        self._serverNames = {}
         
     # request handling
     @inlineCallbacks
@@ -395,11 +394,15 @@ class LabradServer(ClientFactory):
         self._cxn.addListener(self._stopServer, ID=987654321)
         
         # sign up for notifications from the manager
-        yield mgr.notify_on_connect.connect(self._serverConnected)
-        yield mgr.notify_on_disconnect.connect(self._serverDisconnected)
+        yield mgr.subscribe_to_named_message('Server Connect', 55443322, True)
+        yield mgr.subscribe_to_named_message('Server Disconnect', 66554433, True)
+        self._cxn.addListener(self._serverConnected, source=mgr.ID, ID=55443322)
+        self._cxn.addListener(self._serverDisconnected, source=mgr.ID, ID=66554433)
+        
+        #yield mgr.notify_on_connect.connect(self._serverConnected)
+        #yield mgr.notify_on_disconnect.connect(self._serverDisconnected)
         yield mgr.s__notify_on_context_expiration.connect(
                   self._contextExpired, connectargs=(True,))
-        self._serverNames.update((yield mgr.servers()))
         
         # let the rest of the world know we're ready
         yield mgr.s__start_serving()
@@ -474,17 +477,12 @@ class LabradServer(ClientFactory):
     def _serverConnected(self, c, data):
         """Handle connection messages from the manager."""
         ID, name = data
-        self._serverNames[ID] = name
         self.serverConnected(ID, name)
     
     def _serverDisconnected(self, c, data):
         """Handle disconnection messages from the manager."""
-        ID = data
-        if ID in self._serverNames:
-            name = self._serverNames[ID]
-            self.serverDisconnected(ID, name)
-        else:
-            self.serverDisconnected(ID, '<unknown>')
+        ID, name = data
+        self.serverDisconnected(ID, name)
     
     # these methods should be overridden
     def serverConnected(self, ID, name):

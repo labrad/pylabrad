@@ -249,6 +249,10 @@ class NodeAPI(resource.Resource):
         d = connectAsync(self.host, self.port, name='Web Interface Client')
         d.addCallbacks(self._connectionSucceeded, self._connectionFailed)
 
+    def sendMessage(self, message, **kw):
+        for t in transports.values():
+            t.sendMessage(message, **kw)
+
     @inlineCallbacks
     def _connectionSucceeded(self, cxn):
         try:
@@ -261,8 +265,7 @@ class NodeAPI(resource.Resource):
             def relay(c, data, message):
                 source, payload = data
                 kw = dict(payload)
-                for t in transports.values():
-                    t.sendMessage(message, **kw)
+                self.sendMessage(message, **kw)
             messages = ['node.server_starting', 'node.server_started',
                         'node.server_stopping', 'node.server_stopped',
                         'node.list_updated', 'Server Connected', 'Server Disconnected']
@@ -277,17 +280,12 @@ class NodeAPI(resource.Resource):
             
             def serverConnected(c, data):
                 ID, name = data
-                self._serverNames[ID] = name
-                for t in transports.values():
-                    t.sendMessage('Server Connected', name=name)
+                self.sendMessage('Server Connected', name=name)
             yield cxn.manager.notify_on_connect.connect(serverConnected)
             
             def serverDisconnected(c, data):
-                ID = data
-                if ID in self._serverNames:
-                    name = self._serverNames[ID]
-                    for t in transports.values():
-                        t.sendMessage('Server Disconnected', name=name)
+                ID, name = data
+                self.sendMessage('Server Disconnected', name=name)
             yield cxn.manager.notify_on_disconnect.connect(serverDisconnected)
             
         except Exception, e:
