@@ -155,7 +155,9 @@ public class JSONTransport {
 	public void invokeMethod(String method, JSONArray args, JSONObject kw, JSONRequestCallback callback) {
         final String id = Integer.toString(nextId);
         nextId += 1;
-        requestHandlers.put(id, callback);
+        if (callback != null) {
+        	requestHandlers.put(id, callback);
+        }
         
         JSONObject data = new JSONObject();
         data.put("id", new JSONString(id));

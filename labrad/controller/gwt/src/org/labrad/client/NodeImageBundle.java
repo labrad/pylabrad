@@ -4,7 +4,7 @@ import com.google.gwt.user.client.ui.AbstractImagePrototype;
 import com.google.gwt.user.client.ui.ImageBundle;
 
 public interface NodeImageBundle extends ImageBundle {
-    /**
+	/**
      * Server information.
      */
 	@Resource("org/labrad/public/information.gif")

@@ -3,9 +3,19 @@ package org.labrad.client;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.JavaScriptObject;
+import com.google.gwt.json.client.JSONArray;
+import com.google.gwt.json.client.JSONString;
+import com.google.gwt.user.client.ui.ClickListener;
 import com.google.gwt.user.client.ui.FlowPanel;
 import com.google.gwt.user.client.ui.Grid;
+import com.google.gwt.user.client.ui.HasHorizontalAlignment;
+import com.google.gwt.user.client.ui.HasVerticalAlignment;
+import com.google.gwt.user.client.ui.HorizontalPanel;
+import com.google.gwt.user.client.ui.Image;
+import com.google.gwt.user.client.ui.Label;
+import com.google.gwt.user.client.ui.PushButton;
 import com.google.gwt.user.client.ui.Widget;
 
 public class ControlPanel extends FlowPanel {
@@ -25,6 +35,8 @@ public class ControlPanel extends FlowPanel {
         public final native JsArray<String> getNodes() /*-{ return this[1]; }-*/;
         public final native JsArray<JsArray<ServerInfo>> getServerInfo() /*-{ return this[2]; }-*/;
     }
+    
+    private final static NodeImageBundle images = (NodeImageBundle)GWT.create(NodeImageBundle.class);
     
     public void fetchTable() {
         transport.invokeMethod("status", new JSONTransport.JSONRequestCallback() {
@@ -48,14 +60,47 @@ public class ControlPanel extends FlowPanel {
         });
     }
     
+    private Widget makeNodeControl(final String nodename) {
+    	final PushButton b = new PushButton(images.restartServerIcon().createImage());
+    	b.getUpDisabledFace().setImage(new Image("throbber.gif"));
+    	b.addClickListener(new ClickListener() {
+			public void onClick(Widget sender) {
+				b.setEnabled(false);
+				JSONArray args = new JSONArray();
+				args.set(0, new JSONString(nodename));
+				transport.invokeMethod("refresh_servers", args, new JSONTransport.JSONRequestCallback() {
+					public void onError(Throwable error) {
+						b.setEnabled(true);
+						fetchTable();
+					}
+
+					public void onResponseReceived(JavaScriptObject response) {
+						b.setEnabled(true);
+						fetchTable();
+					}
+				});
+			}
+    	});
+    	HorizontalPanel p = new HorizontalPanel();
+    	p.add(new Label(nodename));
+    	p.add(b);
+    	return p;
+    }
+    
     public void makeTable(List<String> servers, List<String> nodes, List<List<ServerInfo>> info) {
+    	if (table != null) {
+    		remove(table);
+    	}
         table = new Grid(servers.size()+1, nodes.size()+1);
         
         int row, col;
         
         for (col = 0; col < nodes.size(); col++) {
-            table.setText(0, col+1, nodes.get(col));
-            table.getCellFormatter().addStyleName(0, col+1, "centered-cell");
+            table.setWidget(0, col+1, makeNodeControl(nodes.get(col)));
+            table.getCellFormatter().setAlignment(0, col+1,
+            		HasHorizontalAlignment.ALIGN_RIGHT,
+            		HasVerticalAlignment.ALIGN_MIDDLE);
+            table.getCellFormatter().addStyleName(0, col+1, "padded-cell");
         }
         for (row = 0; row < servers.size(); row++) {
             table.setText(row+1, 0, servers.get(row));
