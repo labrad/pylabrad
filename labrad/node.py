@@ -74,15 +74,19 @@ class ServerProcess(ProcessProtocol):
         self.output = []
         
     def doOnce(self, func, attr, *a, **kw):
-        def done(result):
-            delattr(self, attr)
+        def done(result, attr):
+            if hasattr(self, attr):
+                delattr(self, attr)
             return result
         if not hasattr(self, attr):
-            setattr(self, attr, util.DeferredSignal())
+            ds = util.DeferredSignal()
+            setattr(self, attr, ds)
             d = func(*a, **kw)
-            d.addBoth(done)
-            d.chainDeferred(getattr(self, attr))
-        return getattr(self, attr)()
+            d.addBoth(done, attr)
+            d.chainDeferred(ds)
+        else:
+            ds = getattr(self, attr)
+        return ds()
         
     def start(self):
         return self.doOnce(self._doStart, '_onStartup')
@@ -91,6 +95,7 @@ class ServerProcess(ProcessProtocol):
     def _doStart(self):
         if self.running:
             return
+        self.startup = util.DeferredSignal()
         
         print "starting '%s'..." % self.name
         print "path:", self.path
@@ -143,6 +148,7 @@ class ServerProcess(ProcessProtocol):
     def _doStop(self):
         if not self.running:
             return
+        self.shutdown = util.DeferredSignal()
         print "stopping '%s'..." % self.name
         dispatcher.send("server_stopping", sender=self, server=self.name)
         d = self.shutdown()
@@ -159,14 +165,11 @@ class ServerProcess(ProcessProtocol):
         except:
             pass
 
-    def restart(self):
-        return self.doOnce(self._doRestart, '_onRestart')
-
     @inlineCallbacks
-    def _doRestart(self):
+    def restart(self):
         yield self.stop()
         yield self.start()
-
+        
     def outReceived(self, data):
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]

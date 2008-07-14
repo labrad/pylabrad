@@ -345,10 +345,10 @@ class MessageContext(object):
     
     implements(IMessageContext)
     
-    def __init__(self, source, context, ID):
+    def __init__(self, source, context, target):
         self.source = source
-        self.context = context
-        self.ID = ID
+        self.ID = context
+        self.target = target
 
 # factory for churning out LabRAD connections
 factory = protocol.ClientCreator(reactor, LabradProtocol)

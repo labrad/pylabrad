@@ -115,9 +115,9 @@ class IRequestContext(Interface):
 class IMessageContext(Interface):
     """Sent as the first argument to message handlers."""
     
-    context = Attribute("The context in which the message was sent, as a tuple of (high word, low word).")
+    ID = Attribute("The context in which the message was sent, as a tuple of (high word, low word).")
     source = Attribute("The numeric ID of the message source.")
-    ID = Attribute("The numeric ID of the handler to which the message was sent.")
+    target = Attribute("The numeric ID of the handler to which the message was sent.")
     
     
 class IRequestHandler(Interface):

@@ -16,18 +16,18 @@ import com.google.gwt.json.client.JSONObject;
 import com.google.gwt.json.client.JSONString;
 import com.google.gwt.user.client.Command;
 import com.google.gwt.user.client.DeferredCommand;
-import com.google.gwt.user.client.ui.Label;
-import com.google.gwt.user.client.ui.VerticalPanel;
 
 public class JSONTransport {
 	private final String baseurl;
-	private VerticalPanel logger;
+	private LogWindow logger;
 	private Command pull;
 	private int nextId;
     private Map<String, JSONRequestCallback> requestHandlers;
     private Map<String, List<JSONMessageListener>> messageListeners;
     private RequestBuilder pullRequester, pushRequester;
 	
+    private int LOG_LENGTH = 10;
+    
 	public JSONTransport(String url, String ID) {
 		baseurl = url;
 		nextId = 1;
@@ -46,12 +46,12 @@ public class JSONTransport {
 		pull.execute();
 	}
 	
-	public void setLogger(VerticalPanel logger) {
+	public void setLogger(LogWindow logger) {
 		this.logger = logger;
 	}
 	
     private void log(String message) {
-        if (logger != null) logger.insert(new Label(message), 0);
+    	logger.log(message);
     }
     
 	private void pullResponses() {
@@ -108,7 +108,7 @@ public class JSONTransport {
 
 	private void handleMessage(String message, JsArray<JavaScriptObject> args, JavaScriptObject kw) {
 		log("Message: " + message +
-		    ".  args: " + args.toString() + 
+		    ".  args: " + args.toString() +
 		    ".  kw: " + kw.toString());
 		//JavaScriptObject[] argsArray = JsArray.toArray(args);
 		JsObject kwObject = (JsObject) kw;
@@ -125,7 +125,7 @@ public class JSONTransport {
 	}
 	
 	private void handleResult(String id, JavaScriptObject result) {
-        log("Result (" + id + "): " + result.toString());
+        //log("Result (" + id + "): " + result.toString());
         JSONRequestCallback callback = requestHandlers.get(id);
         requestHandlers.remove(id);
         if (callback != null) callback.onResponseReceived(result);

@@ -95,18 +95,30 @@ class PullHandler(resource.Resource):
         request.finish()
     
 class JSONTransport(resource.Resource):
-    def __init__(self):
+    timeoutDelay = 100 # time to wait before killing this transport
+    pullDelay = 10 # maximum length of time to keep a pull request open
+    
+    def __init__(self, ID):
         self.children = {}
         self.putChild('push', PushHandler(self))
         self.putChild('pull', PullHandler(self))
         self.responses = []
         self.waiter = None
+        self.timeoutCall = reactor.callLater(self.timeoutDelay, self._timeout)
+        self.ID = ID
+    
+    def resetTimeout(self):
+        self.timeoutCall.reset(self.timeoutDelay)
+    
+    def _timeout(self):
+        del transports[self.ID]
     
     def lookupMethod(self, name):
         return getattr(self, 'remote_' + name)
     
     def invokeMethod(self, id, name, *args, **kw):
         """Called when the client invokes a method on the server."""
+        self.resetTimeout()
         func = self.lookupMethod(name)
         d = defer.maybeDeferred(func, *args, **kw)
         d.addCallback(self._addResult, id)
@@ -118,12 +130,13 @@ class JSONTransport(resource.Resource):
         If no responses are waiting, return a deferred that will be
         fired later when responses become available.
         """
+        self.resetTimeout()
         d = defer.Deferred()
         if len(self.responses):
             reactor.callLater(0, d.callback, self._flushResponses())
         else:
             self.waiter = d
-            timeoutCall = reactor.callLater(10, self._finishWaiter)
+            timeoutCall = reactor.callLater(self.pullDelay, self._finishWaiter)
             d.addBoth(self._cancelTimeout, timeoutCall)
         return d
     
@@ -158,8 +171,8 @@ class JSONTransport(resource.Resource):
         return resp
         
 class NodeProxy(JSONTransport):
-    def __init__(self, cxn):
-        JSONTransport.__init__(self)
+    def __init__(self, cxn, ID):
+        JSONTransport.__init__(self, ID)
         self.cxn = cxn
     
     @inlineCallbacks
@@ -197,16 +210,16 @@ class NodeProxy(JSONTransport):
             row = []
             for node in nodes:
                 if node not in status_dict:
-                    row.append([False, "", "unavailable", server, [], []])
+                    row.append([False, '', 'unavailable', server, [], []])
                 else:
                     found = False
                     for name, desc, ver, inst, vars, instances in status_dict[node]:
                         if name == server:
-                            row.append([True, desc, "Version: " + ver, inst, vars, instances])
+                            row.append([True, desc, 'Version: ' + ver, inst, vars, instances])
                             found = True
                             break
                     if not found:
-                        row.append([False, "", "unavailable", server, [], []])
+                        row.append([False, '', 'unavailable', server, [], []])
             status.append(row)
         returnValue([servers, nodes, status])
     
@@ -239,7 +252,7 @@ class NodeProxy(JSONTransport):
     
     def remote_whitelist(self, address):
         return self.cxn.manager.whitelist(str(address))
-        
+
 transports = {}
     
 class NodeAPI(resource.Resource):
@@ -281,12 +294,14 @@ class NodeAPI(resource.Resource):
             def serverConnected(c, data):
                 ID, name = data
                 self.sendMessage('Server Connected', name=name)
-            yield cxn.manager.notify_on_connect.connect(serverConnected)
+            cxn.manager.addListener(serverConnected, ID=12345678)
+            yield cxn.manager.subscribe_to_named_message('Server Connect', 12345678, True)
             
             def serverDisconnected(c, data):
                 ID, name = data
                 self.sendMessage('Server Disconnected', name=name)
-            yield cxn.manager.notify_on_disconnect.connect(serverDisconnected)
+            cxn.manager.addListener(serverDisconnected, ID=12345679)
+            yield cxn.manager.subscribe_to_named_message('Server Disconnect', 12345679, True)
             
         except Exception, e:
             print e
@@ -316,12 +331,12 @@ class NodeAPI(resource.Resource):
             ID = generateNonce()
             if ID not in transports:
                 break
-        transports[ID] = NodeProxy(self.cxn)
+        transports[ID] = NodeProxy(self.cxn, ID)
         return ID
 
 class DigestAuthRequest(server.Request):
     def process(self):
-        "Process a request."
+        """Process a request."""
         if self.checkAuthorization():
             server.Request.process(self)
         else:
@@ -365,12 +380,12 @@ class DigestAuthRequest(server.Request):
         # set various default headers
         self.setHeader('server', server.version)
         self.setHeader('date', http.datetimeToString())
-        self.setHeader('content-type', "text/html")
+        self.setHeader('content-type', 'text/html')
 
-        realm = "LabRAD Controller"
+        realm = 'LabRAD Controller'
         nonce = generateNonce()
         opaque = generateNonce()
-        msg = '''Digest realm="%s", qop="auth", nonce="%s", opaque="%s"'''
+        msg = 'Digest realm="%s", qop="auth", nonce="%s", opaque="%s"'
         self.setHeader('WWW-Authenticate', msg % (realm, nonce, opaque))
         self.write('<html><h1>Invalid username/password!</h1></html>')
         self.finish()

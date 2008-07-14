@@ -11,7 +11,6 @@ import com.google.gwt.json.client.JSONParser;
 import com.google.gwt.json.client.JSONString;
 import com.google.gwt.user.client.ui.RootPanel;
 import com.google.gwt.user.client.ui.TabPanel;
-import com.google.gwt.user.client.ui.VerticalPanel;
 
 /**
  * Entry point classes define <code>onModuleLoad()</code>.
@@ -40,7 +39,7 @@ public class NodeController implements EntryPoint, RequestCallback {
         tabs.add(new ControlPanel(transport), "Nodes");
         tabs.add(new IPLists(transport), "Security");
         
-        VerticalPanel logger = new VerticalPanel();
+        LogWindow logger = new LogWindow();
         transport.setLogger(logger);
         tabs.add(logger, "Log");
 
