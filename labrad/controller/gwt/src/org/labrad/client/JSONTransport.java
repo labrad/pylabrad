@@ -26,8 +26,6 @@ public class JSONTransport {
     private Map<String, List<JSONMessageListener>> messageListeners;
     private RequestBuilder pullRequester, pushRequester;
 	
-    private int LOG_LENGTH = 10;
-    
 	public JSONTransport(String url, String ID) {
 		baseurl = url;
 		nextId = 1;
