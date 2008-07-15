@@ -78,6 +78,9 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         for p in params:
             if p not in args:
                 raise Exception("'%s' is not a valid parameter." % p)
+            # turn single string annotations into lists
+            if isinstance(params[p], str):
+                params[p] = [params[p]]
 
         Nparams = len(args)
         Noptional = 0 if defaults is None else len(defaults)
