@@ -96,12 +96,12 @@ class GPIBDeviceServer(DeviceServer):
     def serverConnected(self, ID, name):
         """Refresh devices when a gpib server comes on line."""
         if 'gpib' in name.lower():
-            self.refreshDevices()
+            self.refreshDeviceList()
     
     def serverDisconnected(self, ID, name):
         """Refresh devices when a gpib server goes off line."""
         if 'gpib' in name.lower():
-            self.refreshDevices()
+            self.refreshDeviceList()
     
     @inlineCallbacks
     def findDevices(self):
