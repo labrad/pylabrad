@@ -283,6 +283,11 @@ class ProcNode(MultiService):
         return self._reconnect()
 
     def _reconnect(self):
+        ## hack: manually clearing the dispatcher...
+        dispatcher.connections.clear()
+        dispatcher.senders.clear()
+        dispatcher._boundMethods.clear()
+        ## end hack
         if hasattr(self, 'cxn'):
             self.removeService(self.cxn)
             del self.cxn
@@ -333,30 +338,40 @@ class NodeServer(LabradServer):
     @inlineCallbacks
     def initServer(self):
         self.servers = {}
-        self.starting = {}
-        self.running = {}
-        self.stopping = {}
+        self.starters = {}
+        self.runners = {}
+        self.stoppers = {}
         self.initMessages()
         yield self.refreshServers()
         
-    def initMessages(self):
+    def initMessages(self, connect=True):
         """Set up messages to be dispatched locally and sent out over LabRAD."""
         # set up messages to be relayed out over LabRAD
-        def _relayMessage(signal, sender, **kw):
-            kw['node'] = self.name
-            #print 'sending message:', 'node.'+signal, tuple(kw.items())
-            self.client.manager.send_named_message('node.' + signal, tuple(kw.items()))
+        if connect:
+            f = dispatcher.connect
+        else:
+            f = dispatcher.disconnect
+        
         messages = ['server_starting', 'server_started',
                     'server_stopping', 'server_stopped',
                     'list_updated']
         for message in messages:
-            dispatcher.connect(_relayMessage, message, weak=False)
+            f(self._relayMessage, message)
             
         # set up message handlers for subprocess
-        dispatcher.connect(self.subprocessStarting, 'server_starting')
-        dispatcher.connect(self.subprocessStarted, 'server_started')
-        dispatcher.connect(self.subprocessStopping, 'server_stopping')
-        dispatcher.connect(self.subprocessStopped, 'server_stopped')
+        f(self.subprocessStarting, 'server_starting')
+        f(self.subprocessStarted, 'server_started')
+        f(self.subprocessStopping, 'server_stopping')
+        f(self.subprocessStopped, 'server_stopped')
+
+    def _relayMessage(self, signal, sender, **kw):
+        kw['node'] = self.name
+        #print 'sending message:', 'node.'+signal, tuple(kw.items())
+        self.client.manager.send_named_message('node.' + signal, tuple(kw.items()))
+
+    def stopServer(self):
+        print 'stopServer called.'
+        self.initMessages(False)
 
     @inlineCallbacks
     def loadConfig(self):
@@ -442,30 +457,30 @@ class NodeServer(LabradServer):
         
     def subprocessStarting(self, sender):
         """Called when a subprocess begins connecting."""
-        self.starting[sender.name] = sender
+        self.starters[sender.name] = sender
 
     def subprocessStarted(self, sender):
         """Called when a subprocess successfully connects."""
-        if sender.name in self.starting:
-            del self.starting[sender.name]
-        self.running[sender.name] = sender
+        if sender.name in self.starters:
+            del self.starters[sender.name]
+        self.runners[sender.name] = sender
 
     def subprocessStopping(self, sender):
         """Called when a subprocess successfully disconnects."""
-        if sender.name in self.running:
-            del self.running[sender.name]
-        self.stopping[sender.name] = sender
+        if sender.name in self.runners:
+            del self.runners[sender.name]
+        self.stoppers[sender.name] = sender
 
     def subprocessStopped(self, sender):
         """Called when a subprocess successfully disconnects."""
-        if sender.name in self.running:
-            del self.running[sender.name]
-        if sender.name in self.stopping:
-            del self.stopping[sender.name]
+        if sender.name in self.runners:
+            del self.runners[sender.name]
+        if sender.name in self.stoppers:
+            del self.stoppers[sender.name]
         
     def stopServer(self):
         """Stop this node by killing all subprocesses."""
-        stoppages = [srv.stop() for srv in self.running.values()]
+        stoppages = [srv.stop() for srv in self.runners.values()]
         return defer.DeferredList(stoppages)
         
     @setting(1, name=['s'], environ=['*(ss)'], returns=['s'])
@@ -487,18 +502,18 @@ class NodeServer(LabradServer):
     @setting(2, name=['s'], returns=['s'])
     def stop(self, c, name):
         """Stop a running server instance."""
-        if name not in self.running:
+        if name not in self.runners:
             raise Exception("'%s' is not running." % name)
-        srv = self.running[name]
+        srv = self.runners[name]
         yield srv.stop()
         returnValue(srv.name)
 
     @setting(3, name=['s'], returns=['s'])
     def restart(self, c, name):
         """Restart a running server instance."""
-        if name not in self.running:
+        if name not in self.runners:
             raise Exception("'%s' is not running." % name)
-        srv = self.running[name]
+        srv = self.runners[name]
         yield srv.restart()
         returnValue(srv.name)
 
@@ -513,7 +528,7 @@ class NodeServer(LabradServer):
 
         Returns a list of tuples of server name and instance name.
         """
-        return sorted((s.__class__.name, n) for n, s in self.running.items())
+        return sorted((s.__class__.name, n) for n, s in self.runners.items())
 
     @setting(12, returns=['*s'])
     def local_servers(self, c):
@@ -531,7 +546,7 @@ class NodeServer(LabradServer):
         return [self.serverInfo(item[1]) for item in sorted(self.servers.items())]
 
     def serverInfo(self, cls):
-        instances = [n for n, s in self.running.items()
+        instances = [n for n, s in self.runners.items()
                                 if s.__class__.name == cls.name]
         return (cls.name, cls.__doc__ or '', cls.version,
                 cls.instancename, cls.environVars, instances)
@@ -614,16 +629,16 @@ class NodeServer(LabradServer):
     @setting(100, name=['s'], returns=['*(ts)'])
     def server_output(self, c, name):
         """Get output from a server's stdout."""
-        if name not in self.running:
+        if name not in self.runners:
             raise Exception("'%s' is not running." % name)
-        return self.running[name].output
+        return self.runners[name].output
 
     @setting(101, name=['s'], returns=[''])
     def clear_output(self, c, name):
         """Clear the stdout buffer of a server."""
-        if name not in self.running:
+        if name not in self.runners:
             raise Exception("'%s' is not running." % name)
-        self.running[name].clearOutput()
+        self.runners[name].clearOutput()
 
     @setting(102, name=['s'], returns=['s'])
     def server_version(self, c, name):
