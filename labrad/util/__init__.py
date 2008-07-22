@@ -118,7 +118,22 @@ def extractKey(d, key, default):
     del d[key]
     return val
 
-class MultiDict(dict):
+class SafeIterDict(dict):
+    """A dict subclass that allows insertion and deletion while iterating.
+    
+    This is accomplished by overriding keys, items, values, etc. to return
+    copies of their respective lists, rather than the lists themselves.
+    Note that this negates the efficiency gains of using the iter* methods.
+    """
+    keys = lambda self: list(dict.keys(self))
+    items = lambda self: list(dict.items(self))
+    values = lambda self: list(dict.values(self))
+    iterkeys = lambda self: iter(self.keys())
+    iteritems = lambda self: iter(self.items())
+    itervalues = lambda self: iter(self.values())
+    __iter__ = lambda self: iter(self.keys())
+
+class MultiDict(SafeIterDict):
     """Dictionary with multiple keys to the same value."""
     def __init__(self, *a, **kw):
         dict.__init__(self, *a, **kw)

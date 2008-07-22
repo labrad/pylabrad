@@ -27,6 +27,9 @@ class labradUnitsTests(unittest.TestCase):
         pass
         
     def testArithmetic(self):
+        self.assertEquals(U.Value(5.0, None) * U.m, 5.0 * U.m)
+        
         # addition
-        pass
+        self.assertEquals(1.0 * U.kg + 0.0, 1.0 * U.kg)
+        
 
