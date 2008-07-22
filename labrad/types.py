@@ -581,6 +581,9 @@ class LRValue(LRType):
         return cls()
         
     def __flatten__(self, v):
+        # update unit to reflect the actual flattened value
+        if isinstance(v, U.WithUnit):
+            self.unit = v.unit
         return pack('d', float(v))
 
 registerTypeFunc((float, Value), LRValue.__lrtype__)
@@ -936,6 +939,7 @@ class LRError(LRType):
 
     def __flatten__(self, E):
         """Flatten python Exception to LabRAD error."""
+        # TODO: add ability to grab tracebacks here, or more information of other types
         code = getattr(E, 'code', 0)
         msg = getattr(E, 'msg', repr(E))
         payload = getattr(E, 'payload', None)
@@ -970,7 +974,7 @@ class Error(Exception):
         return '(%d) %s [payload=%r]' % (self.code, self.msg, self.payload)
 
     def __repr__(self):
-        return 'Error(%r, %r, %r)' % (self.code, self.msg, self.payload)
+        return 'Error(code=%r, msg=%r, payload=%r)' % (self.code, self.msg, self.payload)
 
     def __lrtype__(self):
         return LRError(getType(self.payload))

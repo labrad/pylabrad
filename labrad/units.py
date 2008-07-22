@@ -150,7 +150,10 @@ class WithUnit(object):
         Classes will be created if they haven't been already.
         """
         # find class with units for this numeric type
-        cls = cls._numericTypes[numType]
+        try:
+            cls = cls._numericTypes[numType]
+        except KeyError:
+            raise TypeError('Cannot use units with instances of type %s' % (numType,))
         
         # find or create a class with this specific unit
         unit = Unit(unit)
@@ -363,6 +366,14 @@ class Complex(WithUnit, complex):
         return self.inUnitsOf(unit).value
 WithUnit._numericTypes[complex] = Complex
 
+# add support for numeric types returned by most numpy/scipy functions
+try:
+    import numpy
+    WithUnit._numericTypes[numpy.float64] = Value
+    WithUnit._numericTypes[numpy.complex128] = Complex
+except:
+    pass
+
 #if useNumpy:
 #    class ValueArray(WithUnit, ndarray):
 #        _numType = ndarray
@@ -438,6 +449,7 @@ class Unit(object):
         
     @staticmethod
     def _stringUnit(name):
+        """Create a unit that has a name, but is outside the usual SI system."""
         return Unit(NumberDict(), 1., [0]*9, 0, name)
     
     def _init(self, names, factor, powers, offset=0, lex_names=''):
@@ -518,9 +530,11 @@ class Unit(object):
         return not self.__eq__(other)
         
     def __mul__(self, other):
-        if isinstance(other, Unit):
+        if other is None:
+            return self
+        elif isinstance(other, Unit):
             if self.offset != 0 or other.offset != 0:
-                raise TypeError("cannot multiply units with non-zero offset")
+                raise TypeError("cannot multiply units with non-zero offset: '%s', '%s'" % (self, other))
             return Unit(self.names + other.names,
                         self.factor * other.factor,
                         [a + b for a, b in zip(self.powers, other.powers)],
@@ -531,9 +545,13 @@ class Unit(object):
     __rmul__ = __mul__
 
     def __div__(self, other):
-        if isinstance(other, Unit):
+        if other is None:
+            if self.offset != 0:
+                raise TypeError("cannot divide unit with non-zero offset: '%s'" % (self,))
+            return self
+        elif isinstance(other, Unit):
             if self.offset != 0 or other.offset != 0:
-                raise TypeError("cannot divide units with non-zero offset")
+                raise TypeError("cannot divide units with non-zero offset: '%s', '%s'" % (self, other))
             return Unit(self.names - other.names,
                         self.factor / other.factor,
                         [a - b for a, b in zip(self.powers, other.powers)],
@@ -542,9 +560,17 @@ class Unit(object):
         return WithUnit(1.0 / other, self)
 
     def __rdiv__(self, other):
+        if other is None:
+            if self.offset != 0:
+                raise TypeError("cannot divide unit with non-zero offset: '%s'" % (self,))
+            return Unit(NumberDict() - self.names,
+                        1.0 / self.factor,
+                        [- b for b in self.powers],
+                        self.offset,
+                        NumberDict() - self.lex_names)
         if isinstance(other, Unit):
             if self.offset != 0 or other.offset != 0:
-                raise TypeError("cannot divide units with non-zero offset")
+                raise TypeError("cannot divide units with non-zero offset: '%s', '%s'" % (self, other))
             return Unit(other.names - self.names,
                         other.factor / self.factor,
                         [a - b for a, b in zip(other.powers, self.powers)],
@@ -554,7 +580,7 @@ class Unit(object):
 
     def __pow__(self, other):
         if self.offset != 0:
-            raise TypeError("cannot exponentiate units with non-zero offset")
+            raise TypeError("cannot exponentiate unit with non-zero offset: '%s'" % (self,))
         if isinstance(other, int):
             return Unit(self.names * other,
                         pow(self.factor, other),
@@ -574,7 +600,7 @@ class Unit(object):
                         [p * other for p in self.powers],
                         self.offset,
                         other * self.lex_names)
-        raise TypeError('Only integer or rational exponents allowed')
+        raise TypeError("Only integer or rational exponents allowed")
 
     def isCompatible(self, other):     # added 1998/10/01 GPW
         """
@@ -597,13 +623,12 @@ class Unit(object):
         """
         other = Unit(other)
         if not self.isCompatible(other):
-            raise TypeError('Incompatible units')
+            raise TypeError("Incompatible units: '%s', '%s'" % (self, other))
         if other is None:
             return self.factor
         if self.offset != other.offset and self.factor != other.factor:
             raise TypeError(('Unit conversion (%s to %s) cannot be expressed ' +
-                             'as a simple multiplicative factor') % \
-                             (self.name, other.name))
+                             'as a simple multiplicative factor') % (self, other))
         return self.factor / other.factor
 
     def conversionTupleTo(self, other): # added 1998/09/29 GPW
@@ -615,11 +640,11 @@ class Unit(object):
         @rtype: (C{float}, C{float})
         @raises TypeError: if the units are not compatible
         """
-        other = Unit(other)
-        if not self.isCompatible(other):
-            raise TypeError('Incompatible units')
         if other is None:
             return 1.0, 0.0
+        other = Unit(other)
+        if not self.isCompatible(other):
+            raise TypeError("Incompatible units: '%s', '%s'" % (self, other))
 
         # let (s1,d1) be the conversion tuple from 'self' to base units
         #   (ie. (x+d1)*s1 converts a value x from 'self' to base units,

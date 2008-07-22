@@ -35,7 +35,7 @@ from twisted.plugin import IPlugin
 from zope.interface import Interface, Attribute, implements
 
 from labrad import util, constants as C, types as T, errors
-from labrad.decorators import setting
+from labrad.decorators import setting, messageHandler
 from labrad.protocol import LabradProtocol
 from labrad.interfaces import ILabradServer, IClientAsync
 
@@ -267,16 +267,16 @@ class LabradServer(ClientFactory):
         """
         code = getattr(e, 'code', 0)
         if self.sendTracebacks:
-            f = failure.Failure(e)
+            f = failure.Failure()
             tb = f.getTraceback(elideFrameworkCode=True)
             msg = 'Remote %s' % tb
         else:
-            msg = getattr(e, 'msg', str(e))
+            msg = e.__class__.name + ': ' + getattr(e, 'msg', str(e))
         msg = '[%s] %s' % (self.name, msg)
         return T.Error(msg, code)
         
     # registering setting and signal handlers
-    def _findHandlers(self):
+    def _findSettingHandlers(self):
         """Find all settings defined for this server."""
         # this is an ad-hoc test; we really should check for the IRequestHandler interface
         members = [getattr(self, name) for name in dir(self)]
@@ -379,7 +379,7 @@ class LabradServer(ClientFactory):
         # register handlers for settings and signals
         mgr = self.client.manager
         p = mgr.packet()
-        for s in self._findHandlers():
+        for s in self._findSettingHandlers():
             if isinstance(s, Signal):
                 self.addSignal(s, p)
             else:
