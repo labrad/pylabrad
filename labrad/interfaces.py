@@ -136,6 +136,11 @@ class IRequestHandler(Interface):
     def handleRequest(context, data):
         """Handle a remote request."""
 
+class IMessageHandler(Interface):
+    pass
+
+class INamedMessageHandler(Interface):
+    pass
 
 class IClientAsync(Interface):
     """An asynchronous LabRAD client."""
