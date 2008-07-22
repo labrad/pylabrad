@@ -135,6 +135,13 @@ class AsyncPacketWrapper(object):
             self._packet.append((ID, args, tag, key))
             return self
         return wrapped
+    
+    # TODO: implement flattened versions of packet object to allow for packet forwarding
+    #def __lrtype__(self):
+    #    pass
+    
+    #def __lrflatten__(self):
+    #    pass
 
 class AsyncServerWrapper:
     """Represents a remote LabRAD server."""
