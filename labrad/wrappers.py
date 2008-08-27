@@ -319,7 +319,7 @@ class ClientAsync(object):
         deletions = [n for n in self.servers if n not in names]
 
         actions = [self._addServer(*s) for s in additions] +\
-                  [self._refreshServer(n) for f in refreshes] +\
+                  [self._refreshServer(f) for f in refreshes] +\
                   [self._delServer(n) for n in deletions]
         yield defer.DeferredList(actions, fireOnOneErrback=True)
         returnValue(self.servers)
