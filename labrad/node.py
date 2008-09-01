@@ -32,7 +32,6 @@ from datetime import datetime
 from ConfigParser import SafeConfigParser
 
 from labrad import util, types as T
-from labrad.config import ConfigFile
 from labrad.server import ILabradServer, LabradServer, setting
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 

@@ -58,18 +58,6 @@ def install():
     file_created(nodeShortcut)
     print "done."
 	
-    # create local copy of configuration
-    print "Creating local copy of node config...",
-    create_local_copy(os.path.join(configPath, "node-template.ini"),
-                      os.path.join(configPath, "node.ini"))
-    nodeConf = os.path.join(menuPath, "LabRAD Node Config.lnk")
-    if os.path.isfile(nodeConf):
-        os.remove(nodeConf)
-    create_shortcut(os.path.join(configPath, "node.ini"),
-                    "Node Configuration", nodeConf)
-    file_created(nodeConf)
-    print "done."
-
     print "Creating controller shortcut...",
     controllerShortcut = os.path.join(menuPath, "LabRAD Controller.lnk")
     if os.path.isfile(controllerShortcut):

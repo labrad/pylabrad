@@ -271,7 +271,7 @@ class LabradServer(ClientFactory):
             tb = f.getTraceback(elideFrameworkCode=True)
             msg = 'Remote %s' % tb
         else:
-            msg = e.__class__.name + ': ' + getattr(e, 'msg', str(e))
+            msg = e.__class__.__name__ + ': ' + getattr(e, 'msg', str(e))
         msg = '[%s] %s' % (self.name, msg)
         return T.Error(msg, code)
         
