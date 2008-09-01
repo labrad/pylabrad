@@ -28,8 +28,6 @@ try:
 except:
     useSSL = False
 
-from nevow import appserver
-
 from labrad import constants as C
 from labrad.controller import makeNodeControllerSite
 
