@@ -21,7 +21,7 @@ from distutils.core import setup
 doclines = __doc__.split('\n')
 
 setup(name='pylabrad',
-      version='0.10.2',
+      version='0.10.3',
       author='Matthew Neeley',
       author_email='maffoo@users.sourceforge.net',
       
