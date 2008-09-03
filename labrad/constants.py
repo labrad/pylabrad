@@ -32,6 +32,7 @@ SERVERS_LIST = 1
 SETTINGS_LIST = 2
 LOOKUP = 3
 HELP = 10
+MESSAGE_SUBSCRIBE = 60
 
 # default timeout in seconds
 TIMEOUT = 30

@@ -272,6 +272,7 @@ class LabradProtocol(protocol.Protocol):
                               for c in (context, None)
                               for i in (ID, None)
                               if (s, c, i) in self.listeners)
+            keys = list(keys)
             for key in keys:
                 for listener, args, kw in self.listeners[key]:
                     listener(msgCtx, data, *args, **kw)

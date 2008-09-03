@@ -375,7 +375,6 @@ class LabradServer(ClientFactory):
         and set up message handlers for messages coming from the manager.
         """
         log.msg('%s starting...' % self.name)
-        
         # register handlers for settings and signals
         mgr = self.client.manager
         p = mgr.packet()

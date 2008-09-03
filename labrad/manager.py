@@ -27,12 +27,14 @@ class ClientManager:
     
     implements(ILabradManager)
     
+    ID = C.MANAGER_ID
+    
     def __init__(self, cxn):
         self.cxn = cxn
 
     def _send(self, packet, *args, **kw):
         """Send a request to the manager."""
-        return self.cxn.sendRequest(C.MANAGER_ID, packet, *args, **kw)
+        return self.cxn.sendRequest(self.ID, packet, *args, **kw)
 
     @inlineCallbacks
     def _getIDList(self, setting, data=None):
@@ -68,5 +70,11 @@ class ClientManager:
         resp = yield self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         returnValue((description, accepts, returns, notes))
+        
+    @inlineCallbacks
+    def subscribeToNamedMessage(self, name, ID, enable=True):
+        """Subscribe to or stop a named message."""
+        packet = [(C.MESSAGE_SUBSCRIBE, (name, long(ID), enable))]
+        returnValue((yield self._send(packet)))
 
 registerAdapter(ClientManager, ILabradProtocol, ILabradManager)

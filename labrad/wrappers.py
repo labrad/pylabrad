@@ -27,10 +27,11 @@ from zope.interface import implements
 class AsyncSettingWrapper(object):
     """Represents a setting on a remote LabRAD server."""
     
-    def __init__(self, server, name, labrad_name, ID):
+    def __init__(self, server, name, pyName, ID):
         self.name = self.__name__ = name
         self.ID = ID
-        self._labrad_name = labrad_name
+        self._py_name = pyName
+        self._labrad_name = name
         self._server = server
         self._cxn = server._cxn
         self._prot = self._cxn._cxn
@@ -101,11 +102,11 @@ class AsyncPacketWrapper(object):
 
         for name in server.settings:
             s = server.settings[name]
-            name, labrad_name, ID = s.name, s._labrad_name, s.ID
+            name, pyName, ID = s.name, s._py_name, s.ID
             wrapped = self._wrap(s)
             wrapped.name = name
-            setattr(self, name, wrapped)
-            self.settings[name, labrad_name, ID] = wrapped
+            setattr(self, pyName, wrapped)
+            self.settings[name, pyName, ID] = wrapped
 
     def send(self, **kw):
         """Send this packet to the server."""
@@ -146,13 +147,14 @@ class AsyncPacketWrapper(object):
 class AsyncServerWrapper:
     """Represents a remote LabRAD server."""
     
-    def __init__(self, cxn, name, labrad_name, ID, **kw):
+    def __init__(self, cxn, name, pyName, ID, **kw):
         self._cxn = cxn
         self._mgr = cxn._mgr
         self.ID = ID
         self.name = name
         self.settings = MultiDict()
-        self._labrad_name = labrad_name
+        self._py_name = pyName
+        self._labrad_name = name
         self._kw = kw
 
     def refresh(self):
@@ -165,9 +167,9 @@ class AsyncServerWrapper:
         # get a list of the currently-available settings
         info = yield self._mgr.getServerInfo(self.ID)
         self.__doc__, self.notes, slist = info
-        names, labrad_names, IDs = zip(*slist)
-        names = [self._fixName(n) for n in names]
-        slist = zip(names, labrad_names, IDs)
+        pyNames, names, IDs = zip(*slist)
+        pyNames = [self._fixName(n) for n in pyNames]
+        slist = zip(names, pyNames, IDs)
 
         # determine what to add, update and delete to be current
         additions = [s for s in slist if s[0] not in self.settings]
@@ -208,19 +210,19 @@ class AsyncServerWrapper:
         return name
 
     @inlineCallbacks
-    def _addSetting(self, name, labrad_name, ID):
+    def _addSetting(self, name, pyName, ID):
         try:
             setting = yield wrapAsync(
-                self._settingWrapper, self, name, labrad_name, ID)
+                self._settingWrapper, self, name, pyName, ID)
         except:
             pass
         else:
-            self.settings[name, labrad_name, ID] = setting
-            setattr(self, name, setting)
+            self.settings[name, pyName, ID] = setting
+            setattr(self, pyName, setting)
 
     @inlineCallbacks
     def _refreshSetting(self, name):
-        setting = getattr(self, name)
+        setting = self.settings[name]
         try:
             yield setting._refresh()
         except:
@@ -228,8 +230,9 @@ class AsyncServerWrapper:
         
 
     def _delSetting(self, name):
-        if hasattr(self, name):
-            delattr(self, name)
+        if name in self.settings:
+            setting = self.settings[name]
+            delattr(self, setting._py_name)
             del self.settings[name]
         return defer.succeed(None)
 
@@ -293,25 +296,72 @@ class ClientAsync(object):
     
     def __init__(self, prot):
         self.servers = MultiDict()
+        self._cache = {}
         self._cxn = prot
         self._mgr = ILabradManager(self._cxn)
         self._next_context = 1
         
     _staticAttrs = ['servers', 'refresh', 'context']
 
+    @inlineCallbacks
     def refresh(self):
-        """Refresh the cache of available servers and their settings."""
-        return self._refresh()
+        """Refresh the cache of available servers and their settings.
+        
+        Also set up messages so that servers that connect and disconnect later
+        will be automatically detected, without needing a refresh.
+        """
+
+        try:
+            mgr = self._mgr
+            cxn = self._cxn
+            yield mgr.subscribeToNamedMessage('Server Connect', 314159265, True)
+            yield mgr.subscribeToNamedMessage('Server Disconnect', 314159266, True)
+            cxn.addListener(self._serverConnected, source=mgr.ID, ID=314159265)
+            cxn.addListener(self._serverDisconnected, source=mgr.ID, ID=314159266)
+        
+            yield self._refresh()
+        except Exception, e:
+            print 'error!'
+            print repr(e)
+            raise
+
+    @inlineCallbacks
+    def _serverConnected(self, c, data):
+        """Add a wrapper when a server connects."""
+        ID, name = data
+        pyName = self._fixName(mangle(name))
+        try:
+            yield self._addServer(pyName, name, ID)
+        except Exception, e:
+            print 'Error adding server %d, "%s":' % (ID, name)
+            print str(e)
+        
+    @inlineCallbacks
+    def _serverDisconnected(self, c, data):
+        """Remove the wrapper when a server disconnects."""
+        ID, name = data
+        pyName = self._fixName(mangle(name))
+        try:
+            yield self._delServer(name)
+        except Exception, e:
+            print 'Error removing server %d, "%s":' % (ID, name)
+            print str(e)
 
     @inlineCallbacks
     def _refresh(self):
         """Update the cache of available LabRAD servers."""
         
+        # TODO: when removing servers, don't actually delete the old objects, just cache them
+        # if the server then comes back online later, reuse the same old object so that people
+        # don't need to refresh or update their object references.
+        # For servers, the wrappers can keep their same IDs, since these never change
+        # For settings, the wrappers should be able to update their settings and continue functioning
+        
         # get a list of the currently-available servers
         slist = yield self._mgr.getServersList()
-        names, labrad_names, IDs = zip(*slist)
-        names = [self._fixName(n) for n in names]
-        slist = zip(names, labrad_names, IDs)
+        pyNames, names, IDs = zip(*slist)
+        pyNames = [self._fixName(n) for n in pyNames]
+        slist = zip(names, pyNames, IDs)
 
         # determine what to add, update and delete to be current
         additions = [s for s in slist if s[0] not in self.servers]
@@ -330,19 +380,33 @@ class ClientAsync(object):
         return name
 
     @inlineCallbacks
-    def _addServer(self, name, labrad_name, ID):
-        server = yield wrapAsync(
-            self._serverWrapper, self, name, labrad_name, ID)
-        self.servers[name, labrad_name, ID] = server
-        setattr(self, name, server)
+    def _addServer(self, name, pyName, ID):
+        """Create a wrapper for a new server and add it to the list.
+        
+        Wrappers are cached so that if a server stops and restarts,
+        the old wrapper will be reused and references to it do not
+        need to be updated.
+        """
+        if name in self._cache:
+            # pull from cache if possible
+            server = self._cache[name]
+            yield server._refresh()
+        else:
+            # create a new wrapper
+            server = yield wrapAsync(
+                self._serverWrapper, self, name, pyName, ID)
+            self._cache[name] = server
+        self.servers[name, pyName, ID] = server
+        setattr(self, pyName, server)
 
     def _refreshServer(self, name):
-        server = getattr(self, name)
+        server = self.servers[name]
         return server._refresh()
 
     def _delServer(self, name):
         if hasattr(self, name):
-            delattr(self, name)
+            server = self.servers[name]
+            delattr(self, server._py_name)
             del self.servers[name]
         return defer.succeed(None)
 
@@ -391,7 +455,7 @@ class PacketResponse(object):
     Attributes are added to access the records in this
     response packet coming from each setting.  For each
     setting called by the packet, we add an attribute to
-    the access the response from that setting.  If a setting
+    access the response from that setting.  If a setting
     is called more than once, all responses from that setting
     are collected into a list.  Responses can be accessed
     by name or ID, unless a key was specified for the call,
