@@ -354,6 +354,8 @@ class Value(WithUnit, float):
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
         return self.inUnitsOf(unit).value
+    def __iter__(self):
+        raise TypeError("'Value' object is not iterable")
 WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
 WithUnit._numericTypes[long] = Value
@@ -364,6 +366,8 @@ class Complex(WithUnit, complex):
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
         return self.inUnitsOf(unit).value
+    def __iter__(self):
+        raise TypeError("'Complex' object is not iterable")
 WithUnit._numericTypes[complex] = Complex
 
 # add support for numeric types returned by most numpy/scipy functions
