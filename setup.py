@@ -20,32 +20,39 @@ from distutils.core import setup
 
 doclines = __doc__.split('\n')
 
-setup(name='pylabrad',
-      version='0.10.4',
-      author='Matthew Neeley',
-      author_email='maffoo@users.sourceforge.net',
-      
-      url='http://sourceforge.net/projects/pylabrad/',
-      download_url='',
-      
-      description = doclines[0],
-      long_description = '\n'.join(doclines[2:]),
-      classifications = classifications.split('\n'),
-      
-      requires=['twisted (>=2.5)'],
-      provides=['labrad'],
-      packages=['labrad',
-                'labrad.config',
-                'labrad.controller', 
-                'labrad.pipeline',
-                'labrad.servers',
-                'labrad.test',
-                'labrad.util',
-                'labrad.util.simplejson'],
-      package_data={'labrad': ['LICENSE.txt'],
-                    'labrad.config': ['*.ini'],
-                    'labrad.controller': ['gwt/www/org.labrad.NodeController/*.*']},
-      py_modules=['twisted.plugins.labrad_controller',
-                  'twisted.plugins.labrad_node'],
-      scripts=['labrad_postinstall.py'],
-     )
+setup(
+    name = 'pylabrad',
+    version = '0.10.4',
+    author = 'Matthew Neeley',
+    author_email = 'maffoo@users.sourceforge.net',
+    
+    url = 'http://sourceforge.net/projects/pylabrad/',
+    download_url = '',
+    
+    description = doclines[0],
+    long_description = '\n'.join(doclines[2:]),
+    classifiers = classifications.split('\n'),
+    
+    requires = ['twisted (>=2.5)'],
+    provides = ['labrad'],
+    packages = [
+        'labrad',
+        'labrad.config',
+        'labrad.controller', 
+        'labrad.pipeline',
+        'labrad.servers',
+        'labrad.test',
+        'labrad.util',
+        'labrad.util.simplejson',
+        ],
+    package_data = {
+        'labrad': ['LICENSE.txt'],
+        'labrad.config': ['*.ini'],
+        'labrad.controller': ['gwt/www/org.labrad.NodeController/*.*'],
+        },
+    py_modules = [
+        'twisted.plugins.labrad_controller',
+        'twisted.plugins.labrad_node',
+        ],
+    scripts = ['labrad_postinstall.py'],
+    )
