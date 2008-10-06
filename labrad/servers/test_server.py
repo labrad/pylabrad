@@ -35,6 +35,11 @@ class TestServer(LabradServer):
     testMode = True
 
     @inlineCallbacks
+    def initServer(self):
+        from registry_wrapper_async import RegistryWrapperAsync
+        self.regWrapper = yield RegistryWrapperAsync.create(self.client, ['', 'Servers', 'Python Test Server'])
+
+    @inlineCallbacks
     def stopServer(self):
         print 'before yield'
         yield None
@@ -43,24 +48,39 @@ class TestServer(LabradServer):
 
     def serverConnected(self, ID, name):
         print 'server connected:', ID, name
+        self.checkServerWrappers(name)
 
     def serverDisconnected(self, ID, name):
         print 'server disconnected:', ID, name
+        self.checkServerWrappers(name)
     
-    @setting(2)
+    @inlineCallbacks
+    def checkServerWrappers(self, name):
+        """Check that server wrappers are up to date with the manager."""
+        mgrServers = yield self.client.manager.servers()
+        mgrServers = set(s[1] for s in mgrServers)
+        cxnServers = set(self.client.servers.keys())
+        if cxnServers == mgrServers:
+            print 'self.client updated for server', name
+        else:
+            print 'self.client not properly refreshed:'
+            print '  servers that should be disconnected:', list(cxnServers - mgrServers)
+            print '  servers that have not been connected:', list(mgrServers - cxnServers)
+    
+    @setting(2, "Delayed Echo")
     def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""
         yield util.wakeupCall(c['delay'])
         returnValue(data)
 
-    @setting(3)
+    @setting(3, "Delayed Echo Deferred")
     def delayed_echo_deferred(self, c, data):
         """Echo a packet after a specified delay."""
         d = defer.Deferred()
         reactor.callLater(c['delay'], d.callback, data)
         return d
 
-    @setting(4, delay=['v[s]', ''], returns=['v[s]'])
+    @setting(4, "Echo Delay", delay=['v[s]', ''], returns=['v[s]'])
     def echo_delay(self, c, delay):
         """Get or set the echo delay."""
         self.log('Echo delay: %s' % delay)
@@ -68,7 +88,7 @@ class TestServer(LabradServer):
             c['delay'] = float(delay)
         return c['delay']
 
-    @setting(40, speed=['v[m/s]', ''], returns=['v[m/s]'])
+    @setting(40, "Speed", speed=['v[m/s]', ''], returns=['v[m/s]'])
     def speed(self, c, speed):
         """Get or set the speed."""
         self.log('Speed: %s' % speed)
@@ -76,25 +96,25 @@ class TestServer(LabradServer):
             c['speed'] = speed
         return c['speed']
 
-    @setting(41)
+    @setting(41, "Verbose Echo")
     def verbose_echo(self, c, data):
         print type(data)
         print repr(data)
         return data
 
-    @setting(5)
+    @setting(5, "Exc in Handler")
     def exc_in_handler(self, c, data):
         """Raises an exception directly in the handler."""
         self.log('Exception in handler.')
         raise Exception('Raised in handler.')
 
-    @setting(6)
+    @setting(6, "Exc in Subfunction")
     def exc_in_subfunction(self, c, data):
         """Raises an exception in a subfunction."""
         self.log('Exception in subfunction.')
         owie()
 
-    @setting(7)
+    @setting(7, "Exc in Deferred")
     def exc_in_deferred(self, c, data):
         """Returns a deferred that fires an exception."""
         self.log('Exception in deferred.')
@@ -103,7 +123,7 @@ class TestServer(LabradServer):
         reactor.callLater(1, d.callback, None)
         return d
 
-    @setting(8)
+    @setting(8, "Exc in Errback")
     def exc_in_errback(self, c, data):
         """Returns a deferred whose errback will be called."""
         self.log('Exception from an errback.')
@@ -111,19 +131,19 @@ class TestServer(LabradServer):
         reactor.callLater(1, d.errback, Exception('Raised by errback.'))
         return d
 
-    @setting(9)
+    @setting(9, "Exc in inlineCallback")
     def exc_in_inlinecallback(self, c, data):
         """Raises an exception in an inlineCallback."""
         self.log('Exception from an inlineCallback.')
         yield util.wakeupCall(c['delay'])
         raise Exception('Raised in inlineCallback.')
 
-    @setting(10, returns=['s'])
+    @setting(10, "Bad Return Type", returns=['s'])
     def bad_return_type(self, c, data):
         """Returns a value that does not match the declared return type."""
         return 5
         
-    @setting(11, tag=['s'])
+    @setting(11, "Get Random Data", tag=['s'])
     def get_random_data(self, c, tag=None):
         """Get a random bit of data conforming to the specified type tag."""
         if tag is None:
@@ -132,7 +152,7 @@ class TestServer(LabradServer):
             t = T.parseTypeTag(tag)
         return hydrant.randValue(t)
         
-    @setting(12)
+    @setting(12, "Get Random Tag")
     def get_random_tag(self, c, tag):
         """Get a random LabRAD type tag."""
         return str(hydrant.randType())

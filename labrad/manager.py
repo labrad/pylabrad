@@ -15,7 +15,6 @@
 
 from labrad import constants as C
 from labrad.interfaces import ILabradProtocol, ILabradManager
-from labrad.util import mangle
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python.components import registerAdapter
@@ -39,11 +38,11 @@ class ClientManager:
     @inlineCallbacks
     def _getIDList(self, setting, data=None):
         resp = yield self._send([(setting, data)])
-        names = self._mangleIDList(resp[0][1])
+        names = self._reorderIDList(resp[0][1])
         returnValue(names)
 
-    def _mangleIDList(self, L):
-        return [(mangle(name), name, ID) for ID, name in L]
+    def _reorderIDList(self, L):
+        return [(name, ID) for ID, name in L]
         
     def getServersList(self):
         """Get a list of connected servers."""
@@ -56,8 +55,25 @@ class ClientManager:
                   (C.SETTINGS_LIST, long(serverID))]
         resp = yield self._send(packet)
         descr, notes = resp[0][1]
-        settings = self._mangleIDList(resp[1][1])
+        settings = self._reorderIDList(resp[1][1])
         returnValue((descr, notes, settings))
+
+    @inlineCallbacks
+    def getServerInfoWithSettings(self, serverID):
+        """Get information about a server, including all of its settings."""
+        packet = [(C.HELP, long(serverID)),
+                  (C.SETTINGS_LIST, long(serverID))]
+        resp = yield self._send(packet)
+        descr, notes = resp[0][1]
+        settings = resp[1][1]
+        packet = [(C.HELP, (long(serverID), long(ID))) for ID, name in settings]
+        resp = yield self._send(packet)
+        settingList = []
+        for s, r in zip(settings, resp):
+            ID, name = s
+            descr, accepts, returns, notes = r[1]
+            settingList.append((name, ID, (descr, accepts, returns, notes)))
+        returnValue((descr, notes, settingList))
 
     def getSettingsList(self, serverID):
         """Get a list of settings for a server."""

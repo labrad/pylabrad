@@ -351,7 +351,7 @@ class LabradServer(ClientFactory):
             self.password = protocol.password
             self._cxn = protocol
             self.client = IClientAsync(protocol)
-            yield self.client.refresh()
+            yield self.client._init()
             yield self._initServer()
             self.started = True
             self.onStartup.callback(self)
@@ -395,8 +395,8 @@ class LabradServer(ClientFactory):
         # sign up for notifications from the manager
         yield mgr.subscribe_to_named_message('Server Connect', 55443322, True)
         yield mgr.subscribe_to_named_message('Server Disconnect', 66554433, True)
-        self._cxn.addListener(self._serverConnected, source=mgr.ID, ID=55443322)
-        self._cxn.addListener(self._serverDisconnected, source=mgr.ID, ID=66554433)
+        self._cxn.addListener(self._serverConnected, source=mgr.ID, ID=55443322, async=False)
+        self._cxn.addListener(self._serverDisconnected, source=mgr.ID, ID=66554433, async=False)
         
         #yield mgr.notify_on_connect.connect(self._serverConnected)
         #yield mgr.notify_on_disconnect.connect(self._serverDisconnected)

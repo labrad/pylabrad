@@ -38,6 +38,9 @@ public class ControlPanel extends FlowPanel {
     
     private final static NodeImageBundle images = (NodeImageBundle)GWT.create(NodeImageBundle.class);
     
+    /**
+     * Fetch the current status of all running nodes.
+     */
     public void fetchTable() {
         transport.invokeMethod("status", new JSONTransport.JSONRequestCallback() {
             public void onError(Throwable exception) {
@@ -60,6 +63,13 @@ public class ControlPanel extends FlowPanel {
         });
     }
     
+    /**
+     * Make a controller widget for a single node.
+     * The controller widget allows the user to trigger a refresh of the
+     * server list on this node.
+     * @param nodename
+     * @return
+     */
     private Widget makeNodeControl(final String nodename) {
     	final PushButton b = new PushButton(images.restartServerIcon().createImage());
     	b.getUpDisabledFace().setImage(new Image("throbber.gif"));
@@ -87,6 +97,12 @@ public class ControlPanel extends FlowPanel {
     	return p;
     }
     
+    /**
+     * Create the control panel table from the given server information.
+     * @param servers
+     * @param nodes
+     * @param info
+     */
     public void makeTable(List<String> servers, List<String> nodes, List<List<ServerInfo>> info) {
     	if (table != null) {
     		remove(table);
@@ -121,6 +137,22 @@ public class ControlPanel extends FlowPanel {
         add(table);
     }
     
+    public void addNode(String node) {
+    	// add node to the table
+    }
+    
+    private void addServer(String server, String node, ServerInfo info) {
+    	// add server to the table
+    }
+    
+    /**
+     * Called when the state changes for a particular server.  This message
+     * gets sent on to instance controllers on other servers to notify them
+     * of the state change, so they can disable or enable themselves accordingly.
+     * @param server
+     * @param node
+     * @param running
+     */
     public void serverStateChanged(String server, String node, boolean running) {
         int row = lookupServer(server);
         int n = lookupNode(node);
@@ -135,6 +167,11 @@ public class ControlPanel extends FlowPanel {
         }
     }
     
+    /**
+     * Lookup the position of a given server in the list
+     * @param server
+     * @return
+     */
     public int lookupServer(String server) {
         int n = table.getRowCount() - 1;
         for (int i = 0; i < n; i++) {
@@ -145,6 +182,25 @@ public class ControlPanel extends FlowPanel {
         throw new RuntimeException("Server not found: " + server);
     }
     
+    /**
+     * Check whether the given server exists in the list
+     * @param server
+     * @return
+     */
+    public boolean serverExists(String server) {
+    	try {
+    		lookupServer(server);
+    		return true;
+    	} catch (Exception e) {
+    		return false;
+    	}
+    }
+    
+    /**
+     * Lookup the index of the given node in the list
+     * @param node
+     * @return
+     */
     public int lookupNode(String node) {
         int n = table.getColumnCount() - 1;
         for (int i = 0; i < n; i++) {
@@ -155,9 +211,23 @@ public class ControlPanel extends FlowPanel {
         throw new RuntimeException("Node not found: " + node);
     }
     
+    /**
+     * Check whether the given node exists in the list
+     * @param node
+     * @return
+     */
+    public boolean nodeExists(String node) {
+        try {
+        	lookupNode(node);
+        	return true;
+        } catch (Exception e) {
+        	return false;
+        }
+    }
+    
     private Grid table = null;
     private JSONTransport transport;
-  
+    
     public ControlPanel(JSONTransport transport) {
         this.transport = transport;
         fetchTable();

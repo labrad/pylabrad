@@ -32,9 +32,9 @@ WEB_DIR = os.path.join(HERE_DIR, 'gwt', 'www', 'org.labrad.NodeController')
 
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
-    return [s for s in servers \
-              if s.lower().startswith('node') \
-                 and hasattr(cxn[s], 'available_servers')]
+    return [s for s in servers
+              if s.lower().startswith('node') and \
+                 hasattr(cxn[s], 'available_servers')]
 
 class JSONResource(resource.Resource):
     def __init__(self, cxn, func, *a, **kw):
@@ -194,7 +194,6 @@ class NodeProxy(JSONTransport):
     @inlineCallbacks
     def remote_status(self):
         cxn = self.cxn
-        yield cxn.refresh()
         servers = yield self.remote_available_servers()
         nodes = yield self.remote_list_nodes()
         yield DeferredList([cxn[node].refresh_servers() for node in nodes], fireOnOneErrback=True)
@@ -281,7 +280,7 @@ class NodeAPI(resource.Resource):
                 self.sendMessage(message, **kw)
             messages = ['node.server_starting', 'node.server_started',
                         'node.server_stopping', 'node.server_stopped',
-                        'node.list_updated', 'Server Connected', 'Server Disconnected']
+                        'node.list_updated']
             p = cxn.manager.packet()
             for ID, message in enumerate(messages):
                 cxn.manager.addListener(relay, ID=ID+1234, kw=dict(message=message))

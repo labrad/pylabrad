@@ -92,6 +92,7 @@ class LabradProtocol(protocol.Protocol):
         self._reuse = set()
         self.requests = {}
         self.listeners = {}
+        self._messageLock = defer.DeferredLock()
         self.clearCache()
     
         # create a generator to assemble the packets
@@ -266,28 +267,58 @@ class LabradProtocol(protocol.Protocol):
 
     def messageReceived(self, source, context, records):
         """Process incoming messages."""
+        self._messageLock.run(self._dispatchMessage, source, context, records)
+        
+    @inlineCallbacks
+    def _dispatchMessage(self, source, context, records):
+        """Dispatch a message to all matching listeners."""
         for ID, data in records:
             msgCtx = MessageContext(source, context, ID)
             keys = ((s, c, i) for s in (source, None)
                               for c in (context, None)
                               for i in (ID, None)
                               if (s, c, i) in self.listeners)
-            keys = list(keys)
+            print 'got message:', msgCtx, ID, data
             for key in keys:
-                for listener, args, kw in self.listeners[key]:
-                    listener(msgCtx, data, *args, **kw)
+                for listener, async in self.listeners[key]:
+                    func, args, kw = listener
+                    try:
+                        d = func(msgCtx, data, *args, **kw)
+                        if not isinstance(d, defer.Deferred):
+                            continue
+                        if async:
+                            d.addErrback(self._handleListenerError,
+                                         msgCtx, data, listener)
+                        else:
+                            yield d
+                    except:
+                        self._handleListenerError(
+                            failure.Failure(), msgCtx, data, listener)
+                        
+    def _handleListenerError(self, failure, msgCtx, data, listener):
+        """Catch errors in message listeners.
+        
+        Just prints out a (hopefully informative) message
+        about any errors that may have occurred.
+        """
+        print 'Unhandled error in message listener:', msgCtx, data, listener
+        failure.printTraceback(elideFrameworkCode=1)
                         
     # message handling
-    def addListener(self, listener, source=None, context=None, ID=None, args=(), kw={}):
-        """Add a listener for messages to the specified key.
+    def addListener(self, listener, source=None, context=None, ID=None, async=True, args=(), kw={}):
+        """Add a listener for messages with the specified attributes.
 
-        The key should be either a setting ID to handle messages
-        from any source to the specified ID, or a tuple of
-        (source, setting ID) to handle messages from a single source.
+        When a message with the specified source, context and ID is received,
+        listener will be called with the message data, along with the args and
+        keyword args specified here.  async determines how message listeners
+        that return deferreds are to be handled.  If async is True, the message
+        dispatcher will not wait for the deferred returned by a listener to fire.
+        However, if async is False, the dispatcher will wait for this deferred
+        before firing any more messages.
         """
         key = (source, context, ID)
         listeners = self.listeners.setdefault(key, [])
-        listeners.append((listener, args, kw))
+        listeners.append(((listener, args, kw), async))
 
     def removeListener(self, listener, source=None, context=None, ID=None):
         """Remove a listener for messages."""
@@ -350,6 +381,9 @@ class MessageContext(object):
         self.source = source
         self.ID = context
         self.target = target
+        
+    def __repr__(self):
+        return 'MessageContext(source=%s, ID=%s, target=%s)' % (self.source, self.ID, self.target)
 
 # factory for churning out LabRAD connections
 factory = protocol.ClientCreator(reactor, LabradProtocol)

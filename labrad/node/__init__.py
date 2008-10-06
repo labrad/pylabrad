@@ -41,7 +41,7 @@ from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.error import ProcessDone, ProcessTerminated
-from twisted.python import log
+from twisted.python import log, failure
 from twisted.python.components import registerAdapter
 from twisted.plugin import getPlugins
 
@@ -65,62 +65,79 @@ class ServerProcess(ProcessProtocol):
         self.cmdline = interpEnvironmentVars(cls.cmdline, self.env)
         self.args = self.cmdline.split()
         self.executable = os.path.join(self.path, self.args[0])
+        # TODO: easier cmdline customization (different args, path, exe, etc.)
 
         self.starting = False
         self.running = False
-        self.startup = util.DeferredSignal()
-        self.shutdown = util.DeferredSignal()
+        self.stopping = False
         self.output = []
-        
-    def doOnce(self, func, attr, *a, **kw):
-        def done(result, attr):
-            if hasattr(self, attr):
-                delattr(self, attr)
-            return result
-        if not hasattr(self, attr):
-            ds = util.DeferredSignal()
-            setattr(self, attr, ds)
-            d = func(*a, **kw)
-            d.addBoth(done, attr)
-            d.chainDeferred(ds)
-        else:
-            ds = getattr(self, attr)
-        return ds()
+        self._stateChangeLock = defer.DeferredLock()
         
     def start(self):
-        return self.doOnce(self._doStart, '_onStartup')
-        
+        """Start this server instance."""
+        return self._stateChangeLock.run(self._start)
+    
     @inlineCallbacks
-    def _doStart(self):
+    def _start(self):
         if self.running:
             return
-        self.startup = util.DeferredSignal()
-        
         print "starting '%s'..." % self.name
         print "path:", self.path
         print "executable:", self.executable
         print "args:", self.args
-
-        startd = self.startup()
         self.starting = True
+        self.startup = defer.Deferred()
         dispatcher.connect(self.serverConnected, "serverConnected")
         dispatcher.send("server_starting", sender=self, server=self.name)
         self.proc = reactor.spawnProcess(self, self.executable, self.args,
                                          env=self.env, path=self.path)
         timeoutCall = reactor.callLater(self.timeout, self.kill)
         try:
-            yield startd
+            yield self.startup
             dispatcher.send("server_started", sender=self, server=self.name)
+        except:
+            dispatcher.send("server_stopped", sender=self, server=self.name)
+            raise
         finally:
             self.starting = False
             if timeoutCall.active():
                 timeoutCall.cancel()
             dispatcher.disconnect(self.serverConnected, "serverConnected")
         
+    def stop(self):
+        """Stop this server instance."""
+        return self._stateChangeLock.run(self._stop)
+        
+    @inlineCallbacks
+    def _stop(self):
+        if not self.running:
+            return
+        print "stopping '%s'..." % self.name
+        self.stopping = True
+        self.shutdown = defer.Deferred()
+        dispatcher.send("server_stopping", sender=self, server=self.name)
+        self.kill()
+        yield self.shutdown
+        self.stopping = False
+        dispatcher.send("server_stopped", sender=self, server=self.name)
+        
+    def restart(self):
+        """Restart this server instance."""
+        return self._stateChangeLock.run(self._restart)
+        
+    @inlineCallbacks
+    def _restart(self):
+        yield self._stop()
+        yield self._start()
+        
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD.
         
-        We check if the server name matches the name we are looking for.
+        If the name matches our name, we'll assume this server
+        started successfully.  This may not be the case (e.g. if
+        two nodes are trying to start the same server simultaneously),
+        but there's no way to find out from LabRAD which node
+        a given server is running on, so this will have to do.
         """
         if name == self.name:
             self.ID = ID
@@ -128,6 +145,11 @@ class ServerProcess(ProcessProtocol):
             self.startup.callback(self)
 
     def processEnded(self, reason):
+        """Called when the server process ends.
+        
+        We check to see the reason why this process failed, and then
+        call the appropriate deferred, depending on the current state.
+        """
         if isinstance(reason.value, ProcessDone):
             print "'%s': process closed cleanly." % self.name
         elif isinstance(reason.value, ProcessTerminated):
@@ -137,64 +159,52 @@ class ServerProcess(ProcessProtocol):
         self.running = False
         if self.starting:
             self.startup.errback(T.Error('Startup failed.', payload=self.output))
+        elif self.stopping:
+            self.shutdown.callback(None)
         else:
-            self.shutdown.callback(self)
-
-    def stop(self):
-        return self.doOnce(self._doStop, '_onShutdown')
-
+            # looks like this thing died on its own
+            dispatcher.send("server_stopped", sender=self, server=self.name)
+    
     @inlineCallbacks
-    def _doStop(self):
+    def kill(self):
+        """Kill the server process."""
         if not self.running:
             return
-        self.shutdown = util.DeferredSignal()
-        print "stopping '%s'..." % self.name
-        dispatcher.send("server_stopping", sender=self, server=self.name)
-        d = self.shutdown()
-        self.kill()
-        yield d
-        dispatcher.send("server_stopped", sender=self, server=self.name)
-
-    def kill(self):
-        # TODO: implement custom shutdown methods
         try:
-            #self.proc.writeToChild(0, '\x03')
-            self.proc.signalProcess("KILL")
-            #self.client._cxn.sendMessage(self.ID, [(987654321, None)])
+            # first try to shutdown nicely with a message
+            servers = self.client.servers
+            if self.name in servers:
+                servers[self.name].sendMessage(987654321)
+                yield util.wakeupCall(10.0)
+                
+            # if we're not dead yet, kill with a vengeance
+            if self.running:
+                self.proc.signalProcess("KILL")
         except:
-            pass
-
-    @inlineCallbacks
-    def restart(self):
-        yield self.stop()
-        yield self.start()
+            print kills, 'Error while trying to kill server process for "%s":' % self.name
+            failure.Failure().printTraceback(elideFrameworkCode=1)
         
     def outReceived(self, data):
+        """Called when the server prints to stdout."""
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]
-        print "'%s' stdout: %s" % (self.name, data)
+        #print "'%s' stdout: %s" % (self.name, data)
 
     def errReceived(self, data):
+        """Called when the server prints to stderr."""
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]
-        print "'%s' stderr: %s" % (self.name, data)
+        #print "'%s' stderr: %s" % (self.name, data)
 
     def clearOutput(self):
+        """Clear the log of stdout."""
         self.output = []
 
-    def inConnectionLost(self):
-        print "'%s': lost stdin." % self.name
-        self.kill()
-
-    def outConnectionLost(self):
-        print "'%s': lost stdout." % self.name
-        self.kill()
-
-    def errConnectionLost(self):
-        print "'%s': lost stderr." % self.name
-        self.kill()
-
 def createGenericServerCls(path, filename):
+    """Create a ServerProcess class representing a generic server.
+    
+    Options for this server are read from a .ini config file on disk.
+    """
     scp = SafeConfigParser()
     scp.read(os.path.join(path, filename))
 
@@ -226,9 +236,15 @@ def createGenericServerCls(path, filename):
     return cls
 
 def createPythonServerCls(plugin):
+    """Create a ServerProcess class representing a python server.
+    
+    Options for this server are read from the python object itself,
+    located with the twisted plugin system.
+    """
     class cls(ServerProcess):
         pass
 
+    # general information
     cls.name = plugin.name
     cls.__doc__ = plugin.__doc__
     if hasattr(plugin, 'version'):
@@ -251,6 +267,12 @@ class IProcNode(Interface):
     pass
 
 class ProcNode(MultiService):
+    """Parent Service that keeps the node running.
+    
+    If the manager is stopped or we lose the network connection,
+    this service attempts to restart it so that we will come
+    back online when the manager is back up.
+    """
     implements(IProcNode)
 
     reconnectDelay = 10
@@ -266,6 +288,7 @@ class ProcNode(MultiService):
         self.startConnection()
 
     def startConnection(self):
+        """Attempt to start the node and connect to LabRAD."""
         print 'Connecting to %s:%d...' % (self.host, self.port)
         node = NodeServer(self.name, self.host, self.port)
         node.onStartup().addErrback(self._error)
@@ -282,6 +305,7 @@ class ProcNode(MultiService):
         return self._reconnect()
 
     def _reconnect(self):
+        """Clean up from the last run and reconnect."""
         ## hack: manually clearing the dispatcher...
         dispatcher.connections.clear()
         dispatcher.senders.clear()
@@ -294,6 +318,8 @@ class ProcNode(MultiService):
         print 'Will try to reconnect in %d seconds...' % self.reconnectDelay
 
 class NodeConfig(object):
+    """Loads configuration info for the node from the registry."""
+    # TODO: monitor config information for changes and respond
     def __init__(self, registry, nodename, dirs, mods):
         self.registry = registry
         self.nodename = nodename
@@ -325,6 +351,12 @@ class NodeConfig(object):
 
 
 class NodeServer(LabradServer):
+    """Start and stop LabRAD servers remotely.
+    
+    The node server allows you to control and
+    monitor servers running on a remote machine.
+    """
+    
     name = 'node %LABRADNODE%'
 
     def __init__(self, nodename, host, port):
@@ -357,7 +389,7 @@ class NodeServer(LabradServer):
         for message in messages:
             f(self._relayMessage, message)
             
-        # set up message handlers for subprocess
+        # set up message handlers for subprocess events
         f(self.subprocessStarting, 'server_starting')
         f(self.subprocessStarted, 'server_started')
         f(self.subprocessStopping, 'server_stopping')
@@ -392,6 +424,7 @@ class NodeServer(LabradServer):
 
     def refreshServers(self):
         """Refresh the list of available servers."""
+        # TODO: refresh periodically, to avoid the need for manual refreshes
         def finishRefresh(result):
             del self._onRefresh
             return result
@@ -414,12 +447,14 @@ class NodeServer(LabradServer):
             try:
                 __import__(module)
                 for plugin in getPlugins(ILabradServer, sys.modules[module]):
-                    p = createPythonServerCls(plugin)
-                    p.client = self.client
-                    if p.name not in found:
-                        found[p.name] = p
-            except Exception, e:
-                print e
+                    s = createPythonServerCls(plugin)
+                    s.client = self.client
+                    if s.name not in found:
+                        found[s.name] = s
+                    yield util.wakeupCall(0.0001) # pause to let other things happen
+            except:
+                print 'Error while loading plugins from module "%s":' % module
+                failure.Failure().printTraceback(elideFrameworkCode=1)
 
         # look for .ini files
         for dirname in self.serverDirs:
@@ -428,12 +463,14 @@ class NodeServer(LabradServer):
                     if not f.lower().endswith('.ini'):
                         continue
                     try:
-                        p = createGenericServerCls(path, f)
-                        p.client = self.client
-                        if p.name not in found:
-                            found[p.name] = p
-                    except Exception, e:
-                        print e
+                        s = createGenericServerCls(path, f)
+                        s.client = self.client
+                        if s.name not in found:
+                            found[s.name] = s
+                        yield util.wakeupCall(0.0001) # pause to let other things happen
+                    except:
+                        print 'Error while loading config file "%s":' % os.path.join(path, f)
+                        failure.Failure().printTraceback(elideFrameworkCode=1)
 
         # add new servers and remove old ones
         additions = [s for s in found.values() if s.name not in self.servers]
@@ -443,9 +480,10 @@ class NodeServer(LabradServer):
         for s in deletions:
             del self.servers[s.name]
         
-        addmsg = [self.serverInfo(s) for s in additions]
-        delmsg = [self.serverInfo(s) for s in deletions]
-        dispatcher.send('list_updated', added=addmsg, removed=delmsg)        
+        if len(additions) or len(deletions):
+            addmsg = [self.serverInfo(s) for s in additions]
+            delmsg = [self.serverInfo(s) for s in deletions]
+            dispatcher.send('list_updated', added=addmsg, removed=delmsg)        
 
     def initContext(self, c):
         c['environ'] = {}
@@ -465,7 +503,7 @@ class NodeServer(LabradServer):
         self.runners[sender.name] = sender
 
     def subprocessStopping(self, sender):
-        """Called when a subprocess successfully disconnects."""
+        """Called when a subprocess begins disconnecting."""
         if sender.name in self.runners:
             del self.runners[sender.name]
         self.stoppers[sender.name] = sender
@@ -545,6 +583,7 @@ class NodeServer(LabradServer):
         return [self.serverInfo(item[1]) for item in sorted(self.servers.items())]
 
     def serverInfo(self, cls):
+        """Get information about a particular server on this node."""
         instances = [n for n, s in self.runners.items()
                                 if s.__class__.name == cls.name]
         return (cls.name, cls.__doc__ or '', cls.version,

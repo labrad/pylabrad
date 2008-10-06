@@ -24,17 +24,18 @@ from labrad.errors import Error
 from labrad.interfaces import ILabradManager
 from labrad.thread import blockingCallFromThread as block, DelayedResponse
 from labrad.wrappers import PacketResponse, getConnection
-from labrad.util import indent, MultiDict, PrettyDict, extractKey
+from labrad.util import mangle, indent, MultiDict, PrettyDict, extractKey
 
 from twisted.internet import reactor
 
-from functools import partial
 import getpass
 
 class NotFoundError(Error):
     code = 10
     def __init__(self, key):
         self.msg = 'Could not find "%s".' % key
+
+# TODO: add sendMessage functions to duplicate asynchronous functionality
 
 class SettingWrapper(object):
     """Object to wrap a single setting on a single server.
@@ -43,10 +44,10 @@ class SettingWrapper(object):
     You can force a refresh of this information by calling the refresh()
     method.  Calling this object directly will send a request.
     """
-    def __init__(self, server, name, labrad_name, ID):
-        self.name = self.__name__ = name
+    def __init__(self, server, name, pyName, ID):
+        self.name = self.__name__ = self._labrad_name = name
         self.ID = ID
-        self._labrad_name = labrad_name
+        self._py_name = pyName
         self._server = server
         self._mgr = server._mgr
         self._refreshed = False
@@ -98,28 +99,9 @@ class SettingWrapper(object):
         # but instead only when needed later due to property access
         self._refreshed = False
 
-    #def connect(self, handler, signupargs=(), signupkw={},
-    #                           handlerargs=(), handlerkw={}):
-    #    """Connect a local handler to this signal."""
-    #    srv = self._server
-    #    block(srv._cxn._cxn.addListener, handler, source=srv.ID, ID=self.ID,
-    #                                     args=handlerargs, kw=handlerkw)
-    #    self._num_listeners += 1
-    #    if self._num_listeners == 1:
-    #        # TODO: remove from listeners if this fails
-    #        return self.__call__(self.ID, *signupargs, **signupkw)
-
-    #def disconnect(self, handler):
-    #    """Disconnect a local handler from this signal."""
-    #    srv = self._server
-    #    block(srv._cxn._cxn.removeListener, handler, source=srv.ID, ID=self.ID)
-    #    self._num_listeners -= 1
-    #    if self._num_listeners == 0:
-    #        return self.__call__()
-
     def __repr__(self):
         return """\
-LabRAD Setting: %s.%s (ID=%d)
+LabRAD Setting: "%s" >> "%s" (ID=%d)
 
 %s
 
@@ -156,7 +138,7 @@ class DynamicAttrDict(PrettyDict):
 
 
 class HasDynamicAttrs(object):
-    """An object with attributes looked up on labrad."""
+    """An object with attributes looked up dynamically on labrad."""
     def __init__(self):
         self.__attrs = None
         self.__cache = None
@@ -167,6 +149,12 @@ class HasDynamicAttrs(object):
         if not self._refreshed:
             self._refresh()
         return self.__attrs
+
+    def _fixName(self, name):
+        pyName = mangle(name)
+        if pyName in self._staticAttrs:
+            pyName = 'lr_' + pyName
+        return pyName
 
     def _refresh(self):
         """Update the list of available attributes."""
@@ -182,21 +170,21 @@ class HasDynamicAttrs(object):
             # get current list of attributes
             attrs = self._getAttrs()
             if len(attrs):
-                names, labrad_names, IDs = zip(*attrs)
+                names, IDs = zip(*attrs)
             else:
-                names, labrad_names, IDs = [], [], []
+                names, IDs = [], []
+            pyNames = [self._fixName(name) for name in names]
+            attrs = zip(names, pyNames, IDs)
 
             # delete names of old attributes (but leave them in the cache)
-            deletions = [name for name in self.__attrs if name not in names]
-            for name in deletions:
-                del self.__attrs[name]
+            deletions = [pyName for pyName in self.__attrs if pyName not in pyNames]
+            for pyName in deletions:
+                del self.__attrs[pyName]
 
             # add new attributes
-            additions = [(n, d, ID) for (n, d, ID) in attrs
-                                    if n not in self.__attrs]
-            for name, labrad_name, ID in additions:
-                if name in self._staticAttrs:
-                    name = 'lr_' + name
+            additions = [(n, p, ID) for (n, p, ID) in attrs
+                                    if p not in self.__attrs]
+            for name, pyName, ID in additions:
                 if name in self.__cache:
                     # pull from cache if possible, but
                     # tell attribute to refresh itself
@@ -205,9 +193,9 @@ class HasDynamicAttrs(object):
                     if hasattr(s, 'refresh'):
                         s.refresh()
                 else:
-                    s = self._wrapAttr(self, name, labrad_name, ID)
+                    s = self._wrapAttr(self, name, pyName, ID)
                 self.__cache[name] = s
-                self.__attrs[name, labrad_name, ID] = s
+                self.__attrs[pyName, name, ID] = s
 
             self._refreshed = True
         except Exception, e:
@@ -249,14 +237,12 @@ class HasDynamicAttrs(object):
 class ServerWrapper(HasDynamicAttrs):
     """A wrapper for a labrad server."""
     
-    def __init__(self, cxn, name, labrad_name, ID, **kw):
+    def __init__(self, cxn, name, pyName, ID):
         HasDynamicAttrs.__init__(self)
         self._cxn = cxn
-        #self._mgr = cxn._mgr
-        self.name = name
-        self._labrad_name = labrad_name
+        self.name = self._labrad_name = name
+        self._py_name = pyName
         self.ID = ID
-        self._kw = kw
 
     @property
     def _mgr(self):
@@ -279,16 +265,10 @@ class ServerWrapper(HasDynamicAttrs):
         return self._cxn.context()
 
     def packet(self, **kw):
-        return PacketWrapper(self, **dict(self._kw, **kw))
+        return PacketWrapper(self, **kw)
 
     def __call__(self, **kw):
         return self
-
-    #def clone(self, **kw):
-        # TODO: this should make a clone that can have different
-        # default keyword args, and, in particular, should talk
-        # to the server in a different context
-    #    pass
 
     def _send(self, *args, **kw):
         return self._cxn._send(self.ID, *args, **kw)
@@ -335,7 +315,7 @@ class PacketWrapper(HasDynamicAttrs):
         ignored = self._server.settings # ensure refresh
         return self._server._slist
 
-    def _wrapAttr(self, _parent, name, labrad_name, ID):
+    def _wrapAttr(self, _parent, name, pyName, ID):
         s = self._server.settings[name]
         def wrapped(*args, **kw):
             key = extractKey(kw, 'key', None)
@@ -380,7 +360,6 @@ class Client(HasDynamicAttrs):
         
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit the body of a with statement."""
-        # TODO: check context management for synchronous client
         try:
             self.disconnect()
         except:

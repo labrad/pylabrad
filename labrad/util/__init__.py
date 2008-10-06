@@ -137,8 +137,8 @@ class MultiDict(SafeIterDict):
     """Dictionary with multiple keys to the same value."""
     def __init__(self, *a, **kw):
         dict.__init__(self, *a, **kw)
-        self.aliases = {}
-        self._keys = {}
+        self.aliases = {} # mapping from aliases to keys
+        self._keys = {} # mapping from keys to aliases
 
     def __repr__(self):
         items = []
@@ -161,10 +161,13 @@ class MultiDict(SafeIterDict):
     def __delitem__(self, k):
         if k in self.aliases:
             k = self.aliases[k]
+        # delete aliases for this key
         if k in self._keys:
             aliases = self._keys[k]
             for a in aliases:
-                del self.aliases[a]
+                # only delete alias if it still points to this key
+                if self.aliases[a] == k:
+                    del self.aliases[a]
             del self._keys[k]
         dict.__delitem__(self, k)
 
@@ -177,6 +180,17 @@ class MultiDict(SafeIterDict):
         if k in self.aliases:
             k = self.aliases[k]
         return dict.__getitem__(self, k)
+    
+    def _updateAliases(self, k, *aliases):
+        """Update the aliases for a given key."""
+        for a in set(self._keys[k]) - set(aliases):
+            # remove old aliases, but only if they still
+            # point to this key
+            if self.aliases[a] == k:
+                del self.aliases[a]
+        for a in aliases:
+            self.aliases[a] = k
+        self._keys[k] = aliases
 
 class PrettyDict(MultiDict):
     def __repr__(self):

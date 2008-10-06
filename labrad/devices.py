@@ -104,6 +104,7 @@ class DeviceServer(LabradServer):
         self.devices = util.MultiDict() # aliases -> device
         self.device_guids = {} # name -> guid
         self._next_guid = 0
+        self._refreshLock = defer.DeferredLock()
         return self.refreshDeviceList()
 
     def stopServer(self):
@@ -129,20 +130,11 @@ class DeviceServer(LabradServer):
         clients that have selected devices in context will still
         be able to refer to them after the refresh.
         """
-        def finishRefresh(result):
-            del self._onRefresh
-            return result
-        if not hasattr(self, '_onRefresh'):
-            self._onRefresh = util.DeferredSignal()
-            d = self._doRefresh()
-            d.addBoth(finishRefresh)
-            d.chainDeferred(self._onRefresh)
-        return self._onRefresh()
+        return self._refreshLock.run(self._doRefresh)
         
     @inlineCallbacks
     def _doRefresh(self):
         """Do the actual refreshing."""
-        yield self.client.refresh()
         self.log('refreshing device list...')
         all_found = yield self.findDevices()
 
