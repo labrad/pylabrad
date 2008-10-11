@@ -32,6 +32,7 @@ import sys
 from datetime import datetime
 from ConfigParser import SafeConfigParser
 
+import labrad
 from labrad import util, types as T
 from labrad.server import ILabradServer, LabradServer, setting
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
@@ -72,7 +73,7 @@ class ServerProcess(ProcessProtocol):
         self.stopping = False
         self.output = []
         self._lock = defer.DeferredLock()
-        
+            
     @property
     def status(self):
         if self.starting:
@@ -88,6 +89,14 @@ class ServerProcess(ProcessProtocol):
         """Start this server instance."""
         return self._lock.run(self._start)
     
+    def stop(self):
+        """Stop this server instance."""
+        return self._lock.run(self._stop)
+    
+    def restart(self):
+        """Restart this server instance."""
+        return self._lock.run(self._restart)
+    
     @inlineCallbacks
     def _start(self):
         if self.running:
@@ -99,25 +108,21 @@ class ServerProcess(ProcessProtocol):
         self.starting = True
         self.startup = defer.Deferred()
         dispatcher.connect(self.serverConnected, 'serverConnected')
-        dispatcher.send('server_starting', sender=self, server=self.name)
+        self.emitMessage('server_starting')
         self.proc = reactor.spawnProcess(self, self.executable, self.args,
                                          env=self.env, path=self.path)
         timeoutCall = reactor.callLater(self.timeout, self.kill)
         try:
             yield self.startup
-            dispatcher.send('server_started', sender=self, server=self.name)
+            self.emitMessage('server_started')
         except:
-            dispatcher.send('server_stopped', sender=self, server=self.name)
+            self.emitMessage('server_stopped')
             raise
         finally:
             self.starting = False
             if timeoutCall.active():
                 timeoutCall.cancel()
             dispatcher.disconnect(self.serverConnected, 'serverConnected')
-        
-    def stop(self):
-        """Stop this server instance."""
-        return self._lock.run(self._stop)
         
     @inlineCallbacks
     def _stop(self):
@@ -126,20 +131,20 @@ class ServerProcess(ProcessProtocol):
         print "stopping '%s'..." % self.name
         self.stopping = True
         self.shutdown = defer.Deferred()
-        dispatcher.send('server_stopping', sender=self, server=self.name)
+        self.emitMessage('server_stopping')
         self.kill()
         yield self.shutdown
         self.stopping = False
-        dispatcher.send('server_stopped', sender=self, server=self.name)
-        
-    def restart(self):
-        """Restart this server instance."""
-        return self._lock.run(self._restart)
+        self.emitMessage('server_stopped')
         
     @inlineCallbacks
     def _restart(self):
         yield self._stop()
         yield self._start()
+        
+    def emitMessage(self, msg):
+        """Emit a message to other parts of this application."""
+        dispatcher.send(msg, sender=self, server=self.name)
         
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD.
@@ -169,12 +174,13 @@ class ServerProcess(ProcessProtocol):
             print "'%s': process ended: %s" % (self.name, reason)
         self.running = False
         if self.starting:
-            self.startup.errback(T.Error('Startup failed.', payload=self.output))
+            err = T.Error('Startup failed.', payload=self.output)
+            self.startup.errback(err)
         elif self.stopping:
             self.shutdown.callback(None)
         else:
             # looks like this thing died on its own
-            dispatcher.send('server_stopped', sender=self, server=self.name)
+            self.emitMessage('server_stopped')
     
     @inlineCallbacks
     def kill(self):
@@ -192,7 +198,8 @@ class ServerProcess(ProcessProtocol):
             if self.running:
                 self.proc.signalProcess('KILL')
         except:
-            print kills, 'Error while trying to kill server process for "%s":' % self.name
+            msg = 'Error while trying to kill server process for "%s":'
+            print kills, msg % self.name
             failure.Failure().printTraceback(elideFrameworkCode=1)
         
     def outReceived(self, data):
@@ -274,10 +281,7 @@ def createPythonServerCls(plugin):
     cls.path = os.path.split(sys.modules[plugin.__module__].__file__)[0]
     return cls
 
-class IProcNode(Interface):
-    pass
-
-class ProcNode(MultiService):
+class Node(MultiService):
     """Parent Service that keeps the node running.
     
     If the manager is stopped or we lose the network connection,
@@ -308,11 +312,11 @@ class ProcNode(MultiService):
         self.addService(self.cxn)
 
     def _disconnected(self, data):
-        log.msg('Node disconnected from manager.')
+        print 'Node disconnected from manager.'
         return self._reconnect()
 
     def _error(self, failure):
-        log.msg(failure.getErrorMessage())
+        print failure.getErrorMessage()
         return self._reconnect()
 
     def _reconnect(self):
@@ -330,10 +334,12 @@ class ProcNode(MultiService):
 
 class NodeConfig(object):
     """Load configuration from the registry and monitor it for changes."""
-    
+    # TODO: add to config: autostarting, refreshinterval, preferred start location
+        
+    @classmethod
     @inlineCallbacks
     def create(cls, cxn, nodename):
-        """Create an object to load node config from the registry."""
+        """Loads node configuration from the registry."""
         instance = cls(cxn, nodename)
         yield instance._init()
         returnValue(instance)
@@ -343,10 +349,6 @@ class NodeConfig(object):
         self._reg = cxn.registry
         self._ctx = cxn.context()
         self.nodename = nodename
-        
-    def _packet(self):
-        """Create a packet to the registry server in our context."""
-        return self._reg.packet(context=self._ctx)
         
     @inlineCallbacks
     def _init(self):
@@ -367,21 +369,25 @@ class NodeConfig(object):
         defaults = ([], ['labrad.servers'])
         defaults = yield self._load('__default__', create, defaults)
         
-        # load for this node
+        # load this node (creating config if necessary)
         create = self.nodename not in dirs
-        conf = yield self._load(self.nodename, create, defaults)
-        self.dirs, self.mods = conf
+        config = yield self._load(self.nodename, create, defaults)
+        self._update(config)
         
         # setup messages when registry changes
-        self._cxn._addListener(self._handleMessage, context=self._cxn)
+        self._reg.addListener(self._handleMessage, context=self._ctx)
         p = self._packet()
         p.notify_on_change(2345, True)
         yield p.send()
-        
-    @inlineCallbacks
-    def _handleMessage(self, c, msg):
-        """Reload when we get a message from the registry."""
-        self.dirs, self.mods = yield self._load()
+    
+    def _packet(self):
+        """Create a packet to the registry server in our context."""
+        return self._reg.packet(context=self._ctx)
+    
+    def _update(self, config):
+        """Update instance variables from loaded config."""
+        self.dirs, self.mods = config
+        print 'config updated:', self.dirs, self.mods
         
     @inlineCallbacks
     def _load(self, nodename=None, create=False, defaults=None):
@@ -399,56 +405,18 @@ class NodeConfig(object):
         mods = filter(None, ans.mods)
         returnValue((dirs, mods))
         
-    @inlineCallbacks
-    def addModules(self, mods):
-        """Add a python module to the list of modules to be searched."""
-        if isinstance(mods, str):
-            mods = [mods]
-        for module in mods:
-            if module not in self.mods:
-                self.mods.append(module)
-        yield self._save()
-        returnValue(self.mods)
-        
-    @inlineCallbacks
-    def removeModules(self, mods):
-        """Remove a module from the list of modules to be searched."""
-        if isinstance(mods, str):
-            mods = [mods]
-        for module in mods:
-            self.mods.remove(module)
-        yield self._save()
-        returnValue(self.mods)
-    
-    @inlineCallbacks
-    def addDirectories(self, dirs):
-        """Add a directory to search for servers."""
-        if isinstance(dirs, str):
-            dirs = [dirs]
-        for directory in dirs:
-            if directory not in self.dirs:
-                self.dirs.append(directory)
-        yield self._save()
-        returnValue(self.dirs)
-    
-    @inlineCallbacks
-    def removeDirectories(self, dirs):
-        """Remove a directory to search for servers."""
-        if isinstance(dirs, str):
-            dirs = [dirs]
-        for directory in dirs:
-            if directory not in self.dirs:
-                self.dirs.append(directory)
-        yield self._save()
-        returnValue(self.dirs)
-        
     def _save(self):
         """Save the current configuration to the registry."""
         p = self._packet()
-        p.cd(['', 'Nodes', nodename], True)
         p.set('directories', self.dirs)
         p.set('packages', self.mods)
         return p.send()
+        
+    @inlineCallbacks
+    def _handleMessage(self, c, msg):
+        """Reload when we get a message from the registry."""
+        config = yield self._load()
+        self._update(config)
 
 
 class NodeServer(LabradServer):
@@ -475,7 +443,7 @@ class NodeServer(LabradServer):
         self.starters = {}
         self.runners = {}
         self.stoppers = {}
-        self.initMessages()
+        self.initMessages(True)
         self.config = yield NodeConfig.create(self.client, self.nodename)
         self.refreshLock = defer.DeferredLock()
         yield self.refreshServers()
@@ -485,6 +453,9 @@ class NodeServer(LabradServer):
         self.initMessages(False)
         stoppages = [srv.stop() for srv in self.runners.values()]
         return defer.DeferredList(stoppages)
+        
+        
+    # message handling
         
     def initMessages(self, connect=True):
         """Set up message dispatching."""
@@ -534,9 +505,12 @@ class NodeServer(LabradServer):
         if sender.name in self.stoppers:
             del self.stoppers[sender.name]
             
+
+    # server refresh
+            
     def refreshServers(self):
         """Refresh the list of available servers."""
-        found = {}
+        self.servers = servers = {}
         # look for python plugins
         for module in self.config.mods:
             try:
@@ -545,9 +519,8 @@ class NodeServer(LabradServer):
                 for plugin in plugins:
                     s = createPythonServerCls(plugin)
                     s.client = self.client
-                    if s.name not in found:
-                        found[s.name] = s
-                    yield util.wakeupCall(0.0001) # pause to let other things happen
+                    if s.name not in servers:
+                        servers[s.name] = s
             except:
                 print 'Error while loading plugins from module "%s":' % module
                 failure.Failure().printTraceback(elideFrameworkCode=1)
@@ -560,35 +533,31 @@ class NodeServer(LabradServer):
                     try:
                         s = createGenericServerCls(path, f)
                         s.client = self.client
-                        if s.name not in found:
-                            found[s.name] = s
-                        yield util.wakeupCall(0.0001) # pause to let other things happen
+                        if s.name not in servers:
+                            servers[s.name] = s
                     except:
-                        print 'Error while loading config file "%s":' % os.path.join(path, f)
+                        fname = os.path.join(path, f)
+                        print 'Error while loading config file "%s":' % fname
                         failure.Failure().printTraceback(elideFrameworkCode=1)
-        # add new servers and remove old ones
-        additions = [s for s in found.values() if s.name not in self.servers]
-        deletions = [s for s in self.servers.values() if s.name not in found]
-        for s in additions:
-            self.servers[s.name] = s
-        for s in deletions:
-            del self.servers[s.name]
-        if len(additions) or len(deletions):
-            addmsg = [self.serverInfo(s) for s in additions]
-            delmsg = [self.serverInfo(s) for s in deletions]
-            dispatcher.send('list_updated', added=addmsg, removed=delmsg)        
+        # TODO: send a message with the current server list
+        #dispatcher.send('refreshed', servers=self.servers_info(None))        
+    
+    
+    # LabRAD settings
     
     @setting(1, name='s', environ='*(ss)', returns='s')
     def start(self, c, name, environ={}):
         """Start an instance of a server."""
+        if name not in self.servers:
+            raise Exception("Unknown server: '%s'." % name)
         environ = dict(environ) # copy context environment
         environ.update(LABRADNODE=self.nodename,
                        LABRADHOST=self.host,
                        LABRADPORT=str(self.port),
                        LABRADPASSWORD=self.password)
-        if name not in self.servers:
-            raise Exception("Unknown server: '%s'." % name)
         srv = self.servers[name](environ)
+        # TODO: check whether an instance with this name already exists
+        self.instances[name] = srv
         yield srv.start()
         returnValue(srv.name)
 
@@ -646,36 +615,6 @@ class NodeServer(LabradServer):
         return (cls.name, cls.__doc__ or '', cls.version,
                 cls.instancename, cls.environVars, instances)
 
-    @setting(40, returns='*s')
-    def path(self, c):
-        """Get a list of directories that will be searched for servers."""
-        return self.config.dirs
-
-    @setting(41, dirs=['s', '*s'], returns='*s')
-    def path_add(self, c, dirs):
-        """Add directories to the server search path."""
-        return self.config.addDirectories(dirs)
-
-    @setting(42, dirs=['s', '*s'], returns='*s')
-    def path_remove(self, c, dirs):
-        """Remove directories from the server search path."""
-        return self.config.removeDirectories(dirs)
-
-    @setting(45, returns='*s')
-    def modules(self, c):
-        """Get a list of python modules that will be searched for servers."""
-        return self.config.mods
-
-    @setting(46, mods=['s', '*s'], returns='*s')
-    def module_add(self, c, mods):
-        """Add python modules to be searched for servers."""
-        return self.config.addModules(mods)
-
-    @setting(47, mods=['s', '*s'], returns='*s')
-    def module_remove(self, c, mods):
-        """Remove python modules from the server search path."""
-        return self.config.removeModules(mods)
-
     @setting(100, name='s', returns='*(ts)')
     def server_output(self, c, name):
         """Get output from a server's stdout."""
@@ -701,9 +640,12 @@ class NodeServer(LabradServer):
     def node_version(self, c):
         """Return a list of key-value tuples containing info about this node."""
         import socket, sys
-        info = {'hostname': socket.gethostname(),
-                'python version': sys.version,
-                'labrad version': labrad.__version__,
-                'labrad revision': labrad.__revision__,
-                'labrad date': labrad.__date__}
+        info = {
+            'hostname': socket.gethostname(),
+            'nodename': self.nodename,
+            'python version': sys.version,
+            'labrad version': labrad.__version__,
+            'labrad revision': labrad.__revision__,
+            'labrad date': labrad.__date__,
+            }
         return list(info.items())

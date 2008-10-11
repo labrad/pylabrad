@@ -52,6 +52,9 @@ public class JSONTransport {
     	logger.log(message);
     }
     
+    /**
+     * 
+     */
 	private void pullResponses() {
 		try {
             pullRequester.sendRequest(null, new RequestCallback() {

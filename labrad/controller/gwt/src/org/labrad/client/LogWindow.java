@@ -11,6 +11,9 @@ public class LogWindow extends VerticalPanel {
 	
 	private int LOG_LENGTH = 10;
 	
+	/**
+	 * Simple panel for logging messages
+	 */
 	public LogWindow() {
 		Button btn = new Button("clear log");
 		btn.addClickListener(new ClickListener() {

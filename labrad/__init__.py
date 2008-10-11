@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from labrad import client, constants as C, manager, util
 from labrad.wrappers import connectAsync, runAsync
 
-__version__  = '0.9.2'
+__version__  = '0.10.4'
 __revision__ = '$Revision$'
 __date__     = '$Date$'
 

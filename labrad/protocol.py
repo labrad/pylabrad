@@ -278,7 +278,6 @@ class LabradProtocol(protocol.Protocol):
                               for c in (context, None)
                               for i in (ID, None)
                               if (s, c, i) in self.listeners)
-            print 'got message:', msgCtx, ID, data
             for key in keys:
                 for listener, async in self.listeners[key]:
                     func, args, kw = listener

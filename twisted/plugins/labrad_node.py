@@ -20,7 +20,7 @@ from twisted.plugin import IPlugin
 from twisted.application.service import IServiceMaker
 
 from labrad import constants as C, util
-from labrad.node import ProcNode
+from labrad.node import Node
 
 class NodeOptions(usage.Options):
     optParameters = [['name', 'n', util.getNodeName(), 'Node name.'],
@@ -38,6 +38,6 @@ class NodePlugin(object):
         name = options['name']
         host = options['host']
         port = int(options['port'])
-        return ProcNode(name, host, port)
+        return Node(name, host, port)
 
 nodeService = NodePlugin()
