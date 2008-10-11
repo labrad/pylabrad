@@ -1,11 +1,0 @@
-Ä}q(Ulabrad_controllerqctwisted.plugin
-CachedDropin
-q)Åq}q(U
-moduleNameqU!twisted.plugins.labrad_controllerqUdescriptionqNUpluginsq	]q
-ctwisted.plugin
-CachedPlugin
-q)Åq}q(Uprovidedq]q(ctwisted.application.service
-IServiceMaker
-qctwisted.plugin
-IPlugin
-qeUdropinqhUnameqUcontrollerServiceqhNubaubUlabrad_nodeqh)Åq}q(hUtwisted.plugins.labrad_nodeqhNh	]qh)Åq}q(h]q(hhehhhUnodeServiceqhNubaubu.
