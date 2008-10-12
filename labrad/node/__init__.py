@@ -288,8 +288,6 @@ class Node(MultiService):
     this service attempts to restart it so that we will come
     back online when the manager is back up.
     """
-    implements(IProcNode)
-
     reconnectDelay = 10
 
     def __init__(self, name, host, port):
