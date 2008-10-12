@@ -34,7 +34,10 @@ def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
     return [s for s in servers
               if s.lower().startswith('node') and \
-                 hasattr(cxn[s], 'available_servers')]
+                 hasattr(cxn[s], 'start') and \
+                 hasattr(cxn[s], 'stop') and \
+                 hasattr(cxn[s], 'restart') and \
+                 hasattr(cxn[s], 'status')]
 
 class JSONResource(resource.Resource):
     def __init__(self, cxn, func, *a, **kw):
@@ -199,7 +202,7 @@ class NodeProxy(JSONTransport):
         yield DeferredList([cxn[node].refresh_servers() for node in nodes], fireOnOneErrback=True)
         
         status_dict = {}
-        info = yield DeferredList([cxn[node].servers_info() for node in nodes])
+        info = yield DeferredList([cxn[node].status() for node in nodes])
         for (success, result), node in zip(info, _nodes(cxn)):
             if success:
                 status_dict[node] = result
@@ -280,7 +283,7 @@ class NodeAPI(resource.Resource):
                 self.sendMessage(message, **kw)
             messages = ['node.server_starting', 'node.server_started',
                         'node.server_stopping', 'node.server_stopped',
-                        'node.list_updated']
+                        'node.status']
             p = cxn.manager.packet()
             for ID, message in enumerate(messages):
                 cxn.manager.addListener(relay, ID=ID+1234, kw=dict(message=message))

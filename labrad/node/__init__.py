@@ -503,6 +503,26 @@ class NodeServer(LabradServer):
         if sender.name in self.stoppers:
             del self.stoppers[sender.name]
             
+    
+    # status information
+            
+    def status(self):
+        """Get information about all servers on this node."""
+        def serverInfo(cls):
+            instances = [n for n, s in self.runners.items()
+                                    if s.__class__.name == cls.name]
+            return (cls.name, cls.__doc__ or '', cls.version,
+                    cls.instancename, cls.environVars, instances)
+        return [serverInfo(item[1])
+                for item in sorted(self.servers.items())]
+
+    def serverInfo(self, cls):
+        """Get information about a particular server on this node."""
+        instances = [n for n, s in self.runners.items()
+                                if s.__class__.name == cls.name]
+        return (cls.name, cls.__doc__ or '', cls.version,
+                cls.instancename, cls.environVars, instances)
+
 
     # server refresh
             
@@ -538,7 +558,7 @@ class NodeServer(LabradServer):
                         print 'Error while loading config file "%s":' % fname
                         failure.Failure().printTraceback(elideFrameworkCode=1)
         # TODO: send a message with the current server list
-        #dispatcher.send('refreshed', servers=self.servers_info(None))        
+        dispatcher.send('status', servers=self.servers_info(None))        
     
     
     # LabRAD settings
@@ -601,17 +621,9 @@ class NodeServer(LabradServer):
         yield self.refreshServers()
 
     @setting(14, returns='*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})')
-    def servers_info(self, c):
+    def status(self, c):
         """Get information about all servers on this node."""
-        return [self.serverInfo(item[1])
-                for item in sorted(self.servers.items())]
-
-    def serverInfo(self, cls):
-        """Get information about a particular server on this node."""
-        instances = [n for n, s in self.runners.items()
-                                if s.__class__.name == cls.name]
-        return (cls.name, cls.__doc__ or '', cls.version,
-                cls.instancename, cls.environVars, instances)
+        return self.status()
 
     @setting(100, name='s', returns='*(ts)')
     def server_output(self, c, name):
