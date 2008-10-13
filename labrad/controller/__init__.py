@@ -13,9 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import with_statement
+
 import os
 import hashlib
 import random
+from contextlib import contextmanager
 
 import labrad
 from labrad.config import ConfigFile
@@ -36,8 +39,7 @@ def _nodes(cxn):
               if s.lower().startswith('node') and \
                  hasattr(cxn[s], 'start') and \
                  hasattr(cxn[s], 'stop') and \
-                 hasattr(cxn[s], 'restart') and \
-                 hasattr(cxn[s], 'status')]
+                 hasattr(cxn[s], 'restart')]
 
 class JSONResource(resource.Resource):
     def __init__(self, cxn, func, *a, **kw):
@@ -69,6 +71,7 @@ class JSONResource(resource.Resource):
             
     
 class PushHandler(resource.Resource):
+    """Handle messages that have been pushed to us."""
     def __init__(self, transport):
         self.transport = transport
         
@@ -82,7 +85,9 @@ class PushHandler(resource.Resource):
         except Exception, e:
             return simplejson.dumps({'error': str(e)})
     
+    
 class PullHandler(resource.Resource):
+    """Collect responses and send them when pulled."""
     def __init__(self, transport):
         self.transport = transport
         
@@ -96,8 +101,12 @@ class PullHandler(resource.Resource):
         request.setHeader('content-length', len(result))
         request.write(result)
         request.finish()
+
+transports = {}
     
 class JSONTransport(resource.Resource):
+    """Provides remote method invocation and messaging over http."""
+    
     timeoutDelay = 100 # time to wait before killing this transport
     pullDelay = 10 # maximum length of time to keep a pull request open
     
@@ -111,21 +120,27 @@ class JSONTransport(resource.Resource):
         self.ID = ID
     
     def resetTimeout(self):
+        """Reset the timing out of this transport."""
         self.timeoutCall.reset(self.timeoutDelay)
     
     def _timeout(self):
+        """Timeout this transport by deleting it from the transport dict."""
         del transports[self.ID]
     
     def lookupMethod(self, name):
+        """Lookup a method to be invoked by name."""
         return getattr(self, 'remote_' + name)
     
+    @inlineCallbacks
     def invokeMethod(self, id, name, *args, **kw):
         """Called when the client invokes a method on the server."""
         self.resetTimeout()
-        func = self.lookupMethod(name)
-        d = defer.maybeDeferred(func, *args, **kw)
-        d.addCallback(self._addResult, id)
-        d.addErrback(self._addError, id)
+        try:
+            func = self.lookupMethod(name)
+            result = yield func(*args, **kw)
+            self._addResponse(id=id, result=result)
+        except:
+            self._addResponse(id=id, error=Failure().getBriefTraceback())
     
     def getResponses(self):
         """Called by the client to get all pending responses.
@@ -146,37 +161,49 @@ class JSONTransport(resource.Resource):
     def sendMessage(self, msg, *args, **kw):
         """Called by the server to push messages out to the client."""
         self._addResponse(message=msg, args=args, kw=kw)
-    
-    def _addResult(self, result, id):
-        self._addResponse(id=id, result=result)
-    
-    def _addError(self, failure, id):
-        self._addResponse(id=id, error=failure.getBriefTraceback())
-    
+            
     def _addResponse(self, **kw):
+        """Add to the current response list and send it if waiting."""
         self.responses.append(kw)
         self._finishWaiter()
     
     def _finishWaiter(self):
+        """Finish sending responses out to a waiting request."""
         if self.waiter:
             d = self.waiter
             self.waiter = None
             reactor.callLater(0, d.callback, self._flushResponses())
             
     def _cancelTimeout(self, result, timeoutCall):
+        """Cancel a timeout call, passing the deferred result through."""
         if timeoutCall.active():
             timeoutCall.cancel()
         return result
     
     def _flushResponses(self):
+        """Serialize the current list of response and clear the list."""
         resp = simplejson.dumps(self.responses)
         self.responses = []
         return resp
+    
         
 class NodeProxy(JSONTransport):
     def __init__(self, cxn, ID):
         JSONTransport.__init__(self, ID)
+        self.contextPool = set()
         self.cxn = cxn
+    
+    @contextmanager
+    def context(self):
+        """Create a new context or reuse one from the pool."""
+        if len(self.contextPool):
+            ctx = self.contextPool.pop()
+        else:
+            ctx = self.cxn.context()
+        try:
+            yield ctx
+        finally:
+            self.contextPool.add(ctx)
     
     @inlineCallbacks
     def remote_available_servers(self):
@@ -189,58 +216,60 @@ class NodeProxy(JSONTransport):
         returnValue(sorted(avail))
         
     def remote_list_servers(self):
+        """Get a list of connected LabRAD server."""
         return self.cxn.servers.keys()
         
     def remote_list_nodes(self):
+        """Get a list of connected nodes."""
         return _nodes(self.cxn)
     
     @inlineCallbacks
     def remote_status(self):
+        """Get the status of all nodes."""
         cxn = self.cxn
-        servers = yield self.remote_available_servers()
-        nodes = yield self.remote_list_nodes()
-        yield DeferredList([cxn[node].refresh_servers() for node in nodes], fireOnOneErrback=True)
+        nodes = _nodes(cxn)
         
+        requests = [cxn[node].status() for node in nodes]
         status_dict = {}
-        info = yield DeferredList([cxn[node].status() for node in nodes])
-        for (success, result), node in zip(info, _nodes(cxn)):
-            if success:
-                status_dict[node] = result
-        
-        status = []
-        for server in servers:
-            row = []
-            for node in nodes:
-                if node not in status_dict:
-                    row.append([False, '', 'unavailable', server, [], []])
-                else:
-                    found = False
-                    for name, desc, ver, inst, vars, instances in status_dict[node]:
-                        if name == server:
-                            row.append([True, desc, 'Version: ' + ver, inst, vars, instances])
-                            found = True
-                            break
-                    if not found:
-                        row.append([False, '', 'unavailable', server, [], []])
-            status.append(row)
-        returnValue([servers, nodes, status])
+        for node, request in zip(nodes, requests):
+            try:
+                status_dict[node] = yield request
+            except:
+                print "Error while getting status of node:", node
+        returnValue(status_dict)
     
     @inlineCallbacks
     def remote_refresh_servers(self, node):
-        yield self.cxn[node].refresh_servers(context=self.cxn.context())
+        """Trigger a node to refresh its server list."""
+        with self.context() as ctx:
+            yield self.cxn[node].refresh_servers(context=ctx)
         returnValue('%s refreshed' % node)
     
+    @inlineCallbacks
     def remote_start(self, node, server):
-        return self.cxn[node].start(str(server), context=self.cxn.context())
+        """Start a server on the given node."""
+        with self.context() as ctx:
+            inst = yield self.cxn[node].start(str(server), context=ctx)
+        returnValue(inst)
         
+    @inlineCallbacks
     def remote_restart(self, node, server):
-        return self.cxn[node].restart(str(server), context=self.cxn.context())
+        """Restart a server on the given node."""
+        with self.context() as ctx:
+            inst = yield self.cxn[node].restart(str(server), context=ctx)
+        returnValue(inst)
         
+    @inlineCallbacks
     def remote_stop(self, node, server):
-        return self.cxn[node].stop(str(server), context=self.cxn.context())
+        """Stop a server on the given node."""
+        print "stop called:", node, server
+        with self.context() as ctx:
+            inst = yield self.cxn[node].stop(str(server), context=ctx)
+        returnValue(inst)
     
     @inlineCallbacks
     def remote_iplist(self):
+        """Get a list of (str, bool) tuples of allowed/disallowed addresses."""
         p = self.cxn.manager.packet()
         p.whitelist()
         p.blacklist()
@@ -248,14 +277,15 @@ class NodeProxy(JSONTransport):
         ips = sorted([(addr, True) for addr in resp.whitelist] + \
                      [(addr, False) for addr in resp.blacklist])
         returnValue(ips)
+        
+    def remote_blacklist(self, addr):
+        """Add an address to the blacklist."""
+        return self.cxn.manager.blacklist(str(addr))
     
-    def remote_blacklist(self, address):
-        return self.cxn.manager.blacklist(str(address))
-    
-    def remote_whitelist(self, address):
-        return self.cxn.manager.whitelist(str(address))
-
-transports = {}
+    def remote_whitelist(self, addr):
+        """Add an address to the whitelist."""
+        return self.cxn.manager.whitelist(str(addr))
+        
     
 class NodeAPI(resource.Resource):
     reconnectDelay = 10
@@ -265,6 +295,7 @@ class NodeAPI(resource.Resource):
         d.addCallbacks(self._connectionSucceeded, self._connectionFailed)
 
     def sendMessage(self, message, **kw):
+        """Forward a message to all connected transports."""
         for t in transports.values():
             t.sendMessage(message, **kw)
 
@@ -276,6 +307,8 @@ class NodeAPI(resource.Resource):
             self.connected = True
             print 'Connected to manager %s:%d.' % (self.host, self.port)
             
+            p = cxn.manager.packet()
+            
             # sign up for named messages
             def relay(c, data, message):
                 source, payload = data
@@ -284,26 +317,25 @@ class NodeAPI(resource.Resource):
             messages = ['node.server_starting', 'node.server_started',
                         'node.server_stopping', 'node.server_stopped',
                         'node.status']
-            p = cxn.manager.packet()
             for ID, message in enumerate(messages):
                 cxn.manager.addListener(relay, ID=ID+1234, kw=dict(message=message))
                 p.subscribe_to_named_message(message, ID+1234, True)
-            yield p.send()
-                
-            # sign up for server connect/disconnect messages
-            self._serverNames = dict((yield cxn.manager.servers()))
             
+            # sign up for server connect/disconnect messages
             def serverConnected(c, data):
                 ID, name = data
                 self.sendMessage('Server Connected', name=name)
             cxn.manager.addListener(serverConnected, ID=12345678)
-            yield cxn.manager.subscribe_to_named_message('Server Connect', 12345678, True)
+            p.subscribe_to_named_message('Server Connect', 12345678, True)
             
             def serverDisconnected(c, data):
                 ID, name = data
                 self.sendMessage('Server Disconnected', name=name)
             cxn.manager.addListener(serverDisconnected, ID=12345679)
-            yield cxn.manager.subscribe_to_named_message('Server Disconnect', 12345679, True)
+            p.subscribe_to_named_message('Server Disconnect', 12345679, True)
+            
+            # finish signup
+            yield p.send()
             
         except Exception, e:
             print e

@@ -144,7 +144,10 @@ class ServerProcess(ProcessProtocol):
         
     def emitMessage(self, msg):
         """Emit a message to other parts of this application."""
-        dispatcher.send(msg, sender=self, server=self.name)
+        dispatcher.send(msg,
+                        sender=self,
+                        server=self.__class__.name,
+                        instance=self.name)
         
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD.
@@ -192,7 +195,7 @@ class ServerProcess(ProcessProtocol):
             servers = self.client.servers
             if self.name in servers:
                 servers[self.name].sendMessage(987654321)
-                yield util.wakeupCall(10.0)
+                yield util.wakeupCall(5.0)
                 
             # if we're not dead yet, kill with a vengeance
             if self.running:
@@ -336,17 +339,19 @@ class NodeConfig(object):
         
     @classmethod
     @inlineCallbacks
-    def create(cls, cxn, nodename):
+    def create(cls, parent):
         """Loads node configuration from the registry."""
-        instance = cls(cxn, nodename)
+        instance = cls(parent)
         yield instance._init()
         returnValue(instance)
     
-    def __init__(self, cxn, nodename):
+    def __init__(self, parent):
+        self.parent = parent
+        self.nodename = parent.nodename
+        cxn = parent.client
         self._cxn = cxn
         self._reg = cxn.registry
         self._ctx = cxn.context()
-        self.nodename = nodename
         
     @inlineCallbacks
     def _init(self):
@@ -370,7 +375,7 @@ class NodeConfig(object):
         # load this node (creating config if necessary)
         create = self.nodename not in dirs
         config = yield self._load(self.nodename, create, defaults)
-        self._update(config)
+        self._update(config, False)
         
         # setup messages when registry changes
         self._reg.addListener(self._handleMessage, context=self._ctx)
@@ -382,10 +387,12 @@ class NodeConfig(object):
         """Create a packet to the registry server in our context."""
         return self._reg.packet(context=self._ctx)
     
-    def _update(self, config):
+    def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
         self.dirs, self.mods = config
         print 'config updated:', self.dirs, self.mods
+        if triggerRefresh:
+            self.parent.refreshServers()
         
     @inlineCallbacks
     def _load(self, nodename=None, create=False, defaults=None):
@@ -442,9 +449,8 @@ class NodeServer(LabradServer):
         self.runners = {}
         self.stoppers = {}
         self.initMessages(True)
-        self.config = yield NodeConfig.create(self.client, self.nodename)
-        self.refreshLock = defer.DeferredLock()
-        yield self.refreshServers()
+        self.config = yield NodeConfig.create(self)
+        self.refreshServers()
     
     def stopServer(self):
         """Stop this node by killing all subprocesses."""
@@ -461,7 +467,7 @@ class NodeServer(LabradServer):
         # set up messages to be relayed out over LabRAD
         messages = ['server_starting', 'server_started',
                     'server_stopping', 'server_stopped',
-                    'list_updated']
+                    'status']
         for message in messages:
             f(self._relayMessage, message)
         # set up message handlers for subprocess events
@@ -516,19 +522,12 @@ class NodeServer(LabradServer):
         return [serverInfo(item[1])
                 for item in sorted(self.servers.items())]
 
-    def serverInfo(self, cls):
-        """Get information about a particular server on this node."""
-        instances = [n for n, s in self.runners.items()
-                                if s.__class__.name == cls.name]
-        return (cls.name, cls.__doc__ or '', cls.version,
-                cls.instancename, cls.environVars, instances)
-
 
     # server refresh
             
     def refreshServers(self):
         """Refresh the list of available servers."""
-        self.servers = servers = {}
+        servers = {}
         # look for python plugins
         for module in self.config.mods:
             try:
@@ -557,8 +556,9 @@ class NodeServer(LabradServer):
                         fname = os.path.join(path, f)
                         print 'Error while loading config file "%s":' % fname
                         failure.Failure().printTraceback(elideFrameworkCode=1)
+        self.servers = servers
         # TODO: send a message with the current server list
-        dispatcher.send('status', servers=self.servers_info(None))        
+        dispatcher.send('status', servers=self.status())        
     
     
     # LabRAD settings
@@ -620,8 +620,9 @@ class NodeServer(LabradServer):
         """Refresh the list of available servers."""
         yield self.refreshServers()
 
-    @setting(14, returns='*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})')
-    def status(self, c):
+    @setting(14, 'status',
+             returns='*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})')
+    def get_status(self, c):
         """Get information about all servers on this node."""
         return self.status()
 
