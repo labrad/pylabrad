@@ -35,8 +35,6 @@ class NotFoundError(Error):
     def __init__(self, key):
         self.msg = 'Could not find "%s".' % key
 
-# TODO: add sendMessage functions to duplicate asynchronous functionality
-
 class SettingWrapper(object):
     """Object to wrap a single setting on a single server.
 
@@ -248,7 +246,7 @@ class ServerWrapper(HasDynamicAttrs):
     def _mgr(self):
         return self._cxn._mgr
 
-    _staticAttrs = ['settings', 'context', 'packet']
+    _staticAttrs = ['settings', 'context', 'packet', 'sendMessage']
     _wrapAttr = SettingWrapper
 
     def _getAttrs(self):
@@ -272,6 +270,15 @@ class ServerWrapper(HasDynamicAttrs):
 
     def _send(self, *args, **kw):
         return self._cxn._send(self.ID, *args, **kw)
+
+    def sendMessage(self, ID, *args, **kw):
+        """Send a message to this server."""
+        tag = extractKey(kw, 'tag', [])
+        if len(args) == 0:
+            args = None
+        elif len(args) == 1:
+            args = args[0]
+        self._cxn._sendMessage(self.ID, [(ID, args, tag)], **kw)
 
     def __repr__(self):
         return """\
@@ -404,6 +411,10 @@ class Client(HasDynamicAttrs):
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
         return self._cxn.sendRequest(target, records, *args, **kw)
+
+    def _sendMessage(self, target, records, *args, **kw):
+        """Send a message over this connection."""
+        return block(self._cxn.sendMessage, target, records, *args, **kw)
 
     def __repr__(self):
         if self.connected:

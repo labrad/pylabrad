@@ -1,4 +1,9 @@
 GENERAL:
+    Client/ClientAsync:
+        create clones that work in different contexts by default
+        implement generic flattened version of a packet that can be forwarded
+            to do this, probably need a 'Flattened' data type, that is a special string with a type tag or something
+    
 	logging:
 		make self.log work in a reasonable way before servers have started serving
         allow logs to be accessed and manipulated remotely
@@ -11,6 +16,11 @@ GENERAL:
 SERVERS:
 	GENERAL:
 		emit log messages and allow setting log levels
+        add manhole interface to allow for remote inspection/debugging
+
+    NODE:
+        more flexible configuration of startup/shutdown options for servers
+        incorporate node-readable configuration directly into source code (rather than separate .ini file)
 
     SUPER NODE:
         ask for a server to be started
@@ -21,4 +31,8 @@ SERVERS:
         make server output visible (and clearable, etc.) in the browser
         access all node settings remotely (e.g. directories, environment variables)
         run multiple server instances on one node (set environment variables for each, etc.)
+        visual indication when no nodes are connected
+        visual indication when connection to LabRAD or controller is lost
+        renegotiate connection automatically after loss
+        
 

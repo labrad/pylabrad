@@ -194,6 +194,7 @@ class ServerProcess(ProcessProtocol):
             # first try to shutdown nicely with a message
             servers = self.client.servers
             if self.name in servers:
+                # TODO: make message kill configurable in .ini file
                 servers[self.name].sendMessage(987654321)
                 yield util.wakeupCall(5.0)
                 
@@ -557,7 +558,7 @@ class NodeServer(LabradServer):
                         print 'Error while loading config file "%s":' % fname
                         failure.Failure().printTraceback(elideFrameworkCode=1)
         self.servers = servers
-        # TODO: send a message with the current server list
+        # send a message with the current server list
         dispatcher.send('status', servers=self.status())        
     
     

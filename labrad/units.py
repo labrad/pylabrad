@@ -887,6 +887,9 @@ kcali   = 1000*cali          # international kilocalorie
 psi     = 6894.75729317*Pa   # pounds per square inch
 degR    = (5./9.)*K          # degrees Rankine
 
+# some common textual units (no conversions here)
+dB = Unit('dB')
+dBm = Unit('dBm')
 
 def description():
     """Return a string describing all available units."""
@@ -908,10 +911,8 @@ def description():
 __doc__ += '\n' + description()
 
 
-# Some demonstration code. Run with "python -i PhysicalQuantities.py"
-# to have this available.
-
 if __name__ == '__main__':
+    # some very basic demonstration code
 
     l = WithUnit(10., 'm')
     big_l = WithUnit(10., 'km')
