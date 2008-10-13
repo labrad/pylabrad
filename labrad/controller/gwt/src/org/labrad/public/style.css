@@ -15,3 +15,4 @@ body { margin: 0px; }
 
 .centered-cell { text-align: center; }
 .padded-cell { padding-right: 15px; padding-left: 15px; }
+.odd-row { background-color: #E4E4E4; }

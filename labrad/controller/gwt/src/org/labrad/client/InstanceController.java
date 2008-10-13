@@ -2,6 +2,8 @@ package org.labrad.client;
 
 import java.util.List;
 
+import org.labrad.client.JSONTransport.JSONMessageListener;
+
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.JavaScriptObject;
 import com.google.gwt.json.client.JSONArray;
@@ -66,7 +68,7 @@ public class InstanceController extends HorizontalPanel {
 //    }
     
     public InstanceController(ControlPanel parent, JSONTransport transport,
-                              String node, String server, String instance, String version,
+                              final String node, final String server, String instance, String version,
                               boolean available, List<String> runningInstances, List<String> environmentVars) {
         this.transport = transport;
         this.parent = parent;
@@ -142,6 +144,38 @@ public class InstanceController extends HorizontalPanel {
         } else {
             setStatus(Status.UNAVAILABLE, false);
         }
+        
+        // update if a server starts running
+        transport.addMessageListener("node.server_started", new JSONMessageListener() {
+			public void onMessage(JavaScriptObject args, JavaScriptObject kw) {
+				String otherNode = ((JsObject)kw).getString("node");
+				String otherServer = ((JsObject)kw).getString("server");
+				if (!server.equals(otherServer)) return;
+				if (node.equals(otherNode)) {
+					setStatus(Status.RUNNING, false);
+				} else {
+					setRunningElsewhere(true);
+				}
+			}
+        });
+        
+        // update if a server stops running
+        transport.addMessageListener("node.server_stopped", new JSONMessageListener() {
+			public void onMessage(JavaScriptObject args, JavaScriptObject kw) {
+				String otherNode = ((JsObject)kw).getString("node");
+				String otherServer = ((JsObject)kw).getString("server");
+				if (!server.equals(otherServer)) return;
+				if (node.equals(otherNode)) {
+					setStatus(Status.STOPPED, false);
+				} else {
+					setRunningElsewhere(false);
+				}
+			}
+        });
+    }
+    
+    public boolean isRunning() {
+    	return currentStatus == Status.RUNNING;
     }
     
     private void startStatusChange(Status intermediateStatus, Status finalStatus) {

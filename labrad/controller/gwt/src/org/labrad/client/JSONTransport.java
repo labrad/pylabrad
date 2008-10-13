@@ -71,7 +71,7 @@ public class JSONTransport {
                 }
             });
         } catch (RequestException e) {
-            //
+            // TODO: handle errors here (e.g. disconnection from server.
         }
 	}
 	
@@ -91,7 +91,7 @@ public class JSONTransport {
 	private void handleResponse(JsResponse response) {
 		if (response.isMessage()) {
 			String message = response.getString("message");
-			JsArray<JavaScriptObject> args = response.get("args").cast();
+			JavaScriptObject args = response.get("args");
 			JavaScriptObject kw = response.get("kw");
 			handleMessage(message, args, kw);
 			
@@ -107,20 +107,13 @@ public class JSONTransport {
 		}
 	}
 
-	private void handleMessage(String message, JsArray<JavaScriptObject> args, JavaScriptObject kw) {
+	private void handleMessage(String message, JavaScriptObject args, JavaScriptObject kw) {
 		log("Message: " + message +
 		    ".  args: " + args.toString() +
 		    ".  kw: " + kw.toString());
-		//JavaScriptObject[] argsArray = JsArray.toArray(args);
-		JsObject kwObject = (JsObject) kw;
-		JsArray<String> keys = kwObject.getKeys();
-		Map<String, String> kwMap = new HashMap<String, String>();
-		for (int i = 0; i < keys.size(); i++) {
-		    kwMap.put(keys.get(i), kwObject.get(keys.get(i)));
-		}
 		if (messageListeners.containsKey(message)) {
 		    for (JSONMessageListener listener : messageListeners.get(message)) {
-		        listener.onMessage(args, kwMap);
+		        listener.onMessage(args, kw);
 		    }
 		}
 	}
@@ -196,26 +189,12 @@ public class JSONTransport {
         public final native <T> T get(String key, Class<T> cls) /*-{ return this[key]; }-*/;
 	}
 	
-	private static class JsObject extends JavaScriptObject {
-	    protected JsObject() {}
-        
-        public final native JsArray<String> getKeys() /*-{
-            var keys = [];
-            for (var key in this) {
-                keys.push(key);
-            }
-            return keys;
-        }-*/;
-        
-        public final native String get(String key) /*-{ return this[key]; }-*/;
-	}
-	
     public interface JSONRequestCallback {
         public void onError(Throwable error);
         public void onResponseReceived(JavaScriptObject response);
     }
     
     public interface JSONMessageListener {
-        public void onMessage(JsArray<JavaScriptObject> args, Map<String, String> kw);
+        public void onMessage(JavaScriptObject args, JavaScriptObject kw);
     }
 }
