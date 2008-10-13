@@ -21,6 +21,9 @@ SERVERS:
     NODE:
         more flexible configuration of startup/shutdown options for servers
         incorporate node-readable configuration directly into source code (rather than separate .ini file)
+            this could be in a specially formatted comment
+            other languages could also do this in a comment as long as it gets incorporated in the source
+            alternatively, we could launch a subinterpreter and execute the file, then load the info from it
 
     SUPER NODE:
         ask for a server to be started

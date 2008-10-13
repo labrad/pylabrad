@@ -46,6 +46,7 @@ class ServerProtocol(LabradProtocol):
     not this protocol class.
     """
     def connectionMade(self):
+        LabradProtocol.connectionMade(self)
         self.factory._connectionMade(self)
 
     @inlineCallbacks

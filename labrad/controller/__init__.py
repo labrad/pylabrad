@@ -21,7 +21,7 @@ import random
 from contextlib import contextmanager
 
 import labrad
-from labrad.util import maybeTimeout, simplejson
+from labrad.util import simplejson
 from labrad.wrappers import connectAsync
 
 from twisted.internet import defer, reactor

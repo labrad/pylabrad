@@ -102,6 +102,10 @@ class LabradProtocol(protocol.Protocol):
         self.onDisconnect = util.DeferredSignal()
 
     # network events
+    def connectionMade(self):
+        # set the SO_KEEPALIVE option on all connections
+        self.transport.setTcpKeepAlive(True)
+    
     def connectionLost(self, reason):
         """Called when the network connection is lost.
         
