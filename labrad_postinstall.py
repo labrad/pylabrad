@@ -24,6 +24,7 @@ menuPath = os.path.join(get_special_folder_path("CSIDL_COMMON_PROGRAMS"),
 scriptsPath = os.path.join(sys.prefix, 'Scripts')
 twistdPath = os.path.join(scriptsPath, 'twistd.py')
 ipyPath = os.path.join(scriptsPath, 'ipython.py')
+libPath = os.path.join(sys.prefix, 'Lib', 'site-packages', 'labrad')
 configPath = os.path.join(sys.prefix, 'Lib', 'site-packages', 'labrad', 'config')
 
 def mkdir(a, *p):
@@ -48,6 +49,12 @@ def create_local_copy(globname, locname):
 def install():
     print "Creating start menu entries..."
     mkdir(menuPath)
+
+    print "Removing old node.py file...",
+    nodeDotPy = os.path.join(libPath, "node.py")
+    if os.path.isfile(nodeDotPy):
+        os.remove(nodeDotPy)
+    print "done."
 
     print "Creating node shortcut...",
     nodeShortcut = os.path.join(menuPath, "LabRAD Node.lnk")
