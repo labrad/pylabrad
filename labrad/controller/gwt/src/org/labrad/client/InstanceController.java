@@ -150,9 +150,11 @@ public class InstanceController extends HorizontalPanel {
 			public void onMessage(JavaScriptObject args, JavaScriptObject kw) {
 				String otherNode = ((JsObject)kw).getString("node");
 				String otherServer = ((JsObject)kw).getString("server");
+				String otherInstance = ((JsObject)kw).getString("instance");
 				if (!server.equals(otherServer)) return;
 				if (node.equals(otherNode)) {
 					setStatus(Status.RUNNING, false);
+					setInstance(otherInstance);
 				} else {
 					setRunningElsewhere(true);
 				}
@@ -176,6 +178,10 @@ public class InstanceController extends HorizontalPanel {
     
     public boolean isRunning() {
     	return currentStatus == Status.RUNNING;
+    }
+    
+    private void setInstance(String instance) {
+    	this.instance = instance;
     }
     
     private void startStatusChange(Status intermediateStatus, Status finalStatus) {
