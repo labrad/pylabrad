@@ -13,8 +13,7 @@ Intended Audience :: Science/Research
 License :: OSI Approved :: GNU General Public License (GPL)
 Operating System :: OS Independent
 Programming Language :: Python
-Topic :: Scientific/Engineering
-"""
+Topic :: Scientific/Engineering"""
 
 from distutils.core import setup
 
@@ -22,7 +21,7 @@ doclines = __doc__.split('\n')
 
 setup(
     name = 'pylabrad',
-    version = '0.10.5',
+    version = '0.10.6',
     author = 'Matthew Neeley',
     author_email = 'maffoo@users.sourceforge.net',
     
