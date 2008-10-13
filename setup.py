@@ -38,7 +38,8 @@ setup(
     packages = [
         'labrad',
         'labrad.config',
-        'labrad.controller', 
+        'labrad.controller',
+        'labrad.node', 
         'labrad.pipeline',
         'labrad.servers',
         'labrad.test',
