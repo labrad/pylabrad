@@ -104,6 +104,7 @@ class LabradProtocol(protocol.Protocol):
     # network events
     def connectionMade(self):
         # set the SO_KEEPALIVE option on all connections
+        self.transport.setTcpNoDelay(True)
         self.transport.setTcpKeepAlive(True)
     
     def connectionLost(self, reason):
