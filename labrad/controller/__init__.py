@@ -21,7 +21,6 @@ import random
 from contextlib import contextmanager
 
 import labrad
-from labrad.config import ConfigFile
 from labrad.util import maybeTimeout, simplejson
 from labrad.wrappers import connectAsync
 
@@ -285,6 +284,56 @@ class NodeProxy(JSONTransport):
     def remote_whitelist(self, addr):
         """Add an address to the whitelist."""
         return self.cxn.manager.whitelist(str(addr))
+
+
+class ControllerConfig(object):
+    """Load configuration from the registry and monitor it for changes."""
+        
+    @classmethod
+    @inlineCallbacks
+    def create(cls, parent):
+        """Loads controller configuration from the registry."""
+        instance = cls(parent)
+        yield instance._init()
+        returnValue(instance)
+    
+    def __init__(self, parent):
+        self.parent = parent
+        cxn = parent.cxn
+        self._cxn = cxn
+        self._reg = cxn.registry
+        self._ctx = cxn.context()
+        
+    @inlineCallbacks
+    def _init(self):
+        """Load from registry and start monitoring for changes."""
+        p = self._packet()
+        p.cd(['', 'Nodes', '__controller__'], True)
+        yield p.send()
+        yield self._load()
+        # setup messages when registry changes
+        self._reg.addListener(self._handleMessage, context=self._ctx)
+        p = self._packet()
+        p.notify_on_change(2345, True)
+        yield p.send()
+    
+    def _packet(self):
+        """Create a packet to the registry server in our context."""
+        return self._reg.packet(context=self._ctx)
+            
+    @inlineCallbacks
+    def _load(self):
+        """Load the current configuration out of the registry."""
+        pw = generateNonce(8) # generate a random password
+        p = self._packet()
+        p.get('users', '*(ss)', True, [('webuser', pw)], key='users')
+        ans = yield p.send()
+        self.users = dict(ans.users)
+        returnValue(ans.users)
+        
+    def _handleMessage(self, c, msg):
+        """Reload when we get a message from the registry."""
+        return self._load()
         
     
 class NodeAPI(resource.Resource):
@@ -306,6 +355,9 @@ class NodeAPI(resource.Resource):
             self.cxn = cxn
             self.connected = True
             print 'Connected to manager %s:%d.' % (self.host, self.port)
+            
+            # lookup password information in the registry
+            self.config = yield ControllerConfig.create(self)
             
             p = cxn.manager.packet()
             
@@ -393,11 +445,7 @@ class DigestAuthRequest(server.Request):
                 return m.hexdigest()
     
             user = auth['username']
-            status = self.channel.site.users[user]
-            #if self.path == '/__logout__':
-            #    status['logged_in'] = False
-            #    return False
-            pw = status['pw']
+            pw = self.channel.site.getPassword(user)
             ha1 = hash(user, auth['realm'], pw)
             ha2 = hash(self.method, auth['uri'])
             response = hash(ha1, auth['nonce'], auth['nc'],
@@ -424,37 +472,31 @@ class DigestAuthRequest(server.Request):
         self.write('<html><h1>Invalid username/password!</h1></html>')
         self.finish()
 
-def generateNonce():
-    return ''.join(random.choice('0123456789abcdef') for _ in range(32))
+def generateNonce(length=32):
+    return ''.join(random.choice('0123456789abcdef') for _ in range(length))
         
 def makeNodeControllerSite(host, port):
-    try:
-        passFile = ConfigFile('controller.ini')
-    except:
-        passFile = ConfigFile('controller-template.ini')
-
-    root = static.File(WEB_DIR)
-    root.indexNames = ['NodeController.html']
+    """Create a new node controller site.
+    
+    This site serves up a directory 
+    """
     api = NodeAPI()
     api.host = host
     api.port = port
     api._connect()
+    def getPassword(user):
+        return api.config.users[user]
+    root = static.File(WEB_DIR)
+    root.indexNames = ['NodeController.html']
     root.putChild('api', api)
     site = server.Site(root)
     site.requestFactory = DigestAuthRequest
-        
-    site.users = {}
-    for section in passFile.sections():
-        try:
-            user = passFile.get(section, 'username')
-            pw = passFile.get(section, 'password')
-            site.users[user] = {'pw': pw, 'logged_in': True}
-        except Exception, e:
-            print e
+    site.getPassword = getPassword
     return site
 
 if __name__ == '__main__':
     from twisted.internet import reactor
-    site = makeNodeControllerSite('localhost', 7682)
-    reactor.listenTCP(7667, site)
+    from labrad import constants as C
+    site = makeNodeControllerSite(C.MANAGER_HOST, C.MANAGER_PORT)
+    reactor.listenTCP(C.HTTP_PORT, site)
     reactor.run()

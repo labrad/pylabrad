@@ -38,14 +38,6 @@ def rmdir(a, *p):
     path = os.path.join(a, *p)
     os.rmdir(path)
     
-def create_local_copy(globname, locname):
-    if not os.path.exists(locname):
-        with open(globname) as globfile:
-            with open(locname, 'w') as locfile:
-                # skip the first five lines, which are a note
-                # about making a local copy
-                locfile.writelines(globfile.readlines()[5:])
-    
 def install():
     print "Creating start menu entries..."
     mkdir(menuPath)
@@ -76,15 +68,13 @@ def install():
     print "done."
     
     # create local copy of configuration
-    print "Creating local copy of controller config...",
-    create_local_copy(os.path.join(configPath, "controller-template.ini"),
-                      os.path.join(configPath, "controller.ini"))
-    controllerConf = os.path.join(menuPath, "LabRAD Controller Config.lnk")
-    if os.path.isfile(controllerConf):
-        os.remove(controllerConf)
-    create_shortcut(os.path.join(configPath, "controller.ini"),
-                    "Controller Configuration", controllerConf)
-    file_created(controllerConf)
+    print "Removing deprecated controller config files...",
+    files = [os.path.join(configPath, "controller-template.ini"),
+             os.path.join(configPath, "controller.ini"),
+             os.path.join(menuPath, "LabRAD Controller Config.lnk")]
+    for f in files:
+        if os.path.isfile(f):
+            os.remove(f)
     print "done."
 
     if os.path.exists(ipyPath):
