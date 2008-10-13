@@ -90,8 +90,7 @@ public class ControlPanel extends FlowPanel {
                 //resp.setText("Request failed with an error: " + exception.toString());
             }
 
-            @SuppressWarnings("unchecked")
-			public void onResponseReceived(JavaScriptObject response) {
+            public void onResponseReceived(JavaScriptObject response) {
             	JsMap<String, JsArray<ServerInfo>> resp = response.cast();
             	nodes.clear();
             	servers.clear();
