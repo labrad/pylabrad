@@ -260,7 +260,7 @@ public class ControlPanel extends FlowPanel {
 			}
     	});
     	HorizontalPanel p = new HorizontalPanel();
-    	p.add(new Label(nodename));
+    	p.add(new Label(nodename.substring(5, nodename.length())));
     	p.add(b);
     	return p;
     }
