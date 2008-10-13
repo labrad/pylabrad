@@ -50,10 +50,11 @@ def install():
     print "Creating start menu entries..."
     mkdir(menuPath)
 
-    print "Removing old node.py file...",
-    nodeDotPy = os.path.join(libPath, "node.py")
-    if os.path.isfile(nodeDotPy):
-        os.remove(nodeDotPy)
+    print "Removing old node.py* files...",
+    for suffix in ['', 'c', 'o']:
+        nodeDotPy = os.path.join(libPath, "node.py" + suffix)
+        if os.path.isfile(nodeDotPy):
+            os.remove(nodeDotPy)
     print "done."
 
     print "Creating node shortcut...",
