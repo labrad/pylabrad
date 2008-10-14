@@ -170,6 +170,10 @@ public class ControlPanel extends FlowPanel {
         }
         // create the new table widget
     	Grid table = new Grid(servers.size()+1, nodes.size()+1);
+    	// give some indication when there are no nodes
+    	if (nodes.size() == 0) {
+    		table.setText(0, 0, "No nodes are connected.");
+    	}
         int row, col;
         // create node controls in the column headers
         for (col = 0; col < nodes.size(); col++) {

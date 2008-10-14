@@ -58,6 +58,7 @@ class ServerProcess(ProcessProtocol):
     """A class to represent a running server instance."""
     implements(IServerProcess)
     timeout = 20
+    shutdownTimeout = 5
 
     def __init__(self, env):
         self.env = os.environ.copy()
@@ -191,19 +192,26 @@ class ServerProcess(ProcessProtocol):
         if not self.running:
             return
         try:
-            # first try to shutdown nicely with a message
             servers = self.client.servers
-            if self.name in servers:
-                # TODO: make message kill configurable in .ini file
-                servers[self.name].sendMessage(987654321)
-                yield util.wakeupCall(5.0)
+            if hasattr(self, 'shutdownMode') and self.name in servers:
+                mode, ID = self.shutdownMode
+                if mode == 'message':
+                    # try to shutdown by sending a message
+                    servers[self.name].sendMessage(ID)
+                elif mode == 'setting':
+                    # try to shutdown by calling a setting
+                    try:
+                        yield servers[self.name][ID]()
+                    except:
+                        pass
+                yield util.wakeupCall(self.shutdownTimeout)
                 
             # if we're not dead yet, kill with a vengeance
             if self.running:
                 self.proc.signalProcess('KILL')
         except:
             msg = 'Error while trying to kill server process for "%s":'
-            print kills, msg % self.name
+            print msg % self.name
             failure.Failure().printTraceback(elideFrameworkCode=1)
         
     def outReceived(self, data):
@@ -255,6 +263,16 @@ def createGenericServerCls(path, filename):
     except:
         pass
 
+    # shutdown
+    if scp.has_option('shutdown', 'message'):
+        cls.shutdownMode = 'message', int(scp.get('shutdown', 'message', raw=True))
+    elif scp.has_option('shutdown', 'setting'):
+        cls.shutdownMode = 'setting', scp.get('shutdown', 'setting', raw=True)
+    try:
+        cls.shutdownTimeout = float(scp.getint('shutdown', 'timeout'))
+    except:
+        pass
+
     return cls
 
 def createPythonServerCls(plugin):
@@ -283,6 +301,17 @@ def createPythonServerCls(plugin):
     # startup
     cls.cmdline = ' '.join([sys.executable, '-m', plugin.__module__])
     cls.path = os.path.split(sys.modules[plugin.__module__].__file__)[0]
+    
+    # shutdown
+    if hasattr(plugin, 'shutdownMessage'):
+        cls.shutdownMode = 'message', plugin.shutdownMessage
+    elif hasattr(plugin, 'shutdownSetting'):
+        cls.shutdownMode = 'setting', plugin.shutdownSetting
+    try:
+        cls.shutdownTimeout = float(plugin.shutdownTimeout)
+    except:
+        pass
+    
     return cls
 
 class Node(MultiService):

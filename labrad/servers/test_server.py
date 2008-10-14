@@ -33,6 +33,7 @@ class TestServer(LabradServer):
     """
     name = 'Python Test Server'
     testMode = True
+    shutdownMessage = 987654321
 
     @inlineCallbacks
     def initServer(self):
