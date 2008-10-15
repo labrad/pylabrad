@@ -1,4 +1,10 @@
 GENERAL:
+    - put data_vault configuration into the registry
+        (note that it may need to be localized for the node the dv is running on,
+        because they may need to access the repo through a different path)
+    - add license and python version (>2.5) info to distutils so they get
+        set properly on pypi
+    
 	logging:
 		make self.log work in a reasonable way before servers have started serving
         allow logs to be accessed and manipulated remotely
