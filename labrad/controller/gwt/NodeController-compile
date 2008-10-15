@@ -1,3 +1,3 @@
 #!/bin/sh
 APPDIR=`dirname $0`;
-java  -Xmx256M -cp "$APPDIR/src:$APPDIR/bin:$APPDIR/../../google/gwt/gwt-user.jar:$APPDIR/../../google/gwt/gwt-dev-linux.jar" com.google.gwt.dev.GWTCompiler -out "$APPDIR/www" "$@" org.labrad.NodeController;
+java  -Xmx256M -cp "$APPDIR/src:$APPDIR/bin:$APPDIR/../../google/gwt/gwt-user.jar:$APPDIR/../../google/gwt/gwt-dev-linux.jar" com.google.gwt.dev.GWTCompiler -out "$APPDIR/../pylabrad/labrad/controller/gwt/www" "$@" org.labrad.NodeController;
