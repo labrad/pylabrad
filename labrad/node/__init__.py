@@ -62,13 +62,16 @@ class ServerProcess(ProcessProtocol):
 
     def __init__(self, env):
         self.env = os.environ.copy()
-        self.env.update(env)
+        self.env.update(env, DIR=self.path)
         cls = self.__class__
         self.name = interpEnvironmentVars(cls.instancename, self.env)
-        self.cmdline = interpEnvironmentVars(cls.cmdline, self.env)
+        # TODO: allow for spaces in args by doing a proper split here
         self.args = self.cmdline.split()
-        self.executable = os.path.join(self.path, self.args[0])
-        # TODO: easier cmdline customization (different args, path, exe, etc.)
+        self.args = [interpEnvironmentVars(a, self.env) for a in self.args]
+        if not os.path.isabs(self.args[0]):
+            # must use absolute path for the executable
+            self.args[0] = os.path.join(self.path, self.args[0])
+        self.executable = self.args[0]
         self.starting = False
         self.running = False
         self.stopping = False
@@ -602,7 +605,8 @@ class NodeServer(LabradServer):
         environ.update(LABRADNODE=self.nodename,
                        LABRADHOST=self.host,
                        LABRADPORT=str(self.port),
-                       LABRADPASSWORD=self.password)
+                       LABRADPASSWORD=self.password,
+                       PYTHON=sys.executable)
         srv = self.servers[name](environ)
         # TODO: check whether an instance with this name already exists
         self.instances[name] = srv

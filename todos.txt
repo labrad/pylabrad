@@ -20,11 +20,15 @@ SERVERS:
         add manhole interface to allow for remote inspection/debugging
 
     NODE:
-        more flexible configuration of startup options for servers
+        more flexible configuration of startup options for servers (get rid of shebang lines on windows)
         incorporate node-readable configuration directly into source code (rather than separate .ini file)
+            + this allows us to determine the path to the file to be run
             this could be in a specially formatted comment
             other languages could also do this in a comment as long as it gets incorporated in the source
             alternatively, we could launch a subinterpreter and execute the file, then load the info from it
+                doing it this way would allow 'structured' options as variable names, and reusing config
+                that the node reads to also set things up when run standalone
+        GUI to let the node live in the tray
 
     SUPER NODE:
         ask for a server to be started
@@ -37,4 +41,5 @@ SERVERS:
         renegotiate connection automatically after loss
         access all node settings remotely (e.g. directories, modules (now in registry))
         run multiple server instances on one node (set environment variables for each, etc.)
+        log when servers start, stop or fail
 

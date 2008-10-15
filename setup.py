@@ -21,7 +21,7 @@ doclines = __doc__.split('\n')
 
 setup(
     name = 'pylabrad',
-    version = '0.10.6',
+    version = '0.91.0',
     author = 'Matthew Neeley',
     author_email = 'maffoo@users.sourceforge.net',
     
