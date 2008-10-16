@@ -1,4 +1,5 @@
 GENERAL:
+    - make sure all LabRAD data is pickleable
     - add python version (>2.5) info to distutils so it gets set properly on pypi
 
 	logging:
