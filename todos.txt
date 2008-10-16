@@ -1,6 +1,5 @@
 GENERAL:
-    - add license and python version (>2.5) info to distutils so they get
-        set properly on pypi
+    - add python version (>2.5) info to distutils so it gets set properly on pypi
 
 	logging:
 		make self.log work in a reasonable way before servers have started serving
