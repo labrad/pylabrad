@@ -24,6 +24,8 @@ setup(
     version = '0.91.1',
     author = 'Matthew Neeley',
     author_email = 'maffoo@users.sourceforge.net',
+    license = 'http://www.gnu.org/licenses/gpl-2.0.html',
+    platforms = ['ANY'],
     
     url = 'http://sourceforge.net/projects/pylabrad/',
     download_url = '',
