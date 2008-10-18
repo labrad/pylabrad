@@ -23,29 +23,45 @@ LOGFILE=node.log
 PIDFILE=node.pid
 CMD=labradnode
 
+d_start()
+{
+    mkdir $LOGDIR
+    mkdir $RUNDIR
+    twistd --pidfile $RUNDIR/$PIDFILE --logfile $LOGDIR/$LOGFILE $0
+}
+
+d_stop()
+{
+    kill `cat $RUNDIR/$PIDFILE`
+}
+
 case "$1" in
-    'start')
-        echo "Starting labradnode..."
-        mkdir $LOGDIR
-        mkdir $RUNDIR
-        twistd --pidfile $RUNDIR/$PIDFILE --logfile $LOGDIR/$LOGFILE $CMD
+    start)
+        echo -n "Starting $0..."
+        d_start
+        echo "done."
         ;;
         
-    'stop')
-        echo "Stopping labradnode..."
-        kill `cat $RUNDIR/$PIDFILE`
+    stop)
+        echo -n "Stopping $0..."
+        d_stop
+        echo "done."
         ;;
         
-    'restart')
-        $0 stop
-        $0 start
+    restart|force-reload)
+        echo -n "Restarting $0..."
+        d_stop
+        sleep 1
+        d_start
+        echo "done."
         ;;
         
     *)
-        echo "Usage: $0 { start | stop }"
+        echo "Usage: $0 { start | stop | restart | force-reload }"
+        exit 3
         ;;
 esac
 
-# TODO: add status, try-restart, reload, force-reload
+# TODO: add status, try-restart, reload
 
 exit 0
