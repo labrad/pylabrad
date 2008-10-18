@@ -28,7 +28,6 @@ case "$1" in
         echo "Starting labradcontrol..."
         mkdir $LOGDIR
         mkdir $RUNDIR
-        source /etc/environment
         twistd --pidfile $RUNDIR/$PIDFILE --logfile $LOGDIR/$LOGFILE $CMD
         ;;
         
