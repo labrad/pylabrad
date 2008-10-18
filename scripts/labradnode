@@ -21,12 +21,15 @@ LOGDIR=/var/log/labrad
 RUNDIR=/var/run/labrad
 LOGFILE=node.log
 PIDFILE=node.pid
-CMD=labradnode
 
 d_start()
 {
-    mkdir $LOGDIR
-    mkdir $RUNDIR
+    if [! -d $LOGDIR] then
+        mkdir $LOGDIR
+    fi
+    if [! -d $RUNDIR] then
+        mkdir $RUNDIR
+    fi
     twistd --pidfile $RUNDIR/$PIDFILE --logfile $LOGDIR/$LOGFILE $0
 }
 
