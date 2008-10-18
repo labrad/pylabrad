@@ -10,17 +10,31 @@
 # Description: Provides a web interface for controlling a LabRAD network.
 ### END INIT INFO
 
+## Environment Variables
+#export PYTHONPATH=
+#export LABRADHOST=localhost
+#export LABRADPORT=7682
+#export LABRADNODE=
+#export LABRADPASSWORD=
+
+LOGDIR=/var/log/labrad
+RUNDIR=/var/run/labrad
+LOGFILE=control.log
+PIDFILE=control.pid
+CMD=labradcontrol
+
 case "$1" in
     'start')
         echo "Starting labradcontrol..."
-        mkdir /var/run/labrad
-        mkdir /var/log/labrad
-        twistd --pidfile /var/run/labrad/control.pid --logfile /var/log/labrad/control.log labradcontrol
+        mkdir $LOGDIR
+        mkdir $RUNDIR
+        source /etc/environment
+        twistd --pidfile $RUNDIR/$PIDFILE --logfile $LOGDIR/$LOGFILE $CMD
         ;;
         
     'stop')
         echo "Stopping labradcontrol..."
-        kill `cat /var/run/labrad/control.pid`
+        kill `cat $RUNDIR/$PIDFILE`
         ;;
         
     'restart')
