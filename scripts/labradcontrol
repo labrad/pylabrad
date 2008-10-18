@@ -24,10 +24,10 @@ PIDFILE=control.pid
 
 d_start()
 {
-    if [! -d $LOGDIR] then
+    if [! -d $LOGDIR]; then
         mkdir $LOGDIR
     fi
-    if [! -d $RUNDIR] then
+    if [! -d $RUNDIR]; then
         mkdir $RUNDIR
     fi
     twistd --pidfile $RUNDIR/$PIDFILE --logfile $LOGDIR/$LOGFILE $0
