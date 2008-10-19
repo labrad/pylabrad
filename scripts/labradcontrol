@@ -16,43 +16,51 @@
 #export LABRADPORT=7682
 #export LABRADNODE=
 #export LABRADPASSWORD=
+USER=root
 
 LOGDIR=/var/log/labrad
 RUNDIR=/var/run/labrad
 LOGFILE=control.log
 PIDFILE=control.pid
+CMD=labradcontrol
+UID=`id -u $USER`
+GID=`id -g $USER`
 
 d_start()
 {
-    if [! -d $LOGDIR]; then
+    if [ ! -d $LOGDIR ]; then
         mkdir $LOGDIR
     fi
-    if [! -d $RUNDIR]; then
+    if [ ! -d $RUNDIR ]; then
         mkdir $RUNDIR
     fi
-    twistd --pidfile $RUNDIR/$PIDFILE --logfile $LOGDIR/$LOGFILE $0
+    twistd --pidfile $RUNDIR/$PIDFILE \
+           --logfile $LOGDIR/$LOGFILE \
+           --uid $UID --gid $GID $CMD
 }
 
 d_stop()
 {
-    kill `cat $RUNDIR/$PIDFILE`
+    if [ -f $RUNDIR/$PIDFILE ]; then
+        kill `cat $RUNDIR/$PIDFILE`
+    fi
 }
 
 case "$1" in
     start)
-        echo -n "Starting $0..."
+        echo -n "Starting $CMD..."
         d_start
         echo "done."
         ;;
         
     stop)
-        echo -n "Stopping $0..."
+        echo -n "Stopping $CMD..."
         d_stop
         echo "done."
         ;;
         
     restart|force-reload)
-        echo -n "Restarting $0..."
+        echo -n "Restarting $CMD..."
         d_stop
         sleep 1
         d_start
@@ -60,7 +68,7 @@ case "$1" in
         ;;
         
     *)
-        echo "Usage: $0 { start | stop | restart | force-reload }"
+        echo "Usage: $CMD { start | stop | restart | force-reload }"
         exit 3
         ;;
 esac
