@@ -31,7 +31,8 @@ public class LogWindow extends VerticalPanel {
 	}
 	
 	public void log(String message) {
-		logger.insert(new Label(message), 0);
+		logger.insert(new LogMessage(message), 0);
+		logger.insert(new Label(" "), 1);
 		if (logger.getWidgetCount() > LOG_LENGTH) {
 			logger.remove(logger.getWidgetCount() - 1);
 		}

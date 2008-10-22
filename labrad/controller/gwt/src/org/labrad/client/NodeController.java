@@ -37,6 +37,7 @@ public class NodeController implements EntryPoint, RequestCallback {
         
         TabPanel tabs = new TabPanel();
         tabs.add(new ControlPanel(transport), "Nodes");
+        tabs.add(new RegistryEditor(transport), "Registry");
         tabs.add(new IPLists(transport), "Security");
         
         LogWindow logger = new LogWindow();
