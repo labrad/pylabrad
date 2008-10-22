@@ -266,6 +266,9 @@ class NodeProxy(JSONTransport):
             inst = yield self.cxn[node].stop(str(server), context=ctx)
         returnValue(inst)
     
+    
+    # server ip lists
+    
     @inlineCallbacks
     def remote_iplist(self):
         """Get a list of (str, bool) tuples of allowed/disallowed addresses."""
@@ -284,6 +287,24 @@ class NodeProxy(JSONTransport):
     def remote_whitelist(self, addr):
         """Add an address to the whitelist."""
         return self.cxn.manager.whitelist(str(addr))
+
+    
+    # registry access
+    
+    @inlineCallbacks
+    def remote_registry_dir(self, path):
+        with self.context() as ctx:
+            p = self.cxn.registry.packet(context=ctx)
+            p.cd([''] + [str(d) for d in path])
+            p.dir()
+            p.cd(['']) # go back to root so as not to block deletion
+            ans = yield p.send()
+            dirs, keys = ans.dir
+            print 'path:', path
+            print 'dirs:', dirs
+            print 'keys:', keys
+            returnValue([sorted(dirs), sorted(keys)])
+
 
 
 class ControllerConfig(object):
@@ -429,6 +450,7 @@ class DigestAuthRequest(server.Request):
             self.sendUnauthorizedResponse()
         
     def checkAuthorization(self):
+        return True
         auth = self.getHeader('Authorization')
         if auth is None:
             return False

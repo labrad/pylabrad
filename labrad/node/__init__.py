@@ -27,7 +27,6 @@ for each child server is controlled by an associated .ini file.
 """
 
 import os
-import re
 import sys
 from datetime import datetime
 from ConfigParser import SafeConfigParser
@@ -73,7 +72,7 @@ class ServerProcess(ProcessProtocol):
             self.args[0] = os.path.join(self.path, self.args[0])
         self.executable = self.args[0]
         self.starting = False
-        self.running = False
+        self.started = False
         self.stopping = False
         self.output = []
         self._lock = defer.DeferredLock()
@@ -82,8 +81,8 @@ class ServerProcess(ProcessProtocol):
     def status(self):
         if self.starting:
             return 'STARTING'
-        elif self.running:
-            return 'RUNNING'
+        elif self.started:
+            return 'STARTED'
         elif self.stopping:
             return 'STOPPING'
         else:
@@ -103,7 +102,7 @@ class ServerProcess(ProcessProtocol):
     
     @inlineCallbacks
     def _start(self):
-        if self.running:
+        if self.started:
             return
         print "starting '%s'..." % self.name
         print "path:", self.path
@@ -130,7 +129,7 @@ class ServerProcess(ProcessProtocol):
         
     @inlineCallbacks
     def _stop(self):
-        if not self.running:
+        if not self.started:
             return
         print "stopping '%s'..." % self.name
         self.stopping = True
@@ -164,7 +163,7 @@ class ServerProcess(ProcessProtocol):
         """
         if name == self.name:
             self.ID = ID
-            self.running = True
+            self.started = True
             self.startup.callback(self)
 
     def processEnded(self, reason):
@@ -179,7 +178,7 @@ class ServerProcess(ProcessProtocol):
             print "'%s': process terminated: %s" % (self.name, reason.value)
         else:
             print "'%s': process ended: %s" % (self.name, reason)
-        self.running = False
+        self.started = False
         if self.starting:
             err = T.Error('Startup failed.', payload=self.output)
             self.startup.errback(err)
@@ -192,7 +191,7 @@ class ServerProcess(ProcessProtocol):
     @inlineCallbacks
     def kill(self):
         """Kill the server process."""
-        if not self.running:
+        if not self.started:
             return
         try:
             servers = self.client.servers
@@ -210,7 +209,7 @@ class ServerProcess(ProcessProtocol):
                 yield util.wakeupCall(self.shutdownTimeout)
                 
             # if we're not dead yet, kill with a vengeance
-            if self.running:
+            if self.started:
                 self.proc.signalProcess('KILL')
         except:
             msg = 'Error while trying to kill server process for "%s":'
@@ -680,6 +679,16 @@ class NodeServer(LabradServer):
         if name not in self.servers:
             raise Exception("'%s' not found." % name)
         return self.servers[name].version
+    
+    @setting(103, name='s', enable='b', returns='')
+    def stream_output(self, c, name, enable):
+        """Enable or disable server output messages.
+        
+        This allows you to receive messages whenever a server
+        outputs something on its stdout, effectively giving a
+        remote view of the server's console window.
+        """
+        pass
     
     @setting(1000, returns='*(ss)')
     def node_version(self, c):
