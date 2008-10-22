@@ -32,6 +32,8 @@ from twisted.web import http, resource, static, server
 HERE_DIR = os.path.split(os.path.abspath(__file__))[0]
 WEB_DIR = os.path.join(HERE_DIR, 'gwt', 'www', 'org.labrad.NodeController')
 
+DEBUG = True
+
 def _nodes(cxn):
     servers = sorted(cxn.servers.keys())
     return [s for s in servers
@@ -450,7 +452,8 @@ class DigestAuthRequest(server.Request):
             self.sendUnauthorizedResponse()
         
     def checkAuthorization(self):
-        return True
+        if DEBUG:
+            return True
         auth = self.getHeader('Authorization')
         if auth is None:
             return False
