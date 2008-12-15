@@ -433,18 +433,28 @@ class Unit(object):
         if name in _unit_table:
             return _unit_table[name]
         unit = _unit_table[''] # start with identity
-        parsed = grammar.unit.parseString(name)
-        for sign, list_ in [(1, parsed.posexp), (-1, parsed.negexp)]:
-            if isinstance(list_, str):
-                continue
-            for elem in list_:
-                num = elem['num'] if 'num' in elem else 1
-                num = -num if 'neg' in elem else num
-                denom = elem['denom'] if 'denom' in elem else 1
-                term = elem['name']
-                if term not in _unit_table:
-                    _unit_table[term] = cls._stringUnit(term)
-                unit = unit * _unit_table[term]**(sign*Ratio(num, denom))
+        try:
+            parsed = grammar.unit.parseString(name)
+            for sign, list_ in [(1, parsed.posexp), (-1, parsed.negexp)]:
+                if isinstance(list_, str):
+                    continue
+                for elem in list_:
+                    num = elem['num'] if 'num' in elem else 1
+                    num = -num if 'neg' in elem else num
+                    denom = elem['denom'] if 'denom' in elem else 1
+                    term = elem['name']
+                    if term not in _unit_table:
+                        _unit_table[term] = cls._stringUnit(term)
+                    unit = unit * _unit_table[term]**(sign*Ratio(num, denom))
+        except:
+            # TODO: handle errors more intelligently here.
+            # (might need to change unit grammar)
+            # most likely this was a parsing error
+            # the manager doesn't guarantee that units
+            # will follow the grammar, so not handling this
+            # error can crash us and kill our connection.
+            # For now, just fall back to a string unit in this case.
+            unit = cls._stringUnit(term)
         # if the name of this unit is new, we'll add it to the table
         # of known units.  Otherwise, we'll just return the unit
         # object that is already in the table.  This means units that

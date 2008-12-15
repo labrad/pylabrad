@@ -181,7 +181,7 @@ class ManagedDeviceServer(LabradServer):
 
     @inlineCallbacks
     def handleDeviceMessage(self, device, server, address, isConnected=True):
-        print 'device message:', device, server, address, isConnected
+        print 'Device message:', device, server, address, isConnected
         name = self.makeDeviceName(device, server, address)
         if isConnected: # add device
             if name in self.devices:
@@ -199,17 +199,7 @@ class ManagedDeviceServer(LabradServer):
             self.devices[guid, name] = dev
             
         else: # remove device
-            # we delete the device, but not its guid, so that
-            # if this device comes back, users who have
-            # selected it by guid will reconnect seamlessly
-            if name not in self.devices:
-                return
-            dev = self.devices[name]
-            del self.devices[name]
-            try:
-                yield dev.shutdown()
-            except Exception, e:
-                self.log('Error while shutting down device "%s": %s' % (name, e))
+            yield self.removeDevice(name)
 
     @inlineCallbacks
     def removeDevice(self, name):
@@ -227,12 +217,12 @@ class ManagedDeviceServer(LabradServer):
 
     @inlineCallbacks
     def connectToDeviceManager(self):
-        yield self.client.refresh()
+        #yield self.client.refresh()
         manager = self.client[self.deviceManager]
         ident_func = manager.register_ident_function
         reg_func = manager.register_server
         if hasattr(self, 'deviceIdentFunc'):
-            yield ident_func(self.deviceIdentFunc, self.messageID)
+            yield ident_func(self.deviceIdentFunc)
         devs = yield reg_func(self.deviceName, self.messageID)
         # the devs list is authoritative any devices we have
         # that are _not_ on this list should be removed
@@ -343,9 +333,18 @@ class ManagedDeviceServer(LabradServer):
 
     # server settings
 
-    @setting(1, 'List Devices', returns=['*(ws)'])
+    @setting(1, 'List Devices', returns='*(ws)')
     def list_devices(self, c):
-        """List available devices."""
+        """Get a list of available devices.
+        
+        The list entries have a numerical ID and a string name.
+        It is recommended to use the names wherever possible to
+        identify devices, since this contains human-readable
+        information about the device, however for speed numerical
+        IDs may sometimes be desirable.  The ID number for a
+        device is persistent, so it can be used even if the device
+        disconnects and later reconnects under the same name.
+        """
         IDs, names = self.deviceLists()
         return zip(IDs, names)
 
@@ -353,27 +352,27 @@ class ManagedDeviceServer(LabradServer):
                 key=[': Select first device',
                      's: Select device by name',
                      'w: Select device by ID'],
-                returns=['s: Name of the selected device'])
+                returns='s: Name of the selected device')
     def select_device(self, c, key=0):
         """Select a device for the current context."""
         dev = self.selectDevice(c, key=key)
         return dev.name
 
-    @setting(3, 'Deselect Device', returns=[''])
+    @setting(3, 'Deselect Device', returns='')
     def deselect_device(self, c):
-        """Select a device for the current context."""
+        """Deselect a device in the current context."""
         dev = self.deselectDevice(c)
 
     @setting(1000001, 'Lock Device',
                       data=[': Lock the selected device',
                             'v[s]: Lock for specified time'],
-                      returns=[''])
+                      returns='')
     def lock_device(self, c, data):
         """Lock a device to be accessible only in this context."""
         dev = self.selectedDevice(c)
         dev.lock(c.ID, data)
 
-    @setting(1000002, 'Release Device', returns=[''])
+    @setting(1000002, 'Release Device', returns='')
     def release_device(self, c):
         """Release the lock on the currently-locked device."""
         dev = self.selectedDevice(c)

@@ -26,10 +26,13 @@ variables or via command line arguments.  The startup process
 for each child server is controlled by an associated .ini file.
 """
 
+from __future__ import with_statement
+
 import os
 import sys
 from datetime import datetime
 from ConfigParser import SafeConfigParser
+import StringIO
 
 import labrad
 from labrad import util, types as T
@@ -135,8 +138,11 @@ class ServerProcess(ProcessProtocol):
         self.stopping = True
         self.shutdown = defer.Deferred()
         self.emitMessage('server_stopping')
-        self.kill()
+        # hack: marker to tell the kill func that it worked
+        finished = [False]
+        self.kill(finished)
         yield self.shutdown
+        finished[0] = True
         self.stopping = False
         self.emitMessage('server_stopped')
         
@@ -163,8 +169,9 @@ class ServerProcess(ProcessProtocol):
         """
         if name == self.name:
             self.ID = ID
-            self.started = True
-            self.startup.callback(self)
+            if self.starting:
+                self.running = True
+                self.startup.callback(self)
 
     def processEnded(self, reason):
         """Called when the server process ends.
@@ -189,7 +196,7 @@ class ServerProcess(ProcessProtocol):
             self.emitMessage('server_stopped')
     
     @inlineCallbacks
-    def kill(self):
+    def kill(self, finished=None):
         """Kill the server process."""
         if not self.started:
             return
@@ -207,6 +214,11 @@ class ServerProcess(ProcessProtocol):
                     except:
                         pass
                 yield util.wakeupCall(self.shutdownTimeout)
+                
+            # hack to let us know that we did indeed finish killing the server
+            if finished is not None:
+                if finished[0]:
+                    return
                 
             # if we're not dead yet, kill with a vengeance
             if self.started:
@@ -232,16 +244,36 @@ class ServerProcess(ProcessProtocol):
         """Clear the log of stdout."""
         self.output = []
 
-def createGenericServerCls(path, filename):
+def findConfigBlock(path, filename):
+    """Find a Node configuration block embedded in a file."""
+    # markers to delimit node info block
+    BEGIN = "### BEGIN NODE INFO"
+    END = "### END NODE INFO"
+    with open(os.path.join(path, filename)) as file:
+        foundBeginning = False
+        lines = []
+        for line in file.xreadlines():
+            if line.upper().strip() == BEGIN:
+                foundBeginning = True
+            elif line.upper().strip() == END:
+                break
+            elif foundBeginning:
+                lines.append(line)
+        return '\n'.join(lines) if lines else None
+            
+
+def createGenericServerCls(path, conf):
     """Create a ServerProcess class representing a generic server.
     
-    Options for this server are read from a .ini config file on disk.
+    Options for this server are passed in as a string in standard
+    .ini format.  We use a string rather than a file to allow this
+    configuration to be extracted from a larger file if necessary.
     """
     class cls(ServerProcess):
         pass
     
     scp = SafeConfigParser()
-    scp.read(os.path.join(path, filename))
+    scp.readfp(StringIO.StringIO(conf))
 
     # general information
     cls.name = scp.get('info', 'name', raw=True)
@@ -324,7 +356,7 @@ class Node(MultiService):
     back online when the manager is back up.
     """
     reconnectDelay = 10
-
+    
     def __init__(self, name, host, port):
         MultiService.__init__(self)
         self.name = name
@@ -401,7 +433,7 @@ class NodeConfig(object):
         
         # load defaults (creating them if necessary)
         create = '__default__' not in dirs
-        defaults = ([], ['labrad.servers'])
+        defaults = ([], ['labrad.servers'], ['.ini', '.py'])
         defaults = yield self._load('__default__', create, defaults)
         
         # load this node (creating config if necessary)
@@ -421,8 +453,8 @@ class NodeConfig(object):
     
     def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
-        self.dirs, self.mods = config
-        print 'config updated:', self.dirs, self.mods
+        self.dirs, self.mods, self.extensions = config
+        print 'config updated:', self.dirs, self.mods, self.extensions
         if triggerRefresh:
             self.parent.refreshServers()
         
@@ -435,18 +467,22 @@ class NodeConfig(object):
         if create:
             p.set('directories', defaults[0])
             p.set('packages', defaults[1])
+            p.set('extensions', defaults[2])
         p.get('directories', '*s', key='dirs')
         p.get('packages', '*s', key='mods')
+        p.get('extensions', '*s', key='exts')
         ans = yield p.send()
         dirs = filter(None, ans.dirs)
         mods = filter(None, ans.mods)
-        returnValue((dirs, mods))
+        exts = filter(None, ans.exts)
+        returnValue((dirs, mods, exts))
         
     def _save(self):
         """Save the current configuration to the registry."""
         p = self._packet()
         p.set('directories', self.dirs)
         p.set('packages', self.mods)
+        p.set('extensions', self.extensions)
         return p.send()
         
     @inlineCallbacks
@@ -577,10 +613,18 @@ class NodeServer(LabradServer):
         for dirname in self.config.dirs:
             for path, dirs, files in os.walk(dirname):
                 for f in files:
-                    if not f.lower().endswith('.ini'):
-                        continue
                     try:
-                        s = createGenericServerCls(path, f)
+                        _, ext = os.path.splitext(f)
+                        if ext.lower() not in self.config.extensions:
+                            continue
+                        if ext.lower() == '.ini':
+                            with open(os.path.join(path, f)) as file:
+                                conf = file.read()
+                        else:
+                            conf = findConfigBlock(path, f)
+                            if conf is None:
+                                continue
+                        s = createGenericServerCls(path, conf)
                         s.client = self.client
                         if s.name not in servers:
                             servers[s.name] = s

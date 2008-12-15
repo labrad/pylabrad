@@ -1,3 +1,5 @@
+pylabrad TODOs:
+
 GENERAL:
     - make sure all LabRAD data is pickleable
     - add python version (>2.5) info to distutils so it gets set properly on pypi
@@ -23,6 +25,7 @@ SERVERS:
         add manhole interface to allow for remote inspection/debugging
 
     NODE:
+    	fix restarting of servers (currently kill call kills restarted server)
         more flexible configuration of startup options for servers (get rid of shebang lines on windows)
         incorporate node-readable configuration directly into source code (rather than separate .ini file)
             + this allows us to determine the path to the file to be run
@@ -38,6 +41,7 @@ SERVERS:
             supernode looks up the location to run the server in the registry
     
     CONTROLLER:
+    	group instance servers and singleton servers
     	show servers that are not running on a node
         make server output visible (and clearable, etc.) in the browser
         visual indication when connection to LabRAD or controller is lost
