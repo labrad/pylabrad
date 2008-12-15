@@ -64,7 +64,7 @@ class ServerProcess(ProcessProtocol):
 
     def __init__(self, env):
         self.env = os.environ.copy()
-        self.env.update(env, DIR=self.path)
+        self.env.update(env, DIR=self.path, FILE=self.filename)
         cls = self.__class__
         self.name = interpEnvironmentVars(cls.instancename, self.env)
         # TODO: allow for spaces in args by doing a proper split here
@@ -140,9 +140,12 @@ class ServerProcess(ProcessProtocol):
         self.emitMessage('server_stopping')
         # hack: marker to tell the kill func that it worked
         finished = [False]
+        #print 'calling kill...'
         self.kill(finished)
+        #print 'killing'
         yield self.shutdown
         finished[0] = True
+        #print 'killed'
         self.stopping = False
         self.emitMessage('server_stopped')
         
@@ -170,7 +173,7 @@ class ServerProcess(ProcessProtocol):
         if name == self.name:
             self.ID = ID
             if self.starting:
-                self.running = True
+                self.started = True
                 self.startup.callback(self)
 
     def processEnded(self, reason):
@@ -262,7 +265,7 @@ def findConfigBlock(path, filename):
         return '\n'.join(lines) if lines else None
             
 
-def createGenericServerCls(path, conf):
+def createGenericServerCls(path, filename, conf):
     """Create a ServerProcess class representing a generic server.
     
     Options for this server are passed in as a string in standard
@@ -292,6 +295,7 @@ def createGenericServerCls(path, conf):
     # startup
     cls.cmdline = scp.get('startup', 'cmdline', raw=True)
     cls.path = path
+    cls.filename = filename
     try:
         cls.timeout = float(scp.getint('startup', 'timeout'))
     except:
@@ -335,6 +339,7 @@ def createPythonServerCls(plugin):
     # startup
     cls.cmdline = ' '.join([sys.executable, '-m', plugin.__module__])
     cls.path = os.path.split(sys.modules[plugin.__module__].__file__)[0]
+    cls.filename = None
     
     # shutdown
     if hasattr(plugin, 'shutdownMessage'):
@@ -624,7 +629,7 @@ class NodeServer(LabradServer):
                             conf = findConfigBlock(path, f)
                             if conf is None:
                                 continue
-                        s = createGenericServerCls(path, conf)
+                        s = createGenericServerCls(path, f, conf)
                         s.client = self.client
                         if s.name not in servers:
                             servers[s.name] = s
