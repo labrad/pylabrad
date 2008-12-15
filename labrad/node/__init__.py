@@ -252,15 +252,17 @@ def findConfigBlock(path, filename):
     # markers to delimit node info block
     BEGIN = "### BEGIN NODE INFO"
     END = "### END NODE INFO"
-    with open(os.path.join(path, filename)) as file:
+    with open(os.path.join(path, filename), 'rb') as file:
         foundBeginning = False
         lines = []
-        for line in file.xreadlines():
-            if line.upper().strip() == BEGIN:
+        for line in file:
+            if line.upper().strip().startswith(BEGIN):
                 foundBeginning = True
-            elif line.upper().strip() == END:
+            elif line.upper().strip().startswith(END):
                 break
             elif foundBeginning:
+                line = line.replace('\r', '')
+                line = line.replace('\n', '')
                 lines.append(line)
         return '\n'.join(lines) if lines else None
             

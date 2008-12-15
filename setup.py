@@ -21,7 +21,7 @@ doclines = __doc__.split('\n')
 
 setup(
     name = 'pylabrad',
-    version = '0.92.1',
+    version = '0.92.2',
     author = 'Matthew Neeley',
     author_email = 'maffoo@users.sourceforge.net',
     license = 'http://www.gnu.org/licenses/gpl-2.0.html',
