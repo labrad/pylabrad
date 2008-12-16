@@ -340,8 +340,7 @@ def createPythonServerCls(plugin):
     
     # startup
     cls.cmdline = ' '.join([sys.executable, '-m', plugin.__module__])
-    cls.path = os.path.split(sys.modules[plugin.__module__].__file__)[0]
-    cls.filename = None
+    cls.path, cls.filename = os.path.split(sys.modules[plugin.__module__].__file__)
     
     # shutdown
     if hasattr(plugin, 'shutdownMessage'):
