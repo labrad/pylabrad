@@ -126,11 +126,9 @@ public class RegistryEditor extends Composite implements TreeListener {
 	}
 	
 	public void onTreeItemSelected(TreeItem item) {
-		// TODO Auto-generated method stub
 	}
 
 	public void onTreeItemStateChanged(TreeItem item) {
-		// TODO Auto-generated method stub
 		if (item.getState()) {
 			Object obj = item.getUserObject();
 			List<String> path = ((ItemInfo)obj).path;

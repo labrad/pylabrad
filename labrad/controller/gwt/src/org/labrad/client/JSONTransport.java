@@ -71,7 +71,7 @@ public class JSONTransport {
                 }
             });
         } catch (RequestException e) {
-            // TODO: handle errors here (e.g. disconnection from server.
+            // TODO handle errors here (e.g. disconnection from server.
         }
 	}
 	
