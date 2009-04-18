@@ -212,6 +212,7 @@ class LabradServer(ClientFactory):
 
     protocol = ServerProtocol
     sendTracebacks = True
+    prioritizeWrites = True
 
     def __init__(self):
         self.description, self.notes = util.parseSettingDoc(self.__doc__)
@@ -239,10 +240,18 @@ class LabradServer(ClientFactory):
         c = self.contexts.get(context, None)
         if c is None:
             c = self.contexts[context] = Context()
+            yield c.acquire() # make sure we're the first in line
             c.data = yield self.newContext(context)
             yield self.initContext(c.data)
-            
-        yield c.acquire() # wait for previous requests in this context to finish
+        else:
+            yield c.acquire() # wait for previous requests in this context to finish
+        
+        if self.prioritizeWrites:
+            # yield here so that pending writes will be sent in preference to processing
+            # new requests.  This can help in cases where server settings do long-running
+            # computations that block, though we are still limited fundamentally by
+            # the completely single-threaded way twisted operates
+            yield util.wakeupCall(0.0)
         response = []
         try:
             yield self.startRequest(c.data, source)
