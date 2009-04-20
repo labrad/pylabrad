@@ -212,7 +212,7 @@ class LabradServer(ClientFactory):
 
     protocol = ServerProtocol
     sendTracebacks = True
-    prioritizeWrites = True
+    prioritizeWrites = False
 
     def __init__(self):
         self.description, self.notes = util.parseSettingDoc(self.__doc__)
