@@ -3,6 +3,7 @@ pylabrad TODOs:
 GENERAL:
     when calling user-overridden methods, check whether they are generators and
         print a warning since they probably forgot @inlineCallbacks
+    use cgitb module to get helpful and informative error reports
 
     logging:
 		make self.log work in a reasonable way before servers have started serving
