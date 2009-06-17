@@ -168,7 +168,7 @@ class PriorityList:
 class Pipeline(PipelineBase):
     """Run a generator over a set of inputs with prioritized stages.
 
-    The priority hints are yield from the pipe as the leading
+    The priority hints are yielded from the pipe as the leading
     member of a tuple.  This is only kept track of during the
     run of the first generator.
     """

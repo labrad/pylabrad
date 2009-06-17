@@ -28,6 +28,8 @@ SERVERS:
     NODE:
     	GUI to let the node live in the tray
     	server classification, preferred run location, etc.
+    	configure different ways to execute servers (e.g. Java jars)
+    	allow the node to look inside java jars for server info
 
     SUPER NODE:
         can the nodes themselves elect a supernode?
