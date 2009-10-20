@@ -19,16 +19,12 @@ labrad.client
 Contains a blocking client connection to labrad.
 """
 
-from labrad import constants as C, types as T, thread, protocol, util
+from labrad import constants as C, thread, util
 from labrad.errors import Error
 from labrad.interfaces import ILabradManager
 from labrad.thread import blockingCallFromThread as block, DelayedResponse
 from labrad.wrappers import PacketResponse, getConnection
-from labrad.util import mangle, indent, MultiDict, PrettyDict, extractKey
-
-from twisted.internet import reactor
-
-import getpass
+from labrad.util import mangle, indent, PrettyDict, extractKey
 
 class NotFoundError(Error):
     code = 10

@@ -99,7 +99,7 @@ class SettingBinder(object):
     This is used to emulate the old 'settings' attribute on a packet
     wrapper, now that the settings have been moved into a class.
     """
-    # TODO: fill out dict functionality here (.keys(), .items(), etc.)
+    # TODO fill out dict functionality here (.keys(), .items(), etc.)
     def __init__(self, inst):
         self._inst = inst
     
@@ -194,7 +194,7 @@ class AsyncPacketWrapper(object):
             if key == rkey:
                 self._packet.pop(i)
         
-    # TODO: implement flattened versions of packet object to allow for packet forwarding
+    # TODO implement flattened versions of packet object to allow for packet forwarding
     #def __lrtype__(self):
     #    pass
     
@@ -325,7 +325,7 @@ class AsyncServerWrapper(object):
         
     def __call__(self):
         return self
-        # TODO: this should make a clone that can have different
+        # TODO this should make a clone that can have different
         # default keyword args, and, in particular, should talk
         # to the server in a different context
 

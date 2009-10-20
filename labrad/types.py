@@ -64,6 +64,7 @@ class Singleton(object):
 # a registry of parsing functions, keyed by type tag
 _parsers = {}
 
+
 class RegisterParser(type):
     """A metaclass for LabRAD types that have parsers.
 
@@ -71,10 +72,11 @@ class RegisterParser(type):
     we register the __parse__ method of the class according
     to the tag that the class specifies.
     """
-    def __init__(cls, name, bases, dict):
-        super(RegisterParser, cls).__init__(cls, name, bases, dict)
+    def __new__(cls, name, bases, dict):
+        c = type.__new__(cls, name, bases, dict)
         if 'tag' in dict:
-            _parsers[dict['tag']] = cls.__parse__
+            _parsers[dict['tag']] = c.__parse__
+        return c
 
 
 class Buffer(object):
@@ -939,7 +941,7 @@ class LRError(LRType):
 
     def __flatten__(self, E):
         """Flatten python Exception to LabRAD error."""
-        # TODO: add ability to grab tracebacks here, or more information of other types
+        # TODO add ability to grab tracebacks here, or more information of other types
         code = getattr(E, 'code', 0)
         msg = getattr(E, 'msg', repr(E))
         payload = getattr(E, 'payload', None)
@@ -960,7 +962,7 @@ class Error(Exception):
     as any payload sent along with it.
     """
 
-    # TODO: register error classes by code, so remote errors can be reraised
+    # TODO register error classes by code, so remote errors can be reraised
 
     msg = ''
     payload = None
@@ -1004,9 +1006,9 @@ class LazyList(list):
         self._data = data
         self._lrtype = parseTypeTag(tag)
     
-	def __lrtype__(self):
-		return self._lrtype
-	
+    def __lrtype__(self):
+        return self._lrtype
+    
     @property
     def elem(self):
         return self._lrtype.elem

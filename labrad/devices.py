@@ -19,19 +19,18 @@ labrad.devices
 Superclass of generic device servers.
 """
 
-from labrad import types as T, util, errors
+from labrad import util, errors
 from labrad.server import LabradServer, setting
 from labrad.errors import Error
 
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python import log
 
 LOCK_TIMEOUT = 10
 
 class DeviceLockedError(Error):
     """The device is locked."""
-    # TODO: should tell who holds lock and when it expires
+    # TODO should tell who holds lock and when it expires
     code = 4
 
 class DeviceWrapper:

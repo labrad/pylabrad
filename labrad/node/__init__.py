@@ -30,6 +30,7 @@ from __future__ import with_statement
 
 import os
 import sys
+import socket
 from datetime import datetime
 from ConfigParser import SafeConfigParser
 import StringIO
@@ -67,7 +68,7 @@ class ServerProcess(ProcessProtocol):
         self.env.update(env, DIR=self.path, FILE=self.filename)
         cls = self.__class__
         self.name = interpEnvironmentVars(cls.instancename, self.env)
-        # TODO: allow for spaces in args by doing a proper split here
+        # TODO allow for spaces in args by doing a proper split here
         self.args = self.cmdline.split()
         self.args = [interpEnvironmentVars(a, self.env) for a in self.args]
         if not os.path.isabs(self.args[0]):
@@ -405,7 +406,7 @@ class Node(MultiService):
 
 class NodeConfig(object):
     """Load configuration from the registry and monitor it for changes."""
-    # TODO: add to config: autostarting, refreshinterval, preferred start location
+    # TODO add to config: autostarting, refreshinterval, preferred start location
         
     @classmethod
     @inlineCallbacks
@@ -657,7 +658,7 @@ class NodeServer(LabradServer):
                        LABRADPASSWORD=self.password,
                        PYTHON=sys.executable)
         srv = self.servers[name](environ)
-        # TODO: check whether an instance with this name already exists
+        # TODO check whether an instance with this name already exists
         self.instances[name] = srv
         yield srv.start()
         returnValue(srv.name)
@@ -743,7 +744,6 @@ class NodeServer(LabradServer):
     @setting(1000, returns='*(ss)')
     def node_version(self, c):
         """Return a list of key-value tuples containing info about this node."""
-        import socket, sys
         info = {
             'hostname': socket.gethostname(),
             'nodename': self.nodename,

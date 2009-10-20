@@ -447,7 +447,7 @@ class Unit(object):
                         _unit_table[term] = cls._stringUnit(term)
                     unit = unit * _unit_table[term]**(sign*Ratio(num, denom))
         except:
-            # TODO: handle errors more intelligently here.
+            # TODO handle errors more intelligently here.
             # (might need to change unit grammar)
             # most likely this was a parsing error
             # the manager doesn't guarantee that units
