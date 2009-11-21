@@ -1,49 +1,39 @@
 pylabrad TODOs:
 
 GENERAL:
-    when calling user-overridden methods, check whether they are generators and
-        print a warning since they probably forgot @inlineCallbacks
-    use cgitb module to get helpful and informative error reports
+  when calling user-overridden methods, check whether they are generators and
+    print a warning since they probably forgot @inlineCallbacks
+  use cgitb module to get helpful and informative error reports
 
-    logging:
-		make self.log work in a reasonable way before servers have started serving
-        allow logs to be accessed and manipulated remotely
-		configurable debug/logging verbosity levels (change on the fly)
-    
-    message handling:
-    	declarative message handling for servers and clients
-    	do this with decorators, similar to @setting
-    
-    Client/ClientAsync:
-        create clones that work in different contexts by default
-        implement generic flattened version of a packet that can be forwarded
-            to do this, probably need a 'Flattened' data type
-            probably just a str subclass with a type tag attribute
-    
+  LOGGING:
+    make self.log work in a reasonable way before servers have started serving
+    allow logs to be accessed and manipulated remotely
+    configurable debug/logging verbosity levels (change on the fly)
+  
+  MESSAGE HANDLING:
+    declarative message handling for servers and clients
+      do this with decorators, similar to @setting
+  
+  Client/ClientAsync:
+    create clones that work in different contexts by default
+    implement generic flattened version of a packet that can be forwarded
+      to do this, probably need a 'Flattened' data type
+      probably just a str subclass with a type tag attribute
+
 SERVERS:
-	GENERAL:
-		emit log messages and allow setting log levels
-        add manhole interface to allow for remote inspection/debugging
+  GENERAL:
+    emit log messages and allow setting log levels
+    add manhole interface to allow for remote inspection/debugging
 
-    NODE:
-    	GUI to let the node live in the tray
-    	server classification, preferred run location, etc.
-    	configure different ways to execute servers (e.g. Java jars)
-    	allow the node to look inside java jars for server info
+  NODE:
+    GUI to let the node live in the tray
+    server classification, preferred run location, etc.
+    configure different ways to execute servers (e.g. Java jars, different python versions, etc.)
+    allow the node to look inside java jars for server info
+    version-control interface for updating servers on remote nodes (e.g. svn)
 
-    SUPER NODE:
-        can the nodes themselves elect a supernode?
-        ask for a server to be started
-            supernode looks up the location to run the server in the registry
-    
-    CONTROLLER:
-    	group instance servers and singleton servers
-    	show servers that are not running on a node
-        make server output visible (and clearable, etc.) in the browser
-        visual indication when connection to LabRAD or controller is lost (!!)
-        renegotiate connection automatically after loss
-        access all node settings remotely (e.g. directories, modules (now in registry))
-        run multiple server instances on one node (set environment variables for each, etc.)
-        log when servers start, stop or fail
-        server classification (hardware interface, device server, tools, etc.)
+  SUPER NODE:
+    can the nodes themselves elect a supernode?
+    ask for a server to be started
+    supernode looks up the location to run the server in the registry
 
