@@ -67,7 +67,7 @@ def blockingCallFromThread(func, *args, **kw):
     else:
         return result
 
-class DelayedResponse(defer.Deferred):
+class Future(defer.Deferred):
     def __init__(self, func, *args, **kw):
         defer.Deferred.__init__(self)
         self.e = threading.Event()
@@ -80,11 +80,11 @@ class DelayedResponse(defer.Deferred):
             d = defer.maybeDeferred(func, *args, **kw)
             d.addBoth(_got_result)
         reactor.callFromThread(wrapped_func)
-        self.waited = False
+        self.done = False
         self.result = None
 
     def addCallback(self, f, *args, **kw):
-        if self.waited:
+        if self.done:
             self.result = f(self.result, args, kw)
             return self.result
         else:
@@ -92,14 +92,14 @@ class DelayedResponse(defer.Deferred):
             return self
         
     def wait(self):
-        if self.waited:
-            raise AlreadyWaitedError()
-        self.waited = True
+        if self.done:
+            return self.result
         while True:
             self.e.wait(1)
             if self.e.isSet():
                 break
             # TODO: check for KeyboardInterrupt here and cancel request
+        self.done = True
         result = self.l[0]
         if isinstance(result, Failure):
             result.raiseException()
@@ -110,7 +110,7 @@ class DelayedResponse(defer.Deferred):
             return result
 
     def __repr__(self):
-        return 'DelayedResponse: call .wait() to wait for the result.'
-
-class AlreadyWaitedError(Exception):
-    """Raised when we try to wait for a delayed response more than once."""
+        if self.done:
+            return '<Future: result=%r>' % (self.result,)
+        else:
+            return '<Future: pending...>'

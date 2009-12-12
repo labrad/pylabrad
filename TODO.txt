@@ -37,3 +37,39 @@ SERVERS:
     ask for a server to be started
     supernode looks up the location to run the server in the registry
 
+python extension: blocks (ala ruby)
+
+def func(a, b, **p):
+    def inner(f):
+        for i in range(a):
+            f(i, b, **p)
+    return inner
+
+a = func(a, aa) => (p1, p2):
+    return p1 + p2
+    
+a = func(a, aa) do (p1, p2):
+    return p1 + p2
+
+
+
+a = EXPR do PARAM_LIST:
+    BODY
+
+desugared:
+
+def should_be_anonymous_func(PARAM_LIST):
+    BODY
+a = EXPR(should_be_anonymous_func)
+
+
+
+EXPR do PARAM_LIST:
+    BODY
+
+desugared:
+
+def should_be_anonymous_func(PARAM_LIST):
+    BODY
+EXPR(should_be_anonymous_func)
+    

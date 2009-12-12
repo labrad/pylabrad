@@ -14,20 +14,20 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from labrad import util
-from labrad.thread import DelayedResponse, startReactor, stopReactor
+from labrad.thread import Future, startReactor, stopReactor
 from twisted.internet.defer import returnValue, _DefGen_Return
 
 def waitFor(*ds):
     for d in ds:
         d.wait()
 
-class DelayedResponseList(DelayedResponse):
-    def __init__(self, *ds):
+class FutureList(Future):
+    def __init__(self, ds):
         self.ds = ds
 
     def wait(self):
         def _maybeWait(d):
-            if isinstance(d, DelayedResponse):
+            if isinstance(d, Future):
                 return d.wait()
             else:
                 return d
@@ -77,7 +77,7 @@ class PipelineBase:
             if isinstance(r, tuple):
                 if isinstance(r[0], Priority):
                     r = r[1:]
-                r = DelayedResponseList(*r)
+                r = FutureList(r)
 
             self.pipes[i][1] = r
 
@@ -87,7 +87,7 @@ class PipelineBase:
 
         # wait for all pipes to finish
         for p in self.pipes:
-            if isinstance(p[1], DelayedResponse):
+            if isinstance(p[1], Future):
                 p[1] = p[1].wait()
 
 
@@ -229,7 +229,7 @@ class Pipeline(PipelineBase):
                 r = r[1:]
 
             if isinstance(r, tuple):
-                r = DelayedResponseList(*r)
+                r = FutureList(r)
 
             # store the result to send back in next time around
             self.pipes[i][1] = r
@@ -244,7 +244,7 @@ class Pipeline(PipelineBase):
         # wait for all pipes to finish
         for i in self.priority.reverse():
             p = self.pipes[i]
-            if isinstance(p[1], DelayedResponse):
+            if isinstance(p[1], Future):
                 p[1] = p[1].wait()
 
 
@@ -261,7 +261,7 @@ if __name__ == '__main__':
     #from labrad.util import timing
 
     def delayedWakeup(t, data=None):
-        return DelayedResponse(util.wakeupCall, t, data)
+        return Future(util.wakeupCall, t, data)
 
     startReactor()
 

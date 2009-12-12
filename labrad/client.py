@@ -22,7 +22,7 @@ Contains a blocking client connection to labrad.
 from labrad import constants as C, thread, util
 from labrad.errors import Error
 from labrad.interfaces import ILabradManager
-from labrad.thread import blockingCallFromThread as block, DelayedResponse
+from labrad.thread import blockingCallFromThread as block, Future
 from labrad.wrappers import PacketResponse, getConnection
 from labrad.util import mangle, indent, PrettyDict, extractKey
 
@@ -55,8 +55,7 @@ class SettingWrapper(object):
             args = None
         elif len(args) == 1:
             args = args[0]
-        resp = DelayedResponse(self._server._send,
-                               [(self.ID, args, tag)], **kw)
+        resp = Future(self._server._send, [(self.ID, args, tag)], **kw)
         if wrap:
             resp.addCallback(lambda resp: resp[0][1])
         return resp.wait() if wait else resp
@@ -302,7 +301,7 @@ class PacketWrapper(HasDynamicAttrs):
     def send(self, wait=True, **kw):
         """Send this packet to the server."""
         records = [rec[:3] for rec in self._packet]
-        resp = DelayedResponse(self._server._send, records, **dict(self._kw, **kw))
+        resp = Future(self._server._send, records, **dict(self._kw, **kw))
         resp.addCallback(PacketResponse, self._server, self._packet)
         return resp.wait() if wait else resp
 
