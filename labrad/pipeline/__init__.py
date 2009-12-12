@@ -24,14 +24,8 @@ def waitFor(*ds):
 class FutureList(Future):
     def __init__(self, ds):
         self.ds = ds
-
     def wait(self):
-        def _maybeWait(d):
-            if isinstance(d, Future):
-                return d.wait()
-            else:
-                return d
-        return [_maybeWait(d) for d in self.ds]
+        return [(d.wait() if isinstance(d, Future) else d) for d in self.ds]
 
 
 class PipelineBase:

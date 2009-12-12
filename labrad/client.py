@@ -24,7 +24,7 @@ from labrad.errors import Error
 from labrad.interfaces import ILabradManager
 from labrad.thread import blockingCallFromThread as block, Future
 from labrad.wrappers import PacketResponse, getConnection
-from labrad.util import mangle, indent, PrettyDict, extractKey
+from labrad.util import mangle, indent, PrettyMultiDict, extractKey
 
 class NotFoundError(Error):
     code = 10
@@ -110,12 +110,8 @@ Returns:
        util.indent('\n'.join(self.returns)), self.notes)
 
 
-class DynamicAttrDict(PrettyDict):
+class DynamicAttrDict(PrettyMultiDict):
     _parent = None
-
-    def __iter__(self):
-        # copy the list of keys so we can add/remove during iteration
-        return iter(list(self.keys()))
     
     def __getitem__(self, key):
         try:

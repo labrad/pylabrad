@@ -192,7 +192,7 @@ class MultiDict(SafeIterDict):
             self.aliases[a] = k
         self._keys[k] = aliases
 
-class PrettyDict(MultiDict):
+class PrettyMultiDict(MultiDict):
     def __repr__(self):
         return '\n'.join(sorted(self.keys()))
 

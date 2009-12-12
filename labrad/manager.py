@@ -13,13 +13,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from labrad import constants as C
-from labrad.interfaces import ILabradProtocol, ILabradManager
-
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python.components import registerAdapter
 
 from zope.interface import Interface, implements
+
+from labrad import constants as C
+from labrad.interfaces import ILabradProtocol, ILabradManager
 
 class ClientManager:
     """Adapt client to the ILabradManager interface."""

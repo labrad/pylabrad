@@ -85,11 +85,10 @@ class Future(defer.Deferred):
 
     def addCallback(self, f, *args, **kw):
         if self.done:
-            self.result = f(self.result, args, kw)
-            return self.result
+            self.result = f(self.result, *args, **kw)
         else:
             self.callbacks.append((f, args, kw))
-            return self
+        return self
         
     def wait(self):
         if self.done:

@@ -19,16 +19,16 @@ import functools
 from types import MethodType
 from collections import defaultdict
 
-from labrad import constants as C, protocol, util
-from labrad.protocol import LabradProtocol
-from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
-from labrad.util import mangle, indent, MultiDict, extractKey
-
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python.components import registerAdapter
 
 from zope.interface import implements
+
+from labrad import constants as C, protocol, util
+from labrad.protocol import LabradProtocol
+from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
+from labrad.util import mangle, indent, MultiDict, extractKey
 
 
 class AsyncSettingWrapper(object):
