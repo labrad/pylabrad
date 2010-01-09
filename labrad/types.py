@@ -31,12 +31,11 @@ import re
 from struct import pack, unpack
 import time
 from types import InstanceType
-import datetime
 from datetime import timedelta, datetime as dt
 from itertools import chain, imap
 from operator import itemgetter
 
-from labrad import constants as C, units as U
+from labrad import units as U
 from labrad.units import Value, Complex
 
 try:

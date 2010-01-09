@@ -35,7 +35,7 @@ class ConfigFile(object):
         with open(self.fname) as f:
             self.parser.readfp(f)
         
-    def save():
+    def save(self):
         with open(self.fname, 'w') as f:
             self.parser.write(f)
         

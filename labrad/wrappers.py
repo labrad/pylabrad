@@ -25,10 +25,9 @@ from twisted.python.components import registerAdapter
 
 from zope.interface import implements
 
-from labrad import constants as C, protocol, util
-from labrad.protocol import LabradProtocol
+from labrad import constants as C, protocol
 from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
-from labrad.util import mangle, indent, MultiDict, extractKey
+from labrad.util import mangle, MultiDict, extractKey
 
 
 class AsyncSettingWrapper(object):
@@ -180,9 +179,9 @@ class AsyncPacketWrapper(object):
         Note that if multiple records share the same key, they will
         all be updated.
         """
-        for i, (ID, data, accepts, rkey) in enumerate(self._packet):
-            if key == rkey:
-                self._packet[i] = ID, value, accepts, key
+        for i, rec in enumerate(self._packet):
+            if key == rec[3]:
+                self._packet[i] = rec[0], value, rec[2], rec[3]
     
     def __delitem__(self, key):
         """Delete a setting call from this packet, indexed by key.
@@ -190,8 +189,8 @@ class AsyncPacketWrapper(object):
         Note that if multiple records share the same key, they will
         all be deleted.
         """
-        for i, (ID, data, accepts, rkey) in enumerate(self._packet):
-            if key == rkey:
+        for i, rec in enumerate(self._packet):
+            if key == rec[3]:
                 self._packet.pop(i)
         
     # TODO implement flattened versions of packet object to allow for packet forwarding
@@ -427,19 +426,16 @@ class ClientAsync(object):
         
         # get a list of the currently-available servers
         slist = yield self._mgr.getServersList()
-        if len(slist):
-            names, IDs = zip(*slist)
-        else:
-            names, IDs = [], []
-
+        names = [s[0] for s in slist]
+        
         # determine what to add, update and delete to be current
         additions = [s for s in slist if s[0] not in self.servers]
         refreshes = [n for n in self.servers if n in names]
         deletions = [n for n in self.servers if n not in names]
 
-        actions = [self._addServer(*s) for s in additions] +\
-                  [self._refreshServer(n) for n in refreshes] +\
-                  [self._delServer(n) for n in deletions]
+        actions = ([self._addServer(*s) for s in additions] +
+                   [self._refreshServer(n) for n in refreshes] +
+                   [self._delServer(n) for n in deletions])
         yield defer.DeferredList(actions, fireOnOneErrback=True)
 
     def _fixName(self, name):
@@ -548,7 +544,8 @@ class PacketResponse(object):
     def __init__(self, resp, server, packet):
         # collect all responses from each setting or key
         temp = defaultdict(list)
-        for (pID, pData, pAccepts, key), (ID, data) in zip(packet, resp):
+        for rec, (ID, data) in zip(packet, resp):
+            key = rec[3]
             setting = server.settings[ID]
             name, pyName = setting.name, setting._py_name
             # if this record has a key, index by key only

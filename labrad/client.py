@@ -242,7 +242,7 @@ class ServerWrapper(HasDynamicAttrs):
 
     def _getAttrs(self):
         info = block(self._mgr.getServerInfo, self.ID)
-        self.__doc__, self.notes, self._slist  = info
+        self.__doc__, self.notes, self._slist = info
         return self._slist
 
     @property
@@ -310,7 +310,7 @@ class PacketWrapper(HasDynamicAttrs):
 
     def _getAttrs(self):
         """Grab the list of the server's attributes."""
-        ignored = self._server.settings # ensure refresh
+        self._server._refresh() # ensure refresh
         return self._server._slist
 
     def _wrapAttr(self, _parent, name, pyName, ID):
@@ -328,9 +328,9 @@ class PacketWrapper(HasDynamicAttrs):
 
     def __setitem__(self, key, value):
         """Update existing parts of the packet, indexed by key."""
-        for i, (ID, data, accepts, rkey) in enumerate(self._packet):
-            if key == rkey:
-                self._packet[i] = ID, value, accepts, key
+        for i, rec in enumerate(self._packet):
+            if key == rec[3]:
+                self._packet[i] = rec[0], value, rec[2], rec[3]
 
     def _recordRepr(self, ID, data, types, key):
         key_str = "" if key is None else " (key=%s)" % (key,)
