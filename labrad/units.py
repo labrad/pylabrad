@@ -375,7 +375,7 @@ try:
     import numpy
     WithUnit._numericTypes[numpy.float64] = Value
     WithUnit._numericTypes[numpy.complex128] = Complex
-except:
+except ImportError:
     pass
 
 #if useNumpy:
