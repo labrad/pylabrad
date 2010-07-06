@@ -279,7 +279,7 @@ if __name__ == '__main__':
     def pipe2(i):
         a = 0
         for x in range(50000000):
-             a += 1
+            a += 1
         yield LAST
         yield FIRST, delayedWakeup(5)
         returnValue(i)

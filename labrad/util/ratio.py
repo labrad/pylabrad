@@ -94,7 +94,7 @@ class Ratio(object):
 
     def __abs__(self):
         return Ratio(abs(self.num), abs(self.denom))
-		
+    
     def __add__(self, other):
         if not isinstance(other, (int, long, Ratio)):
             return NotImplemented
@@ -103,23 +103,23 @@ class Ratio(object):
         num = self.num * other.denom + self.denom * other.num
         denom = self.denom * other.denom
         return Ratio(num, denom)
-	
+    
     __radd__ = __add__
-	
+    
     def __iadd__(self, other):
         sum = self + other
         self.num = sum.num
         self.denom = sum.denom
-	
+        
     def __sub__(self, other):
         return self + (-other)
-	
+    
     def __rsub__(self, other):
         return other + (-self)
-	
+    
     def __isub__(self, other):
         self.__iadd__(self, -other)
-	
+    
     def __mul__(self, other):
         if not isinstance(other, (int, long, Ratio)):
             return NotImplemented
@@ -128,9 +128,9 @@ class Ratio(object):
         num = self.num * other.num
         denom = self.denom * other.denom
         return Ratio(num, denom)
-		
+    
     __rmul__ = __mul__
-	
+    
     def __imul__(self, other):
         prod = self * other
         self.num = prod.num
@@ -144,9 +144,9 @@ class Ratio(object):
         num = self.num * other.denom
         denom = self.denom * other.num
         return Ratio(num, denom)
-		
+    
     __truediv__ = __div__
-	
+    
     def __rdiv__(self, other):
         if not isinstance(other, (int, long, Ratio)):
             return NotImplemented
@@ -155,7 +155,7 @@ class Ratio(object):
         num = other.num * self.denom
         denom = other.denom * self.num
         return Ratio(num, denom)
-	
+    
     def __idiv__(self, other):
         ratio = self / other
         self.num = ratio.num

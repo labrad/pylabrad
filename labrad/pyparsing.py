@@ -169,13 +169,13 @@ class ParseFatalException(ParseBaseException):
 
 #~ class ReparseException(ParseBaseException):
     #~ """Experimental class - parse actions can raise this exception to cause
-       #~ pyparsing to reparse the input string:
-        #~ - with a modified input string, and/or
-        #~ - with a modified start location
-       #~ Set the values of the ReparseException in the constructor, and raise the
-       #~ exception in a parse action to cause pyparsing to use the new string/location.
-       #~ Setting the values as None causes no change to be made.
-       #~ """
+    #~ pyparsing to reparse the input string:
+    #~ - with a modified input string, and/or
+    #~ - with a modified start location
+    #~ Set the values of the ReparseException in the constructor, and raise the
+    #~ exception in a parse action to cause pyparsing to use the new string/location.
+    #~ Setting the values as None causes no change to be made.
+    #~ """
     #~ def __init_( self, newstring, restartLoc ):
         #~ self.newParseText = newstring
         #~ self.reparseLoc = restartLoc
@@ -269,27 +269,6 @@ class ParseResults(object):
             sub = v
         if isinstance(sub,ParseResults):
             sub.__parent = wkref(self)
-        
-    def __delitem__( self, i ):
-        if isinstance(i,(int,slice)):
-            mylen = len( self.__toklist )
-            del self.__toklist[i]
-            
-            # convert int to slice
-            if isinstance(i, int):
-                if i < 0:
-                    i += mylen
-                i = slice(i, i+1)
-            # get removed indices
-            removed = range(*i.indices(mylen))
-            removed.reverse()
-            # fixup indices in token dictionary
-            for occurrences in self.__tokdict.itervalues():
-                for j in removed:
-                    for k, (value, position) in enumerate(occurrences):
-                        occurrences[k] = _ParseResultsWithOffset(value, position - (position > j))
-        else:
-            del self.__tokdict[i]
 
     def __delitem__( self, i ):
         if isinstance(i,(int,slice)):

@@ -57,7 +57,7 @@ def install():
 	            nodeShortcut, "-n labradnode")
     file_created(nodeShortcut)
     print "done."
-	
+    
     print "Creating controller shortcut...",
     controllerShortcut = os.path.join(menuPath, "LabRAD Controller.lnk")
     if os.path.isfile(controllerShortcut):
