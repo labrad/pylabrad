@@ -20,7 +20,7 @@ Superclass of GPIB device servers.
 """
 
 from labrad import types as T, constants as C, util, errors
-from labrad.devices import DeviceWrapper, DeviceServer
+from labrad.devices import DeviceWrapper, DeviceServer, DeviceLockedError
 from labrad.server import LabradServer, setting
 
 from twisted.internet import defer
@@ -43,33 +43,59 @@ class GPIBDeviceWrapper(DeviceWrapper):
         self._timeout = T.Value(C.TIMEOUT, 's')
         
         # set the address and timeout in this context
-        p = self.gpib.packet()
+        p = self._packet()
         p.address(self.addr)
         p.timeout(self._timeout)
-        yield p.send(context=self._context)
+        yield p.send()
         
         # do device-specific initialization
         yield self.initialize()
 
+    def _packet(self):
+        return self.gpib.packet(context=self._context)
+
+    @inlineCallbacks
     def timeout(self, seconds):
         """Set the GPIB timeout for this device."""
         self._timeout = T.Value(seconds, 's')
-        return self.gpib.timeout(self._timeout, context=self._context)
+        p = self._packet()
+        p.timeout(self._timeout)
+        yield p.send()
 
-    def query(self, query, bytes=None):
+    @inlineCallbacks
+    def query(self, query, bytes=None, timeout=None):
         """Query this GPIB device."""
-        p = self.gpib.packet()
-        p.write(query).read(bytes)
-        d = p.send(context=self._context)
-        return d.addCallback(lambda r: r.read)
+        p = self._packet()
+        if timeout is not None:
+            p.timeout(timeout)
+        p.write(query)
+        p.read(bytes)
+        if timeout is not None:
+            p.timeout(self._timeout)
+        resp = yield p.send()
+        returnValue(resp.read)
 
-    def write(self, s):
+    def write(self, s, timeout=None):
         """Write a string to the device."""
-        return self.gpib.write(s, context=self._context)
+        p = self._packet()
+        if timeout is not None:
+            p.timeout(timeout)
+        p.write(s)
+        if timeout is not None:
+            p.timeout(self._timeout)
+        resp = yield p.send()
+        returnValue(resp.write)
 
-    def read(self, bytes=None):
+    def read(self, bytes=None, timeout=None):
         """Read a string from the device."""
-        return self.gpib.read(bytes, context=self._context)
+        p = self._packet()
+        if timeout is not None:
+            p.timeout(timeout)
+        p.read(bytes)
+        if timeout is not None:
+            p.timeout(self._timeout)
+        resp = yield p.send()
+        returnValue(resp.read)
 
     def initialize(self):
         """Called when we first connect to the device.
@@ -160,6 +186,7 @@ class ManagedDeviceServer(LabradServer):
     
     messageID = 21436587
 
+    @inlineCallbacks
     def initServer(self):
         self.devices = util.MultiDict() # aliases -> device
         self.device_guids = {} # name -> guid
@@ -168,13 +195,14 @@ class ManagedDeviceServer(LabradServer):
         handler = lambda c, data: self.handleDeviceMessage(*data)
         self._cxn.addListener(handler, ID=self.messageID)
         if self.deviceManager in self.client.servers:
-            return self.connectToDeviceManager()
+            yield self.connectToDeviceManager()
 
+    @inlineCallbacks
     def stopServer(self):
         if hasattr(self, 'devices'):
             ds = [defer.maybeDeferred(dev.shutdown)
                   for dev in self.devices.values()]
-            return defer.DeferredList(ds, fireOnOneErrback=True)
+            yield defer.DeferredList(ds, fireOnOneErrback=True)
 
     def makeDeviceName(self, device, server, address):
         return server + ' - ' + address
@@ -395,20 +423,20 @@ class GPIBManagedServer(ManagedDeviceServer):
         
     # server settings
 
-    @setting(1001, 'GPIB Write', string='s', returns='')
-    def gpib_write(self, c, string):
+    @setting(1001, 'GPIB Write', string='s', timeout='v[s]', returns='')
+    def gpib_write(self, c, string, timeout=None):
         """Write a string to the device over GPIB."""
-        return self.selectedDevice(c).write(string)
+        return self.selectedDevice(c).write(string, timeout)
 
-    @setting(1002, 'GPIB Read', bytes='w', returns='s')
-    def gpib_read(self, c, bytes=None):
+    @setting(1002, 'GPIB Read', bytes='w', timeout='v[s]', returns='s')
+    def gpib_read(self, c, bytes=None, timeout=None):
         """Read a string from the device over GPIB."""
-        return self.selectedDevice(c).read(bytes)
+        return self.selectedDevice(c).read(bytes, timeout)
 
-    @setting(1003, 'GPIB Query', query='s', returns='s')
-    def gpib_query(self, c, query):
+    @setting(1003, 'GPIB Query', query='s', timeout='v[s]', returns='s')
+    def gpib_query(self, c, query, timeout=None):
         """Write a string over GPIB and read the response."""
-        return self.selectedDevice(c).query(query)
+        return self.selectedDevice(c).query(query, timeout=timeout)
 
 def _gpibServers(cxn):
     """Get a list of available GPIB servers."""

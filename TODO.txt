@@ -5,6 +5,12 @@ GENERAL:
     print a warning since they probably forgot @inlineCallbacks
   use cgitb module to get helpful and informative error reports
 
+  Client/ClientAsync:
+    create clones that work in different contexts by default
+    implement generic flattened version of a packet that can be forwarded
+      to do this, probably need a 'Flattened' data type
+      probably just a str subclass with a type tag attribute
+
   LOGGING:
     make self.log work in a reasonable way before servers have started serving
     allow logs to be accessed and manipulated remotely
@@ -13,12 +19,6 @@ GENERAL:
   MESSAGE HANDLING:
     declarative message handling for servers and clients
       do this with decorators, similar to @setting
-  
-  Client/ClientAsync:
-    create clones that work in different contexts by default
-    implement generic flattened version of a packet that can be forwarded
-      to do this, probably need a 'Flattened' data type
-      probably just a str subclass with a type tag attribute
 
 SERVERS:
   GENERAL:
@@ -37,39 +37,3 @@ SERVERS:
     ask for a server to be started
     supernode looks up the location to run the server in the registry
 
-python extension: blocks (ala ruby)
-
-def func(a, b, **p):
-    def inner(f):
-        for i in range(a):
-            f(i, b, **p)
-    return inner
-
-a = func(a, aa) => (p1, p2):
-    return p1 + p2
-    
-a = func(a, aa) do (p1, p2):
-    return p1 + p2
-
-
-
-a = EXPR do PARAM_LIST:
-    BODY
-
-desugared:
-
-def should_be_anonymous_func(PARAM_LIST):
-    BODY
-a = EXPR(should_be_anonymous_func)
-
-
-
-EXPR do PARAM_LIST:
-    BODY
-
-desugared:
-
-def should_be_anonymous_func(PARAM_LIST):
-    BODY
-EXPR(should_be_anonymous_func)
-    

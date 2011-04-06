@@ -1,0 +1,3 @@
+version 0.92.5
+- labrad.gpib: added the ability to optionally set a temporary timeout for each read/write/query operation
+- labrad.gpib: fixed bug with DeviceLockedError exception type not being imported
