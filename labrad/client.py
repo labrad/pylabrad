@@ -380,11 +380,11 @@ class Client(HasDynamicAttrs):
 
     def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
         thread.startReactor()
-        name = 'Python Client (%s)' % util.getNodeName()
-        self._cxn = block(getConnection, host, port, name, password)
+        self._cxn = block(getConnection, host, port, self.name, password)
         self._mgr = ILabradManager(self._cxn)
         self.ID = self._cxn.ID
-        self.host, self.port = host, port
+        self.host = host
+        self.port = port
         self.connected = True
 
     def disconnect(self):
