@@ -338,9 +338,9 @@ class AsyncServerWrapper(object):
 @inlineCallbacks
 def getConnection(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client", password=None):
     """Connect to LabRAD and return a deferred that fires the protocol object."""
+    p = yield protocol.factory.connectTCP(host, port, C.TIMEOUT)
     if password is None:
         password = protocol.getPassword()
-    p = yield protocol.factory.connectTCP(host, port, C.TIMEOUT)
     yield p.loginClient(password, name)
     returnValue(p)
 
