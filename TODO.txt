@@ -1,6 +1,7 @@
 pylabrad TODOs:
 
 GENERAL:
+  remove metaclass magic in unit types and lists so everything is pickleable
   when calling user-overridden methods, check whether they are generators and
     print a warning since they probably forgot @inlineCallbacks
   use cgitb module to get helpful and informative error reports
