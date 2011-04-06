@@ -52,7 +52,6 @@ def blockingCallFromThread(func, *args, **kw):
     def _got_result(result):
         l.append(result)
         e.set()
-        return None
     def wrapped_func():
         d = defer.maybeDeferred(func, *args, **kw)
         d.addBoth(_got_result)
@@ -75,7 +74,6 @@ class Future(defer.Deferred):
         def _got_result(result):
             self.l.append(result)
             self.e.set()
-            return None
         def wrapped_func():
             d = defer.maybeDeferred(func, *args, **kw)
             d.addBoth(_got_result)
