@@ -34,7 +34,7 @@ from types import InstanceType
 from datetime import timedelta, datetime as dt
 from itertools import chain, imap
 from operator import itemgetter
-from functools import wraps
+import functools
 
 from labrad import units as U
 from labrad.units import Value, Complex
@@ -1005,6 +1005,7 @@ class LazyList(list):
     def __init__(self, data, tag):
         self._data = data
         self._lrtype = parseTypeTag(tag)
+        self._unflattened = False
     
     def __lrtype__(self):
         return self._lrtype
@@ -1029,8 +1030,9 @@ class LazyList(list):
     
     def _unflattenList(self):
         """Unflatten to nested python list."""
-        if hasattr(self, '_list'):
+        if self._unflattened:
             return
+        self._unflattened = True
             
         s = Buffer(self._data)
         n, elem = self._lrtype.depth, self._lrtype.elem
@@ -1078,21 +1080,22 @@ class LazyList(list):
 # that when called, the LazyList will be unflattened
 _listAttrs = [
     '__add__', '__contains__', '__delitem__', '__delslice__', '__eq__', '__ge__',
-    '__getitem__', '__getslice__', '__gt__', '__hash__', '__iadd__', '__imul__',
+    '__getitem__', '__getslice__', '__gt__', '__iadd__', '__imul__',
     '__iter__', '__le__', '__len__', '__lt__', '__mul__', '__ne__', '__repr__',
     '__reversed__', '__rmul__', '__setitem__', '__setslice__', '__str__',
     'append', 'count', 'extend', 'index', 'insert', 'pop', 'remove',
     'reverse', 'sort']
 
-for name in _listAttrs:
-    func = getattr(list, name)
-    
-    @wraps(func)
+def _wrap(attr):
+    func = getattr(list, attr)
+    @functools.wraps(func, assigned=['__name__', '__doc__'])
     def wrapped(self, *args, **kw):
         self._unflattenList()
         return func(self, *args, **kw)
-    
-    setattr(LazyList, name, wrapped)
+    return wrapped
+
+for attr in _listAttrs:
+    setattr(LazyList, attr, _wrap(attr))
 
 
 # errors
