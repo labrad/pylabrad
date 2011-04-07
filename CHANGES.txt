@@ -1,5 +1,8 @@
 version 0.92.5
 - labrad.gpib: added the ability to optionally set a temporary timeout for each read/write/query operation
 - labrad.gpib: fixed bug with DeviceLockedError exception type not being imported
-- labrad.controller: removed
-- labrad.util.simplejson: removed
+
+- labrad.types: removed dynamic class generation magic from LazyList
+
+- labrad.controller: package removed
+- labrad.util.simplejson: package removed

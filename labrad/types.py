@@ -34,6 +34,7 @@ from types import InstanceType
 from datetime import timedelta, datetime as dt
 from itertools import chain, imap
 from operator import itemgetter
+from functools import wraps
 
 from labrad import units as U
 from labrad.units import Value, Complex
@@ -564,9 +565,9 @@ class LRValue(LRType):
         # or the other value does not.  In other words, the only case
         # disallowed is the case where we have no unit but the other
         # type does.  This prevents the unit from getting lost in the coercion.
-        return type(other) == LRAny or \
-               (type(self) == type(other) and \
-                (self.unit is not None or other.unit is None))
+        return (type(other) == LRAny or
+                (type(self) == type(other) and
+                 (self.unit is not None or other.unit is None)))
 
     def isFullySpecified(self):
         return self.unit is not None
@@ -648,10 +649,10 @@ class LRCluster(LRType):
         and all of our items are more specific than the corresponding
         items in the other cluster.
         """
-        return type(other) == LRAny or \
-               (type(self) == type(other) and \
-                len(self.items) == len(other.items) and \
-                all(s <= o for s, o in zip(self.items, other.items)))
+        return (type(other) == LRAny or
+                (type(self) == type(other) and
+                 len(self.items) == len(other.items) and
+                 all(s <= o for s, o in zip(self.items, other.items))))
 
     def isFullySpecified(self):
         return all(t.isFullySpecified() for t in self.items)
@@ -794,16 +795,16 @@ class LRList(LRType):
 
         We check the list dimensionality (depth) and the element type.
         """
-        return type(self) == type(other) and \
-               self.depth == other.depth and \
-               self.elem == other.elem
+        return (type(self) == type(other) and
+                self.depth == other.depth and
+                self.elem == other.elem)
 
     def isFullySpecified(self):
         return self.elem.isFullySpecified()
 
     def __unflatten__(self, s):
         data = s.get(self.__width__(Buffer(s)))
-        return List(data, self)
+        return LazyList(data, self)
     
         """Unflatten to nested python list."""
         # get list dimensions
@@ -931,11 +932,12 @@ class LRError(LRType):
     def __unflatten__(self, s):
         """Unflatten to Error type to capture code, message and payload."""
         if self.payload is LRNone():
-            code, msg = unflatten(s, LRCluster(LRInt(), LRStr()))
+            type = LRCluster(LRInt(), LRStr())
+            code, msg = unflatten(s, type)
             payload = None
         else:
-            code, msg, payload = \
-                unflatten(s, LRCluster(LRInt(), LRStr(), self.payload))
+            type = LRCluster(LRInt(), LRStr(), self.payload)
+            code, msg, payload = unflatten(s, type)
         return Error(msg, code, payload)
 
     def __flatten__(self, E):
@@ -992,14 +994,13 @@ class Word(int):
     def __lrtype__(self):
         return LRWord()
 
+
 class LazyList(list):
     """A proxy object for LabRAD lists.
     
     LazyList will be unflattened as needed when list methods are called,
     or can alternately be unflattened as a numpy array, bypassing the slow
     step of creating a large python list.
-    
-    **DO NOT instantiate LazyList directly, use List() instead.**
     """
     def __init__(self, data, tag):
         self._data = data
@@ -1030,9 +1031,6 @@ class LazyList(list):
         """Unflatten to nested python list."""
         if hasattr(self, '_list'):
             return
-        cls = self.__class__
-        for attr in _listAttrs:
-            delattr(cls, attr)
             
         s = Buffer(self._data)
         n, elem = self._lrtype.depth, self._lrtype.elem
@@ -1067,22 +1065,17 @@ class LazyList(list):
         if elem == LRBool(): a = make('bool', 1)
         elif elem == LRInt(): a = make('int32', 4)
         elif elem == LRWord(): a = make('uint32', 4)
-        elif elem <= LRValue():
-            a = make('float64', 8)
-            #a = U.WithUnit(a, elem.units)
-        elif elem <= LRComplex():
-            a = make('complex128', 16)
-            #a = U.WithUnit(a, elem.units)
+        elif elem <= LRValue(): a = make('float64', 8)
+        elif elem <= LRComplex(): a = make('complex128', 16)
         else:
             a = array([unflatten(s, elem) for _ in xrange(size)])
         a.shape = dims + a.shape[1:] # handle clusters as elements
         self._array = a
         return self._array
 
-# attributes of the list class will be wrapped with LazyList methods
-# when one of these wrapped is accessed, the LazyList will be unflattened
-# and the wrapped attributes deleted, so that the instance can be used
-# as a standard list thereafter.
+
+# attributes of the LazyList class will be wrapped so
+# that when called, the LazyList will be unflattened
 _listAttrs = [
     '__add__', '__contains__', '__delitem__', '__delslice__', '__eq__', '__ge__',
     '__getitem__', '__getslice__', '__gt__', '__hash__', '__iadd__', '__imul__',
@@ -1091,26 +1084,15 @@ _listAttrs = [
     'append', 'count', 'extend', 'index', 'insert', 'pop', 'remove',
     'reverse', 'sort']
 
-def _wrapper(name):
-    def func(self, *args, **kw):
-        self._unflattenList()
-        return getattr(list, name)(self, *args, **kw)
-    func.__name__ = name
-    func.__doc__ = getattr(list, name).__doc__
-    return func
-    
 for name in _listAttrs:
-    setattr(LazyList, name, _wrapper(name))
-
-def List(data, tag):
-    """Construct a new LazyList type and return an instance.
+    func = getattr(list, name)
     
-    LazyList wrapper attributes are deleted on unflattening to avoid
-    additional overhead on subsequent usage.  As a result, LazyList
-    classes are single-use.  This function constructs a class that has
-    a copy of the LazyList __dict__ and so behaves in the same way.
-    """
-    return type("List", (list,), LazyList.__dict__.copy())(data, tag)
+    @wraps(func)
+    def wrapped(self, *args, **kw):
+        self._unflattenList()
+        return func(self, *args, **kw)
+    
+    setattr(LazyList, name, wrapped)
 
 
 # errors
