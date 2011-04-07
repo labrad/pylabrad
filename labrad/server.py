@@ -32,10 +32,10 @@ from twisted.internet.protocol import ClientFactory
 from twisted.python import failure, log
 from twisted.python.components import registerAdapter
 from twisted.plugin import IPlugin
-from zope.interface import Interface, Attribute, implements
+from zope.interface import implements
 
-from labrad import util, constants as C, types as T, errors
-from labrad.decorators import setting, messageHandler
+from labrad import util, constants as C, types as T
+from labrad.decorators import setting
 from labrad.protocol import LabradProtocol
 from labrad.interfaces import ILabradServer, IClientAsync
 

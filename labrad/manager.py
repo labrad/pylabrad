@@ -16,7 +16,7 @@
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python.components import registerAdapter
 
-from zope.interface import Interface, implements
+from zope.interface import implements
 
 from labrad import constants as C
 from labrad.interfaces import ILabradProtocol, ILabradManager

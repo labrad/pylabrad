@@ -14,7 +14,7 @@
 
 from datetime import datetime
 
-from twisted.trial import unittest, util
+from twisted.trial import unittest
 
 from labrad import types as T
 

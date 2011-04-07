@@ -19,10 +19,7 @@ from labrad.util import hydrant
 
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python import log
 
-import time
-from datetime import datetime
 
 class TestServer(LabradServer):
     """Server to test labrad from python.

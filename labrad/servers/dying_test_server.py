@@ -13,13 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from labrad import types as T, util
+from labrad import util
 from labrad.server import LabradServer, setting, Signal
 from twisted.internet import defer, reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import returnValue
 from twisted.python import log
 
-import time
 from datetime import datetime
 
 class TestServer(LabradServer):

@@ -13,11 +13,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from labrad import types as T, util
+from labrad import util
 from labrad.server import LabradServer, setting
 
 from twisted.python import log
-from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks
 
 from datetime import datetime
@@ -74,5 +73,4 @@ class LoopServer(LabradServer):
 __server__ = LoopServer()
 
 if __name__ == '__main__':
-    from labrad import util
     util.runServer(__server__)    

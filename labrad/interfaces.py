@@ -14,7 +14,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from zope.interface import implements, Interface, Attribute
-from twisted.python.components import registerAdapter
 
 
 class ILabradProtocol(Interface):

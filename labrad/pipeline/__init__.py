@@ -267,14 +267,14 @@ if __name__ == '__main__':
     letters = [chr(65+n) for n in range(10)]
 
     pl = PipelineBase(pipe1)
-    t1 = timing(pl.run, n=1, inputs=range(10))
+    #t1 = timing(pl.run, n=1, inputs=range(10))
 
     pl = Pipeline(pipe1)
-    t2 = timing(pl.run, n=1, inputs=range(10))
+    #t2 = timing(pl.run, n=1, inputs=range(10))
 
     print 'pipe 1.'
-    print 'without prioritization: %g s' % t1
-    print 'with prioritization: %g s' % t2
+    #print 'without prioritization: %g s' % t1
+    #print 'with prioritization: %g s' % t2
 
     def pipe2(i):
         a = 0
@@ -285,14 +285,14 @@ if __name__ == '__main__':
         returnValue(i)
 
     pl = PipelineBase(pipe2)
-    t1 = timing(pl.run, n=1, inputs=range(10))
+    #t1 = timing(pl.run, n=1, inputs=range(10))
 
     pl = Pipeline(pipe2)
-    t2 = timing(pl.run, n=1, inputs=range(10))
+    #t2 = timing(pl.run, n=1, inputs=range(10))
 
     print
     print 'pipe 2.'
-    print 'without prioritization: %g s' % t1
-    print 'with prioritization: %g s' % t2
+    #print 'without prioritization: %g s' % t1
+    #print 'with prioritization: %g s' % t2
 
     stopReactor()

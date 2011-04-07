@@ -149,7 +149,7 @@ class Pipeline(Deferred):
         returnValue(results)
 
 if __name__ == '__main__':
-    from labrad.util import wakeUpCall
+    from labrad.util import wakeupCall
     from random import randint
 
     LENGTH = 4
@@ -165,7 +165,7 @@ if __name__ == '__main__':
             @inlineCallbacks
             def stage(i):
                 print 'starting:', (ID, k)
-                yield wakeUpCall(DELAYS[i % len(DELAYS)], (ID, i))
+                yield wakeupCall(DELAYS[i % len(DELAYS)], (ID, i))
                 print 'finished:', (ID, k)
             d = stage(k)
             d.addCallback(printResult)
