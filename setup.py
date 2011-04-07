@@ -39,21 +39,17 @@ setup(
     packages = [
         'labrad',
         'labrad.config',
-        'labrad.controller',
         'labrad.node', 
         'labrad.pipeline',
         'labrad.servers',
         'labrad.test',
         'labrad.util',
-        'labrad.util.simplejson',
         ],
     package_data = {
         'labrad': ['LICENSE.txt'],
         'labrad.config': ['*.ini'],
-        'labrad.controller': ['gwt/www/org.labrad.NodeController/*.*'],
         },
     py_modules = [
-        'twisted.plugins.labrad_controller',
         'twisted.plugins.labrad_node',
         ],
     scripts = ['labrad_postinstall.py'],
