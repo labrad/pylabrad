@@ -57,25 +57,6 @@ def install():
 	            nodeShortcut, "-n labradnode")
     file_created(nodeShortcut)
     print "done."
-    
-    print "Creating controller shortcut...",
-    controllerShortcut = os.path.join(menuPath, "LabRAD Controller.lnk")
-    if os.path.isfile(controllerShortcut):
-        os.remove(controllerShortcut)
-    create_shortcut(twistdPath, "Web control for LabRAD, localhost:7667",
-	            controllerShortcut, "-n labradcontrol")
-    file_created(controllerShortcut)
-    print "done."
-    
-    # create local copy of configuration
-    print "Removing deprecated controller config files...",
-    files = [os.path.join(configPath, "controller-template.ini"),
-             os.path.join(configPath, "controller.ini"),
-             os.path.join(menuPath, "LabRAD Controller Config.lnk")]
-    for f in files:
-        if os.path.isfile(f):
-            os.remove(f)
-    print "done."
 
     if os.path.exists(ipyPath):
         print "Creating LabRAD shell shortcut...",
@@ -99,9 +80,8 @@ def install():
         print "done."
     else:
         print "IPython not found.  Skipping shortcuts for IPython shell."
-    
-    
-    
+
+
 def remove():
     pass
 
