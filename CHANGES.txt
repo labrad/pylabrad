@@ -1,8 +1,14 @@
 version 0.92.5
+- labrad.client: separated Client from Connection so that multiple Clients
+    can share a single connection.  These clients can have separate contexts
+    to allow for all requests made on that client to be in a different
+    default context. 
+
 - labrad.gpib: added the ability to optionally set a temporary timeout for each read/write/query operation
 - labrad.gpib: fixed bug with DeviceLockedError exception type not being imported
 
-- labrad.types: removed dynamic class generation magic from LazyList
+- labrad.types: removed dynamic class generation magic from LazyList (now pickleable)
+- labrad.units: removed dynamic class generation magic from WithUnit (now pickleable)
 
 - labrad.controller: package removed
 - labrad.util.simplejson: package removed

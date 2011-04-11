@@ -14,7 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from labrad import types as T, util
-from labrad.server import LabradServer, setting, Signal
+from labrad.server import LabradServer, setting
 from labrad.util import hydrant
 
 from twisted.internet import defer, reactor
@@ -64,6 +64,9 @@ class TestServer(LabradServer):
             print 'self.client not properly refreshed:'
             print '  servers that should be disconnected:', list(cxnServers - mgrServers)
             print '  servers that have not been connected:', list(mgrServers - cxnServers)
+    
+    def initContext(self, c):
+        c['dict'] = {}
     
     @setting(2, "Delayed Echo")
     def delayed_echo(self, c, data):
@@ -155,11 +158,22 @@ class TestServer(LabradServer):
         """Get a random LabRAD type tag."""
         return str(hydrant.randType())
 
+    @setting(100, "Set", key='s', value='?', returns='')
+    def set(self, c, key, value):
+        c['dict'][key] = value
+    
+    @setting(101, "Get", key='s', returns='?')
+    def get(self, c, key):
+        return c['dict'][key]
+    
+    @setting(102, "Keys", returns='*s')
+    def keys(self, c):
+        return sorted(c['dict'].keys())
+
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')
         
 __server__ = TestServer()
 
 if __name__ == '__main__':
-    from labrad import util
     util.runServer(__server__)

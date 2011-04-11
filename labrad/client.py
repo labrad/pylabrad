@@ -347,11 +347,12 @@ Data:
 
 
 class Client(HasDynamicAttrs):
-    def __init__(self, name):
+    def __init__(self, cxn, context=None):
         HasDynamicAttrs.__init__(self)
-        self.name = name or 'Python Client (%s)' % util.getNodeName()
-        self.connected = False
-        self._next_context = 1
+        self.__cxn = cxn
+        if context is None:
+            context = cxn.context()
+        self._ctx = context
 
     def __enter__(self):
         """Enter the body of a with statement."""
@@ -364,7 +365,10 @@ class Client(HasDynamicAttrs):
         except:
             pass
         return False
-        
+    
+    def __call__(self, context=None):
+        return Client(self, context)
+    
     def _getAttrs(self):
         if not self.connected:
             return []
@@ -377,6 +381,78 @@ class Client(HasDynamicAttrs):
     def servers(self):
         self._refresh()
         return self._attrs
+
+    # attributes proxied to the underlying connection, which may be shared among multiple clients
+    @property
+    def name(self):
+        return self.__cxn.name
+    
+    @property
+    def ID(self):
+        return self.__cxn.ID
+    
+    @property
+    def host(self):
+        return self.__cxn.host
+    
+    @property
+    def port(self):
+        return self.__cxn.port
+    
+    @property
+    def connected(self):
+        return self.__cxn.connected
+    
+    @property
+    def _cxn(self):
+        return self.__cxn._cxn
+    
+    @property
+    def _mgr(self):
+        return self.__cxn._mgr
+
+    def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
+        self.__cxn.connect(host, port=port, timeout=timeout, password=password)
+
+    def disconnect(self):
+        self.__cxn.disconnect()
+
+    def context(self):
+        return self.__cxn.context()
+
+    def _send(self, target, records, *args, **kw):
+        """Send a packet over this connection."""
+        if 'context' not in kw:
+            kw['context'] = self._ctx
+        return self.__cxn._send(target, records, *args, **kw)
+
+    def _sendMessage(self, target, records, *args, **kw):
+        """Send a message over this connection."""
+        if 'context' not in kw:
+            kw['context'] = self._ctx
+        return self.__cxn._sendMessage(target, records, *args, **kw)
+
+    def __repr__(self):
+        if self.connected:
+            return """\
+LabRAD Client: '%s' on %s:%s
+
+Available servers:
+%s
+""" % (self.name, self.host, self.port, indent(repr(self.servers)))
+        else:
+            return """\
+LabRAD Client: '%s'
+
+Disconnected
+""" % self.name
+
+
+class Connection(object):
+    def __init__(self, name):
+        self.name = name or 'Python Client (%s)' % util.getNodeName()
+        self.connected = False
+        self._next_context = 1
 
     def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
         thread.startReactor()
@@ -404,19 +480,4 @@ class Client(HasDynamicAttrs):
     def _sendMessage(self, target, records, *args, **kw):
         """Send a message over this connection."""
         return block(self._cxn.sendMessage, target, records, *args, **kw)
-
-    def __repr__(self):
-        if self.connected:
-            return """\
-LabRAD Client: '%s' on %s:%s
-
-Available servers:
-%s
-""" % (self.name, self.host, self.port, indent(repr(self.servers)))
-        else:
-            return """\
-LabRAD Client: '%s'
-
-Disconnected
-""" % self.name
 

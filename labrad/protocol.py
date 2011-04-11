@@ -22,13 +22,12 @@ authenticating.
 """
 
 from labrad import errors, types as T, util, constants as C
-from labrad.interfaces import ILabradProtocol, IClientAsync, IMessageContext
+from labrad.interfaces import ILabradProtocol, IMessageContext
 
 from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet.error import ConnectionDone
 from twisted.python import failure, log
-from zope.interface import Interface, implements
+from zope.interface import implements
 
 import hashlib
 import getpass

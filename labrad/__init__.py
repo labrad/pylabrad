@@ -26,8 +26,8 @@ __date__     = '$Date$'
 
 def connect(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name=None, **kw):
     """Create a client connection to the labrad manager."""
-    cxn = client.Client(name)
+    cxn = client.Connection(name)
     cxn.connect(host, port, **kw)
-    return cxn
+    return client.Client(cxn)
 
 connection = connect
