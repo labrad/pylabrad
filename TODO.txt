@@ -6,6 +6,7 @@ GENERAL:
 
   Client/ClientAsync:
     create clones that work in different contexts by default
+      done for client, need to implement for clientAsync as well
     implement generic flattened version of a packet that can be forwarded
       to do this, probably need a 'Flattened' data type
       probably just a str subclass with a type tag attribute

@@ -3,7 +3,7 @@ from twisted.trial import unittest
 import labrad
 from labrad import types as T
 
-TEST_STR = "this is a test, this is only a test"
+TEST_STR = 'this is a test, this is only a test'
 
 class ClientTests(unittest.TestCase):
     def setUp(self):
