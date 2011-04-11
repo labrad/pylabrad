@@ -139,7 +139,10 @@ class WithUnit(object):
         #if unit is None:
         #    return 1.0 * value # make sure return value is at least a float
         cls = cls._findClass(type(value), unit)
-        return super(WithUnit, cls).__new__(cls, value)
+        
+        inst = super(WithUnit, cls).__new__(cls, value)
+        inst.unit = Unit(unit)
+        return inst
         
     _numericTypes = {}
         
@@ -154,12 +157,6 @@ class WithUnit(object):
             cls = cls._numericTypes[numType]
         except KeyError:
             raise TypeError('Cannot use units with instances of type %s' % (numType,))
-        
-        # find or create a class with this specific unit
-        unit = Unit(unit)
-        if unit not in cls._units:
-            cls._units[unit] = type(cls.__name__, (cls,), {'unit': unit})
-        cls = cls._units[unit]
         return cls
         
     @property
@@ -313,8 +310,8 @@ class WithUnit(object):
             return self
         num = ''
         denom = ''
-        for unit, power in zip(_base_names, self.unit.powers) + \
-                           self.unit.lex_names.items():
+        for unit, power in (zip(_base_names, self.unit.powers) +
+                            self.unit.lex_names.items()):
             if power != 1 and power != -1:
                 unit += '**' + str(abs(power))
             if power < 0: denom += '/' + unit
@@ -350,7 +347,6 @@ class WithUnit(object):
 
 class Value(WithUnit, float):
     _numType = float
-    _units = {}
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
         return self.inUnitsOf(unit).value
@@ -362,7 +358,6 @@ WithUnit._numericTypes[long] = Value
 
 class Complex(WithUnit, complex):
     _numType = complex
-    _units = {}
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
         return self.inUnitsOf(unit).value
@@ -536,8 +531,8 @@ class Unit(object):
                 # might fail to convert other to Unit
                 pass
         elif isinstance(other, Unit):
-            return self.powers == other.powers and \
-                   self.lex_names == other.lex_names
+            return (self.powers == other.powers and
+                    self.lex_names == other.lex_names)
         return False
         
     def __ne__(self, other):
@@ -683,8 +678,9 @@ class Unit(object):
         return not any(self.powers) and not any(self.lex_names.values())
 
     def isAngle(self):
-        return self.powers[7] == 1 and sum(self.powers) == 1 and \
-               not any(self.lex_names.values()) 
+        return (self.powers[7] == 1 and
+                sum(self.powers) == 1 and
+                not any(self.lex_names.values())) 
 
 
 def convert(*args):
@@ -748,7 +744,7 @@ _prefixes = [
     ('y',  1.e-24),
     ]
 
-_help.append('SI prefixes:' + \
+_help.append('SI prefixes:' +
     ', '.join(prefix + ' (%.0E)' % value for prefix, value in _prefixes))
 
 
@@ -910,8 +906,8 @@ def description():
             s += '\n' + entry + '\n'
         elif isinstance(entry, tuple):
             name, comment, unit, prefixable = entry
-            s += '%-8s  %-26s %s\n' % \
-                 (('', '*')[prefixable] + name, comment, unit)
+            prefix = '*' if prefixable else ''
+            s += '%-8s  %-26s %s\n' % (prefix + name, comment, unit)
         else:
             # impossible
             raise TypeError, 'wrong construction of _help list'
