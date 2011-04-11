@@ -226,12 +226,13 @@ class HasDynamicAttrs(object):
 class ServerWrapper(HasDynamicAttrs):
     """A wrapper for a labrad server."""
     
-    def __init__(self, cxn, name, pyName, ID):
+    def __init__(self, cxn, name, pyName, ID, context=None):
         HasDynamicAttrs.__init__(self)
         self._cxn = cxn
         self.name = self._labrad_name = name
         self._py_name = pyName
         self.ID = ID
+        self._ctx = context
 
     @property
     def _mgr(self):
@@ -256,14 +257,21 @@ class ServerWrapper(HasDynamicAttrs):
     def packet(self, **kw):
         return PacketWrapper(self, **kw)
 
-    def __call__(self, **kw):
-        return self
+    def __call__(self, context=None):
+        """Create a new server wrapper based on this one but with a new default context."""
+        if context is None:
+            context = self._cxn.context()
+        return ServerWrapper(self._cxn, self.name, self._py_name, self.ID, context=context)
 
     def _send(self, *args, **kw):
+        if 'context' not in kw or kw['context'] is None:
+            kw['context'] = self._ctx
         return self._cxn._send(self.ID, *args, **kw)
 
     def sendMessage(self, ID, *args, **kw):
         """Send a message to this server."""
+        if 'context' not in kw or kw['context'] is None:
+            kw['context'] = self._ctx
         tag = extractKey(kw, 'tag', [])
         if len(args) == 0:
             args = None
@@ -422,13 +430,13 @@ class Client(HasDynamicAttrs):
 
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
-        if 'context' not in kw:
+        if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
         return self.__cxn._send(target, records, *args, **kw)
 
     def _sendMessage(self, target, records, *args, **kw):
         """Send a message over this connection."""
-        if 'context' not in kw:
+        if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
         return self.__cxn._sendMessage(target, records, *args, **kw)
 

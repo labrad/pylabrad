@@ -7,7 +7,7 @@ TEST_STR = "this is a test, this is only a test"
 
 class ClientTests(unittest.TestCase):
     def setUp(self):
-        self.cxn = labrad.connect(host='localhost')
+        self.cxn = labrad.connect() #host='localhost')
 
     def tearDown(self):
         self.cxn.disconnect()
@@ -110,3 +110,24 @@ class ClientTests(unittest.TestCase):
         self.assertRaises(Exception, pts.exc_in_deferred)
         self.assertRaises(Exception, pts.exc_in_errback)
         self.assertRaises(Exception, pts.exc_in_inlinecallback)
+
+    def testContextWrappers(self):
+        cxn1 = self.cxn()
+        cxn2 = self.cxn()
+        
+        pts1 = cxn1.python_test_server
+        pts2 = cxn2.python_test_server
+        pts3 = cxn1.python_test_server()
+        pts4 = pts2()
+        
+        pts1.set('1', 1)
+        pts2.set('2', 2)
+        pts3.set('3', 3)
+        pts4.set('4', 4)
+        
+        self.assertEquals(pts1.keys(), ['1'])
+        self.assertEquals(pts2.keys(), ['2'])
+        self.assertEquals(pts3.keys(), ['3'])
+        self.assertEquals(pts4.keys(), ['4'])
+
+        
