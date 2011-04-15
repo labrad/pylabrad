@@ -14,7 +14,7 @@
 
 from twisted.trial import unittest
 
-from labrad import units as U
+from labrad import units
 
 class labradUnitsTests(unittest.TestCase):
     def testParsing(self):
@@ -25,9 +25,14 @@ class labradUnitsTests(unittest.TestCase):
         pass
         
     def testArithmetic(self):
-        self.assertEquals(U.Value(5.0, None) * U.m, 5.0 * U.m)
+        m = units.Unit('m')
+        kg = units.Unit('kg')
+        
+        self.assertEquals(units.Value(5.0, None)*m, 5.0*m)
         
         # addition
-        self.assertEquals(1.0 * U.kg + 0.0, 1.0 * U.kg)
+        self.assertEquals(1.0*kg + 0.0, 1.0*kg)
+        
+        self.assertNotEquals(1.0*kg, None)
         
 

@@ -202,6 +202,16 @@ class WithUnit(object):
     def __rsub__(self, other):
         return self._sum(other, -1, 1)
 
+    def __eq__(self, other):
+        if not isinstance(other, WithUnit):
+            if self.unit is None:
+                return self.value == other
+            return False
+        return self.__cmp__(other) == 0
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def __cmp__(self, other):
         diff = self._sum(other, 1, -1)
         return cmp(diff.value, 0)
