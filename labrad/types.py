@@ -1032,6 +1032,7 @@ class LazyList(list):
         """Unflatten to nested python list."""
         if self._unflattened:
             return
+
         self._unflattened = True
             
         s = Buffer(self._data)
@@ -1096,7 +1097,6 @@ def _wrap(attr):
 
 for attr in _listAttrs:
     setattr(LazyList, attr, _wrap(attr))
-
 
 # errors
 
