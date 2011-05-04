@@ -1,3 +1,2 @@
 include *.txt
 include *.ini
-recursive-include labrad/controller/gwt/www/org.labrad.NodeController *
