@@ -19,7 +19,7 @@ labrad.grammar
 Grammars for parsing various LabRAD stuff with pyparsing.
 """
 
-from labrad.pyparsing import (Word, Literal, Group, OneOrMore,
+from labrad.pyparsing import (Word, Literal, Group,
                               Forward, Optional, alphas, nums, stringEnd)
 
 toInt = lambda s, l, t: [int(t[0])]
