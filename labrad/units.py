@@ -459,7 +459,7 @@ class Unit(object):
             # will follow the grammar, so not handling this
             # error can crash us and kill our connection.
             # For now, just fall back to a string unit in this case.
-            unit = cls._stringUnit(term)
+            unit = cls._stringUnit(name)
         # if the name of this unit is new, we'll add it to the table
         # of known units.  Otherwise, we'll just return the unit
         # object that is already in the table.  This means units that
