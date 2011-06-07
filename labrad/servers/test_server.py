@@ -66,56 +66,57 @@ class TestServer(LabradServer):
             print '  servers that have not been connected:', list(mgrServers - cxnServers)
     
     def initContext(self, c):
+        c['delay'] = 5
         c['dict'] = {}
     
-    @setting(2, "Delayed Echo")
+    @setting(2, "Delayed Echo", data='?')
     def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""
         yield util.wakeupCall(c['delay'])
         returnValue(data)
 
-    @setting(3, "Delayed Echo Deferred")
+    @setting(3, "Delayed Echo Deferred", data='?')
     def delayed_echo_deferred(self, c, data):
         """Echo a packet after a specified delay."""
         d = defer.Deferred()
         reactor.callLater(c['delay'], d.callback, data)
         return d
 
-    @setting(4, "Echo Delay", delay=['v[s]', ''], returns=['v[s]'])
-    def echo_delay(self, c, delay):
+    @setting(4, "Echo Delay", delay='v[s]', returns='v[s]')
+    def echo_delay(self, c, delay=None):
         """Get or set the echo delay."""
         self.log('Echo delay: %s' % delay)
         if delay is not None:
             c['delay'] = float(delay)
         return c['delay']
 
-    @setting(40, "Speed", speed=['v[m/s]', ''], returns=['v[m/s]'])
-    def speed(self, c, speed):
+    @setting(40, "Speed", speed='v[m/s]', returns='v[m/s]')
+    def speed(self, c, speed=None):
         """Get or set the speed."""
         self.log('Speed: %s' % speed)
         if speed is not None:
             c['speed'] = speed
         return c['speed']
 
-    @setting(41, "Verbose Echo")
+    @setting(41, "Verbose Echo", data='?')
     def verbose_echo(self, c, data):
         print type(data)
         print repr(data)
         return data
 
-    @setting(5, "Exc in Handler")
+    @setting(5, "Exc in Handler", data='?')
     def exc_in_handler(self, c, data):
         """Raises an exception directly in the handler."""
         self.log('Exception in handler.')
         raise Exception('Raised in handler.')
 
-    @setting(6, "Exc in Subfunction")
+    @setting(6, "Exc in Subfunction", data='?')
     def exc_in_subfunction(self, c, data):
         """Raises an exception in a subfunction."""
         self.log('Exception in subfunction.')
         owie()
 
-    @setting(7, "Exc in Deferred")
+    @setting(7, "Exc in Deferred", data='?')
     def exc_in_deferred(self, c, data):
         """Returns a deferred that fires an exception."""
         self.log('Exception in deferred.')
@@ -124,7 +125,7 @@ class TestServer(LabradServer):
         reactor.callLater(1, d.callback, None)
         return d
 
-    @setting(8, "Exc in Errback")
+    @setting(8, "Exc in Errback", data='?')
     def exc_in_errback(self, c, data):
         """Returns a deferred whose errback will be called."""
         self.log('Exception from an errback.')
@@ -132,19 +133,19 @@ class TestServer(LabradServer):
         reactor.callLater(1, d.errback, Exception('Raised by errback.'))
         return d
 
-    @setting(9, "Exc in inlineCallback")
+    @setting(9, "Exc in inlineCallback", data='?')
     def exc_in_inlinecallback(self, c, data):
         """Raises an exception in an inlineCallback."""
         self.log('Exception from an inlineCallback.')
         yield util.wakeupCall(c['delay'])
         raise Exception('Raised in inlineCallback.')
 
-    @setting(10, "Bad Return Type", returns=['s'])
+    @setting(10, "Bad Return Type", data='?', returns='s')
     def bad_return_type(self, c, data):
         """Returns a value that does not match the declared return type."""
         return 5
         
-    @setting(11, "Get Random Data", tag=['s'])
+    @setting(11, "Get Random Data", tag='s')
     def get_random_data(self, c, tag=None):
         """Get a random bit of data conforming to the specified type tag."""
         if tag is None:
@@ -154,7 +155,7 @@ class TestServer(LabradServer):
         return hydrant.randValue(t)
         
     @setting(12, "Get Random Tag")
-    def get_random_tag(self, c, tag):
+    def get_random_tag(self, c):
         """Get a random LabRAD type tag."""
         return str(hydrant.randType())
 
