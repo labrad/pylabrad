@@ -38,6 +38,11 @@ class ReactorThread(threading.Thread):
 _reactorThread = None
 
 def startReactor():
+    # check to see whether the reactor is already running
+    # this ensures that when synchronous code is called from an asynchronous
+    # program using deferToThread we don't try to restart the reactor
+    if reactor.running:
+        return
     global _reactorThread
     if not _reactorThread or not _reactorThread.isAlive():
         _reactorThread = ReactorThread()
