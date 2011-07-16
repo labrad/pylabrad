@@ -28,11 +28,11 @@ class labradUnitsTests(unittest.TestCase):
         m = units.Unit('m')
         kg = units.Unit('kg')
         
-        self.assertEquals(units.Value(5.0, None)*m, 5.0*m)
+        self.assertEqual(units.Value(5.0, None)*m, 5.0*m)
         
         # addition
-        self.assertEquals(1.0*kg + 0.0, 1.0*kg)
+        self.assertEqual(1.0*kg + 0.0, 1.0*kg)
         
-        self.assertNotEquals(1.0*kg, None)
+        self.assertNotEqual(1.0*kg, None)
         
 
