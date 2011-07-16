@@ -60,13 +60,13 @@ class labradTypesTests(unittest.TestCase):
             '*b*i': T.LRCluster(T.LRList(T.LRBool()), T.LRList(T.LRInt())),
         }
         for tag, type_ in tests.items():
-            self.assertEquals(T.parseTypeTag(tag), type_)
+            self.assertEqual(T.parseTypeTag(tag), type_)
             newtag = str(type_)
             if isinstance(type_, T.LRCluster) and tag[0] + tag[-1] != '()':
                 # just added parentheses in this case
-                self.assertEquals(newtag, '(%s)' % tag)
+                self.assertEqual(newtag, '(%s)' % tag)
             else:
-                self.assertEquals(newtag, tag)
+                self.assertEqual(newtag, tag)
 
 
     def testFlatAndBack(self):
@@ -105,7 +105,7 @@ class labradTypesTests(unittest.TestCase):
         for data_in in tests:
             #print data_in, T.flatten(data_in)
             data_out = T.unflatten(*T.flatten(data_in))
-            self.assertEquals(data_in, data_out)
+            self.assertEqual(data_in, data_out)
 
     def testTypeHints(self):
         """Test conversion to specified allowed types."""
@@ -131,7 +131,7 @@ class labradTypesTests(unittest.TestCase):
             (5.0, ['s', 'b', 't', 'w', 'i'], 'v'),
         ]
         for data, hints, tag in passingTests:
-            self.assertEquals(T.flatten(data, hints)[1], T.parseTypeTag(tag))
+            self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
         for data, hints, tag in failingTests:
             self.assertRaises(T.FlatteningError, T.flatten, data, hints)
 
@@ -142,7 +142,7 @@ class labradTypesTests(unittest.TestCase):
             ([([],), ([5.0],), ([T.Value(5, 'm')],)], '*(*v[m])'),
         ]
         for data, tag in tests:
-            self.assertEquals(T.flatten(data)[1], T.parseTypeTag(tag))
+            self.assertEqual(T.flatten(data)[1], T.parseTypeTag(tag))
             
     def testUnitTypes(self):
         """Test flattening with units.
@@ -156,4 +156,13 @@ class labradTypesTests(unittest.TestCase):
             (T.Value(5.0, 'ft'), ['v[m]'], 'v[ft]'),
         ]
         for data, hints, tag in tests:
-            self.assertEquals(T.flatten(data, hints)[1], T.parseTypeTag(tag))
+            self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
+    
+    def testNumpySupport(self):
+        """Test flattening and unflattening of numpy arrays"""
+        import numpy as np
+        
+        # TODO: flesh this out with more array types
+        a = np.array([1,2,3,4,5])
+        b = T.unflatten(*T.flatten(a)).asarray
+        self.assert_(np.all(a == b))
