@@ -354,7 +354,7 @@ class LabradProtocol(protocol.Protocol):
         m.update(password)
         try:
             resp = yield self.sendRequest(C.MANAGER_ID, [(0L, m.digest())])
-        except:
+        except Exception:
             raise errors.LoginFailedError('Incorrect password.')
         self.password = C.PASSWORD = password # save password, since it worked
         self.loginMessage = resp[0][1] # get welcome message
