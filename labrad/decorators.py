@@ -25,9 +25,10 @@ from functools import wraps
 from inspect import getargspec
 
 from twisted.internet.defer import inlineCallbacks
+from zope.interface import implements
 
 from labrad import types as T, util
-from labrad.interfaces import implements, IRequestHandler, IMessageHandler
+from labrad.interfaces import IRequestHandler, IMessageHandler
 
 def _isGenerator(f):
     """Check to see whether f is a generator.
