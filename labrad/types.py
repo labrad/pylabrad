@@ -305,7 +305,7 @@ def flatten(obj, types=[]):
             for t in types:
                 try:
                     s = t.__flatten__(obj)
-                except:
+                except Exception:
                     pass
                 else:
                     break
@@ -455,12 +455,12 @@ class LRInt(LRType, Singleton):
     tag = 'i'
     width = 4
     def __unflatten__(self, s):
-        return unpack('i', s.get(4))[0]
+        return unpack('>i', s.get(4))[0]
     
     def __flatten__(self, n):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
-        return pack('i', n)
+        return pack('>i', n)
 
 registerType(int, LRInt())
 
@@ -470,12 +470,12 @@ class LRWord(LRType, Singleton):
     tag = 'w'
     width = 4
     def __unflatten__(self, s):
-        return long(unpack('I', s.get(4))[0])
+        return long(unpack('>I', s.get(4))[0])
     
     def __flatten__(self, n):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
-        return pack('I', n)
+        return pack('>I', n)
 
 registerType(long, LRWord())
 
@@ -486,18 +486,18 @@ class LRStr(LRType, Singleton):
     isFixedWidth = False
     
     def __width__(self, s):
-        width = unpack('i', s.get(4))[0]
+        width = unpack('>i', s.get(4))[0]
         s.skip(width)
         return 4 + width
     
     def __unflatten__(self, s):
-        n = unpack('i', s.get(4))[0]
+        n = unpack('>i', s.get(4))[0]
         return s.get(n)
     
     def __flatten__(self, s):
         if not isinstance(s, str):
             raise FlatteningError(s, self)
-        return pack('I', len(s)) + s
+        return pack('>I', len(s)) + s
 
 registerType(str, LRStr())
 
@@ -519,7 +519,7 @@ class LRTime(LRType, Singleton):
     width = 16
     
     def __unflatten__(self, s):
-        secs, us = unpack('QQ', s.get(16))
+        secs, us = unpack('>QQ', s.get(16))
         us = float(us)/pow(2,64)*pow(10,6)
         t = timeOffset() + timedelta(seconds=secs, microseconds=us)
         return t
@@ -528,7 +528,7 @@ class LRTime(LRType, Singleton):
         diff = t - timeOffset()
         secs = diff.days * (60 * 60 * 24) + diff.seconds
         us = long(float(diff.microseconds)/pow(10,6)*pow(2,64))
-        return pack('QQ', secs, us)
+        return pack('>QQ', secs, us)
 
 registerType(dt, LRTime())
 
@@ -573,7 +573,7 @@ class LRValue(LRType):
         return self.unit is not None
 
     def __unflatten__(self, s):
-        v = unpack('d', s.get(8))[0]
+        v = unpack('>d', s.get(8))[0]
         return Value(v, self.unit)
         
     @classmethod
@@ -586,7 +586,7 @@ class LRValue(LRType):
         # update unit to reflect the actual flattened value
         if isinstance(v, U.WithUnit):
             self.unit = v.unit
-        return pack('d', float(v))
+        return pack('>d', float(v))
 
 registerTypeFunc((float, Value), LRValue.__lrtype__)
 
@@ -598,12 +598,12 @@ class LRComplex(LRValue):
     width = 16
     
     def __unflatten__(self, s):
-        real, imag = unpack('dd', s.get(16))
+        real, imag = unpack('>dd', s.get(16))
         return Complex(complex(real, imag), self.unit)
     
     def __flatten__(self, c):
         c = complex(c)
-        return pack('dd', c.real, c.imag)
+        return pack('>dd', c.real, c.imag)
 
 registerTypeFunc((complex, Complex), LRComplex.__lrtype__)
 
@@ -697,6 +697,103 @@ class LRCluster(LRType):
 registerTypeFunc(tuple, LRCluster.__lrtype__)
 
 
+#class LRChoice(LRType):
+#    """Represents a choice among different data types."""
+#    
+#    tag = '<'
+#
+#    def __init__(self, *choices):
+#        self.choices = choices
+#        
+#    def __str__(self):
+#        return '<%s>' % '|'.join(str(i) for i in self.choices)
+#
+#    def __repr__(self):
+#        contents = '<%s>' % '|'.join(repr(i) for i in self.choices)
+#        return self.__class__.__name__ + contents
+#
+#    @classmethod
+#    def __parse__(cls, s):
+#        choices = []
+#        while len(s) and s[0] != '>':
+#            cluster = []
+#            while len(s) and s[0] != '|':
+#                cluster.append(parseSingleType(s))
+#            if len(cluster) == 0:
+#                raise Exception('Type choices cannot be empty')
+#            elif len(cluster) == 1:
+#                choices.append(cluster[0])
+#            else:
+#                choices.append(LRCluster(*choices))
+#            if s.get(1) != '|': # pop off the '|'
+#                raise Exception('Expected "|" to delimit type choices.')
+#        if s.get(1) != '>':
+#            raise Exception('Unbalanced brackets in choice.')
+#        return cls(*choices)
+#
+#    #@classmethod
+#    #def __lrtype__(cls, c):
+#    #    return cls(*[getType(i) for i in c])
+#
+#    def __len__(self):
+#        return len(self.choices)
+#
+#    def __getitem__(self, key):
+#        return self.choices[key]
+#
+#    def __le__(self, other):
+#        """Test whether this type is more specific than another.
+#
+#        Compatibility requires that both clusters have the same length,
+#        and all of our items are more specific than the corresponding
+#        items in the other cluster.
+#        """
+#        # FIXME: implement this
+#        return (type(other) == LRAny or
+#                all(s <= other for s in self.choices))
+#
+#    def isFullySpecified(self):
+#        return len(self.choices) == 1
+#    
+#    @property
+#    def isFixedWidth(self):
+#        return False
+#        #if hasattr(self, '_isFixedWidth'):
+#        #    return self._isFixedWidth
+#        #self._isFixedWidth = all(item.isFixedWidth for item in self.items)
+#        #if self._isFixedWidth:
+#        #    self.width = sum(item.width for item in self.items)    
+#    
+#    def __width__(self, s):
+#        return sum(item.__width__(s) for item in self.items)
+#        
+#    def __unflatten__(self, s):
+#        """Unflatten items into a python tuple."""
+#        return tuple(unflatten(s, t) for t in self.items)
+#
+#    def __flatten__(self, c):
+#        """Flatten python tuple to LabRAD cluster."""
+#        if len(c) == 0:
+#            raise FlatteningError('Cannot flatten zero-length clusters')
+#        if len(c) != len(self.items):
+#            raise FlatteningError('Cannot flatten %s to %s' % (c, self.items))
+#        if LRAny() in self.items:
+#            strs = []
+#            items = []
+#            for t, elem in zip(self.items, c):
+#                if t == LRAny():
+#                    s, t = flatten(elem)
+#                    strs.append(s)
+#                    items.append(t)
+#                else:
+#                    s = t.__flatten__(elem)
+#                    strs.append(s)
+#                    items.append(t)
+#            self.items = items # warning: type mutated here
+#            return ''.join(strs)
+#        return ''.join(t.__flatten__(elem) for t, elem in zip(self.items, c))
+
+
 class LRList(LRType):
     """A multidimensional rectangular array type."""
     
@@ -719,7 +816,7 @@ class LRList(LRType):
     
     def __width__(self, s):
         n, elem = self.depth, self.elem
-        dims = unpack('i'*n, s.get(4*n))
+        dims = unpack('>' + ('i'*n), s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if elem is None:
             width = 0
@@ -785,10 +882,10 @@ class LRList(LRType):
 
         We check the list dimensionality (depth) and the element type.
         """
-        return type(other) == LRAny or \
-               (type(self) == type(other) and \
-                self.depth == other.depth and \
-                (other.elem is None or self.elem <= other.elem))
+        return (type(other) == LRAny or
+                (type(self) == type(other) and
+                 self.depth == other.depth and
+                 (other.elem is None or self.elem <= other.elem)))
 
     def __eq__(self, other):
         """Test whether this type is equal to another.
@@ -809,7 +906,7 @@ class LRList(LRType):
         """Unflatten to nested python list."""
         # get list dimensions
         n = self.depth
-        dims = unpack('i'*n, s.get(4*n))
+        dims = unpack('>' + ('i'*n), s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if self.elem is None or size == 0:
             return nestedList([], n-1)
@@ -848,14 +945,14 @@ class LRList(LRType):
                 return ''.join(flattenNDlist(row, n+1) for row in ls)
         flat = flattenNDlist(L)
         lengths = [l or 0 for l in lengths]
-        return pack('i' * len(lengths), *lengths) + flat
+        return pack('>' + ('i' * len(lengths)), *lengths) + flat
         
     def __flatten_array__(self, a):
         """Flatten numpy array to LabRAD list."""
         shape = a.shape[:self.depth]
         if len(shape) != self.depth:
             raise Exception("Bad array shape.")
-        dims = pack('i' * len(shape), *shape)
+        dims = pack('>' + ('i' * len(shape)), *shape)
         if self.elem == LRAny():
             self.elem = self.__lrtype_array__(a).elem
         
@@ -863,20 +960,20 @@ class LRList(LRType):
         wanted_dtype = _known_dtypes.get(type(self.elem), None)
         
         if wanted_dtype is not None:
-            if wanted_dtype == 'uint32':
-                if a.dtype == 'int64':
-                    a = a.astype('uint32')
-            if a.dtype > dtype(wanted_dtype):
-                raise Exception("Narrowing type cast while flattening numpy array.")
+            if wanted_dtype == '>u4':
+                if a.dtype == 'i8' or a.dtype == '>i8':
+                    a = a.astype('>u4')
+            if a.dtype.itemsize > dtype(wanted_dtype).itemsize:
+                raise Exception("Narrowing type cast while flattening numpy array: dtype=%s, wanted_dtype=%s" % (a.dtype, dtype(wanted_dtype)))
             a = a.astype(wanted_dtype)
         else:
             elems = imap(itemgetter(0), (flatten(i) for i in a.flat))
             return dims + ''.join(elems)
         return dims + a.tostring()
         
-_known_dtypes = {LRBool: 'bool', LRInt: 'int32', LRWord: 'uint32',
-                 LRValue: 'float64', LRComplex: 'complex128'}
-                 
+_known_dtypes = {LRBool: '>u1', LRInt: '>i4', LRWord: '>u4',
+                 LRValue: '>f8', LRComplex: '>c16'}
+
 registerTypeFunc(list, LRList.__lrtype__)
 if useNumpy:
     registerTypeFunc(ndarray, LRList.__lrtype_array__)
@@ -1037,7 +1134,7 @@ class LazyList(list):
             
         s = Buffer(self._data)
         n, elem = self._lrtype.depth, self._lrtype.elem
-        dims = unpack('i'*n, s.get(4*n))
+        dims = unpack('>' + ('i'*n), s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         
         if elem is None or size == 0:
@@ -1061,15 +1158,15 @@ class LazyList(list):
         
         s = Buffer(self._data)
         n, elem = self._lrtype.depth, self._lrtype.elem
-        dims = unpack('i'*n, s.get(4*n))
+        dims = unpack('>' + ('i'*n), s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         
         make = lambda t, width: fromstring(s.get(size*width), dtype=dtype(t))
-        if elem == LRBool(): a = make('bool', 1)
-        elif elem == LRInt(): a = make('int32', 4)
-        elif elem == LRWord(): a = make('uint32', 4)
-        elif elem <= LRValue(): a = make('float64', 8)
-        elif elem <= LRComplex(): a = make('complex128', 16)
+        if elem == LRBool(): a = make('>u1', 1)
+        elif elem == LRInt(): a = make('>i4', 4)
+        elif elem == LRWord(): a = make('>u4', 4)
+        elif elem <= LRValue(): a = make('>f8', 8)
+        elif elem <= LRComplex(): a = make('>c16', 16)
         else:
             a = array([unflatten(s, elem) for _ in xrange(size)])
         a.shape = dims + a.shape[1:] # handle clusters as elements
