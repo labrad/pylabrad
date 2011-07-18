@@ -390,3 +390,71 @@ class DeferredSignal(object):
 
     def disconnect(self, listener):
         self.listeners.remove(listener)
+
+# convenience functions for dealing with units
+def convert(v, u):
+    """Convert quantity v into units u.
+    
+    If v is just a number, no conversion is performed.
+    If u is None, then the units of v are simply stripped
+    but otherwise no conversion is performed.
+    """
+    if hasattr(v, 'value'): # prefer over subclass check: isinstance(v, Value)
+        if u is None:
+            return v.value
+        else:
+            return v[u]
+    else:
+        return v
+
+def convertUnits(**unitdict):
+    """
+    Decorator to create functions that automatically
+    convert arguments into specified units.  If a unit
+    is specified for an argument and the caller passes
+    an argument with incompatible units, an Exception
+    will be raised.  Inside the decorated function, the
+    arguments no longer have any units, they are just
+    plain floats.  Not all arguments to the function need
+    to be specified in the decorator.  Those that are not
+    specified will be passed through unmodified.
+    
+    Usage:
+    
+    @convertUnits(t0='ns', amp=None)
+    def func(t0, amp):
+        <do stuff>
+        
+    This is essentially equivalent to:
+    
+    def func(t0, amp):
+        t0 = convert(t0, 'ns')
+        amp = convert(amp, None)
+        <do stuff>
+        
+    The convert function, defined above, will convert
+    any quantities with units into the specified units,
+    or strip off any units if unit is None.
+    """
+    
+    def wrap(f):
+        args = inspect.getargspec(f)[0] # list of argument names
+        for arg in unitdict:
+            if arg not in args:
+                raise Exception('function %s does not take arg "%s"' % (f, arg))
+        # unitdict maps argument names to units
+        # posdict maps argument positions to units
+        posdict = dict((i, unitdict[arg]) for i, arg in enumerate(args) if arg in unitdict)
+        
+        @functools.wraps(f)
+        def wrapped(*a, **kw):
+            # convert positional arguments if they have a unit
+            a = [convert(val, posdict.get(i, None)) for i, val in enumerate(a)]
+            # convert named arguments if they have a unit
+            for arg, val in kw.iteritems():
+                if arg in unitdict:
+                    kw[arg] = convert(val, unitdict[arg])
+            # call the function with converted arguments
+            return f(*a, **kw)
+        return wrapped
+    return wrap
