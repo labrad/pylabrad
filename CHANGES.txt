@@ -1,3 +1,8 @@
+version 0.92.6
+- labrad.node: added support for running servers as executable jar/war files by
+    configuring the java path.  The jars can contain embedded metadata for the
+    node server in a zipped node.ini file
+
 version 0.92.5
 - labrad.client: separated Client from Connection so that multiple Clients
     can share a single connection.  These clients can have separate contexts
