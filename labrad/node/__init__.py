@@ -34,6 +34,7 @@ import socket
 from datetime import datetime
 from ConfigParser import SafeConfigParser
 import StringIO
+import zipfile
 
 import labrad
 from labrad import util, types as T
@@ -440,7 +441,7 @@ class NodeConfig(object):
         
         # load defaults (creating them if necessary)
         create = '__default__' not in dirs
-        defaults = ([], ['labrad.servers'], ['.ini', '.py'])
+        defaults = ([], ['labrad.servers'], ['.ini', '.py'], '')
         defaults = yield self._load('__default__', create, defaults)
         
         # load this node (creating config if necessary)
@@ -460,8 +461,8 @@ class NodeConfig(object):
     
     def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
-        self.dirs, self.mods, self.extensions = config
-        print 'config updated:', self.dirs, self.mods, self.extensions
+        self.dirs, self.mods, self.extensions, self.java = config
+        print 'config updated:', self.dirs, self.mods, self.extensions, self.java
         if triggerRefresh:
             self.parent.refreshServers()
         
@@ -475,14 +476,17 @@ class NodeConfig(object):
             p.set('directories', defaults[0])
             p.set('packages', defaults[1])
             p.set('extensions', defaults[2])
+            p.set('javapath', defaults[3])
         p.get('directories', '*s', key='dirs')
         p.get('packages', '*s', key='mods')
         p.get('extensions', '*s', key='exts')
+        p.get('javapath', 's', True, '', key='java')
         ans = yield p.send()
         dirs = filter(None, ans.dirs)
         mods = filter(None, ans.mods)
         exts = filter(None, ans.exts)
-        returnValue((dirs, mods, exts))
+        java = ans.java
+        returnValue((dirs, mods, exts, java))
         
     def _save(self):
         """Save the current configuration to the registry."""
@@ -490,6 +494,7 @@ class NodeConfig(object):
         p.set('directories', self.dirs)
         p.set('packages', self.mods)
         p.set('extensions', self.extensions)
+        p.set('javapath', self.java)
         return p.send()
         
     @inlineCallbacks
@@ -627,6 +632,17 @@ class NodeServer(LabradServer):
                         if ext.lower() == '.ini':
                             with open(os.path.join(path, f)) as file:
                                 conf = file.read()
+                        elif ext.lower() in ['.war', '.jar']:
+                            zf = zipfile.ZipFile(os.path.join(path, f))
+                            found = False
+                            for info in zf.infolist():
+                                if 'node.ini' in info.filename:
+                                    found = True
+                                    member = zf.open(info.filename)
+                                    conf = member.read()
+                                    member.close()
+                                    break
+                            zf.close()
                         else:
                             conf = findConfigBlock(path, f)
                             if conf is None:
@@ -656,7 +672,8 @@ class NodeServer(LabradServer):
                        LABRADHOST=self.host,
                        LABRADPORT=str(self.port),
                        LABRADPASSWORD=self.password,
-                       PYTHON=sys.executable)
+                       PYTHON=sys.executable,
+                       JAVA=self.config.java)
         srv = self.servers[name](environ)
         # TODO check whether an instance with this name already exists
         self.instances[name] = srv
