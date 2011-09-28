@@ -1,3 +1,6 @@
+version 0.92.7
+- labrad.gpib: BUGFIX: added missing @inlineCallbacks annotations in GPIBDeviceWrapper methods
+
 version 0.92.6
 - labrad.node: added support for running servers as executable jar/war files by
     configuring the java path.  The jars can contain embedded metadata for the
