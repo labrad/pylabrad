@@ -75,6 +75,7 @@ class GPIBDeviceWrapper(DeviceWrapper):
         resp = yield p.send()
         returnValue(resp.read)
 
+    @inlineCallbacks
     def write(self, s, timeout=None):
         """Write a string to the device."""
         p = self._packet()
@@ -86,6 +87,7 @@ class GPIBDeviceWrapper(DeviceWrapper):
         resp = yield p.send()
         returnValue(resp.write)
 
+    @inlineCallbacks
     def read(self, bytes=None, timeout=None):
         """Read a string from the device."""
         p = self._packet()
