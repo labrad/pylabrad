@@ -43,10 +43,8 @@ RECORD_TYPE = T.parseTypeTag('wss')
 def packetStream(packetHandler):
     """A generator that assembles packets.
 
-    This is the version 2 packet protocol for labrad, with request numbers.
-    We use the standard library module struct to decode the data.  The
-    leading '>' in the format strings indicates big-endian data, 'I'
-    is equivalent to U32, and 'B' is equivalent to U8.
+    Accepts a function packetHandler that will be called with four arguments
+    whenever a packet is completed: source, context, request, records.
     """
     buf = ''
     while True:
