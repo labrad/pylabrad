@@ -34,14 +34,15 @@ class TestServer(LabradServer):
 
     @inlineCallbacks
     def initServer(self):
-        from registry_wrapper_async import RegistryWrapperAsync
-        self.regWrapper = yield RegistryWrapperAsync.create(self.client, ['', 'Servers', 'Python Test Server'])
+        yield None
+        #from registry_wrapper_async import RegistryWrapperAsync
+        #self.regWrapper = yield RegistryWrapperAsync.create(self.client, ['', 'Servers', 'Python Test Server'])
 
     @inlineCallbacks
     def stopServer(self):
         print 'before yield'
         yield None
-        print (yield self.client.manager.convert_units(T.Value(5, 'GHz'), 'Hz'))
+        #print (yield self.client.manager.convert_units(T.Value(5, 'GHz'), 'Hz'))
         print 'after yield'
 
     def serverConnected(self, ID, name):
