@@ -15,7 +15,6 @@
 
 from twisted.internet import defer, reactor
 from twisted.python import failure, log, reflect, util
-from twisted.python.util import mergeFunctionMetadata
 import copy, re, textwrap
 from labrad.util.unwrap import unwrap
 
