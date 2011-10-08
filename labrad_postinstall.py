@@ -39,48 +39,7 @@ def rmdir(a, *p):
     os.rmdir(path)
     
 def install():
-    print "Creating start menu entries..."
-    mkdir(menuPath)
-
-    print "Removing old node.py* files...",
-    for suffix in ['', 'c', 'o']:
-        nodeDotPy = os.path.join(libPath, "node.py" + suffix)
-        if os.path.isfile(nodeDotPy):
-            os.remove(nodeDotPy)
-    print "done."
-
-    print "Creating node shortcut...",
-    nodeShortcut = os.path.join(menuPath, "LabRAD Node.lnk")
-    if os.path.isfile(nodeShortcut):
-        os.remove(nodeShortcut)
-    create_shortcut(twistdPath, "Node to start and stop LabRAD servers",
-	            nodeShortcut, "-n labradnode")
-    file_created(nodeShortcut)
-    print "done."
-
-    if os.path.exists(ipyPath):
-        print "Creating LabRAD shell shortcut...",
-        ipyShortcut = os.path.join(menuPath, "LabRAD Shell.lnk")
-        ipyScript = os.path.join(configPath, "ipythonrc-labrad.ini")
-        if os.path.isfile(ipyShortcut):
-            os.remove(ipyShortcut)
-        create_shortcut(ipyPath, "",
-                        ipyShortcut, "-rcfile %s" % ipyScript)
-        file_created(ipyShortcut)
-        print "done."
-
-        print "Creating LabRAD tutorial shortcut...",
-        ipyShortcut = os.path.join(menuPath, "LabRAD Tutorial.lnk")
-        ipyScript = os.path.join(configPath, "ipythonrc-labrad_tut.ini")
-        if os.path.isfile(ipyShortcut):
-            os.remove(ipyShortcut)
-        create_shortcut(ipyPath, "",
-                        ipyShortcut, "-rcfile %s" % ipyScript)
-        file_created(ipyShortcut)
-        print "done."
-    else:
-        print "IPython not found.  Skipping shortcuts for IPython shell."
-
+    pass
 
 def remove():
     pass
