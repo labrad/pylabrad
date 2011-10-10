@@ -52,28 +52,10 @@ def stopReactor():
     reactor.callFromThread(reactor.stop)
 
 def blockingCallFromThread(func, *args, **kw):
-    e = threading.Event()
-    l = []
-    def _got_result(result):
-        l.append(result)
-        e.set()
-    def wrapped_func():
-        d = defer.maybeDeferred(func, *args, **kw)
-        d.addBoth(_got_result)
-    reactor.callFromThread(wrapped_func)
-    while True:
-        e.wait(1)
-        if e.isSet():
-            break
-    result = l[0]
-    if isinstance(result, Failure):
-        result.raiseException()
-    else:
-        return result
+    return Future(func, *args, **kw).wait()
 
-class Future(defer.Deferred):
+class Future(object):
     def __init__(self, func, *args, **kw):
-        defer.Deferred.__init__(self)
         self.e = threading.Event()
         self.l = []
         def _got_result(result):
@@ -85,6 +67,7 @@ class Future(defer.Deferred):
         reactor.callFromThread(wrapped_func)
         self.done = False
         self.result = None
+        self.callbacks = []
 
     def addCallback(self, f, *args, **kw):
         if self.done:
