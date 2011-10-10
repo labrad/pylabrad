@@ -22,6 +22,7 @@ Superclass of GPIB device servers.
 from labrad import types as T, constants as C, util, errors
 from labrad.devices import DeviceWrapper, DeviceServer, DeviceLockedError
 from labrad.server import LabradServer, setting
+from labrad.support import MultiDict
 
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -190,7 +191,7 @@ class ManagedDeviceServer(LabradServer):
 
     @inlineCallbacks
     def initServer(self):
-        self.devices = util.MultiDict() # aliases -> device
+        self.devices = MultiDict() # aliases -> device
         self.device_guids = {} # name -> guid
         self._next_guid = 0
         # register a message handler for connect/disconnect messages

@@ -22,9 +22,10 @@ Contains a blocking client connection to labrad.
 from labrad import constants as C, thread, util
 from labrad.errors import Error
 from labrad.interfaces import ILabradManager
+from labrad.support import PrettyMultiDict, PacketResponse
 from labrad.thread import blockingCallFromThread as block, Future
-from labrad.wrappers import PacketResponse, getConnection
-from labrad.util import mangle, indent, PrettyMultiDict, extractKey
+from labrad.wrappers import getConnection
+from labrad.util import mangle, indent, extractKey
 
 class NotFoundError(Error):
     code = 10
@@ -55,7 +56,7 @@ class SettingWrapper(object):
             args = None
         elif len(args) == 1:
             args = args[0]
-        resp = Future(self._server._send, [(self.ID, args, tag)], **kw)
+        resp = self._server._send([(self.ID, args, tag)], **kw)
         if wrap:
             resp.addCallback(lambda resp: resp[0][1])
         return resp.wait() if wait else resp
@@ -199,7 +200,9 @@ class HasDynamicAttrs(object):
         return []
 
     _staticAttrs = [] # static attributes names, so dynamic names don't collide
-    _wrapAttr = lambda *a: None # should be overridden by subclasses
+    
+    def _wrapAttr(self, *args):
+        """Should be overridden by subclasses"""
 
     def refresh(self, now=False):
         """Signal that a refresh is needed.
@@ -305,7 +308,7 @@ class PacketWrapper(HasDynamicAttrs):
     def send(self, wait=True, **kw):
         """Send this packet to the server."""
         records = [rec[:3] for rec in self._packet]
-        resp = Future(self._server._send, records, **dict(self._kw, **kw))
+        resp = self._server._send(records, **dict(self._kw, **kw))
         resp.addCallback(PacketResponse, self._server, self._packet)
         return resp.wait() if wait else resp
 
@@ -483,7 +486,7 @@ class Connection(object):
 
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
-        return self._cxn.sendRequest(target, records, *args, **kw)
+        return Future(self._cxn.sendRequest, target, records, *args, **kw)
 
     def _sendMessage(self, target, records, *args, **kw):
         """Send a message over this connection."""

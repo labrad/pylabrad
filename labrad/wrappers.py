@@ -17,7 +17,6 @@ from __future__ import absolute_import
 
 import functools
 from types import MethodType
-from collections import defaultdict
 
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -27,7 +26,8 @@ from zope.interface import implements
 
 from labrad import constants as C, protocol
 from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
-from labrad.util import mangle, MultiDict, extractKey
+from labrad.support import MultiDict, PacketResponse
+from labrad.util import mangle, extractKey
 
 
 class AsyncSettingWrapper(object):
@@ -527,42 +527,3 @@ def wrapAsync(cls, *args, **kw):
     d = obj.refresh()
     d.addCallback(lambda x: obj)
     return d
-
-
-class PacketResponse(object):
-    """Wrapper for response packets from LabRAD servers.
-
-    Attributes are added to access the records in this
-    response packet coming from each setting.  For each
-    setting called by the packet, we add an attribute to
-    access the response from that setting.  If a setting
-    is called more than once, all responses from that setting
-    are collected into a list.  Responses can be accessed
-    by name or ID, unless a key was specified for the call,
-    in which case the response is accessible via the key only.
-    """
-    def __init__(self, resp, server, packet):
-        # collect all responses from each setting or key
-        temp = defaultdict(list)
-        for rec, (ID, data) in zip(packet, resp):
-            key = rec[3]
-            setting = server.settings[ID]
-            name, pyName = setting.name, setting._py_name
-            # if this record has a key, index by key only
-            # otherwise by setting name, python name and ID
-            if key is not None:
-                name = pyName = ID = key
-            keys = (name, pyName, ID)
-            temp[keys].append(data)
-        # add data for the various settings
-        self.settings = MultiDict()
-        for (name, pyName, ID), l in temp.items():
-            if len(l) == 1:
-                l = l[0]
-            if isinstance(pyName, str):
-                setattr(self, pyName, l)
-            self.settings[name, pyName, ID] = l
-
-    def __getitem__(self, key):
-        return self.settings[key]
-

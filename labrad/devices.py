@@ -19,9 +19,10 @@ labrad.devices
 Superclass of generic device servers.
 """
 
-from labrad import util, errors
+from labrad import errors
 from labrad.server import LabradServer, setting
 from labrad.errors import Error
+from labrad.support import MultiDict
 
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -100,7 +101,7 @@ class DeviceServer(LabradServer):
     deviceWrapper = DeviceWrapper
 
     def initServer(self):
-        self.devices = util.MultiDict() # aliases -> device
+        self.devices = MultiDict() # aliases -> device
         self.device_guids = {} # name -> guid
         self._next_guid = 0
         self._refreshLock = defer.DeferredLock()

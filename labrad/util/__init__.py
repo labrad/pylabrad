@@ -13,9 +13,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import copy, re, textwrap
+
 from twisted.internet import defer, reactor
 from twisted.python import failure, log, reflect, util
-import copy, re, textwrap
+
 from labrad.util.unwrap import unwrap
 
 def fancyHelp(ID, name, accepts, returns, units, about):
@@ -116,84 +118,6 @@ def extractKey(d, key, default):
     val = d[key]
     del d[key]
     return val
-
-class SafeIterDict(dict):
-    """A dict subclass that allows insertion and deletion while iterating.
-    
-    This is accomplished by overriding keys, items, values, etc. to return
-    copies of their respective lists, rather than the lists themselves.
-    Note that this negates the efficiency gains of using the iter* methods.
-    """
-    keys = lambda self: list(dict.keys(self))
-    items = lambda self: list(dict.items(self))
-    values = lambda self: list(dict.values(self))
-    iterkeys = lambda self: iter(self.keys())
-    iteritems = lambda self: iter(self.items())
-    itervalues = lambda self: iter(self.values())
-    __iter__ = lambda self: iter(self.keys())
-
-class MultiDict(SafeIterDict):
-    """Dictionary with multiple keys to the same value."""
-    def __init__(self, *a, **kw):
-        dict.__init__(self, *a, **kw)
-        self.aliases = {} # mapping from aliases to keys
-        self._keys = {} # mapping from keys to aliases
-
-    def __repr__(self):
-        items = []
-        for k, v in self.iteritems():
-            key_str = repr(k)
-            if k in self._keys:
-                aliases = [key_str] + [repr(a) for a in self._keys[k]]
-                key_str = ' or '.join(aliases)
-            items.append('%s: %r' % (key_str, v))
-        return '{' + ', '.join(items) + '}'
-
-    def __setitem__(self, k, v):
-        if isinstance(k, tuple):
-            k, aliases = k[0], k[1:]
-            for alias in aliases:
-                self.aliases[alias] = k
-            self._keys[k] = aliases
-        dict.__setitem__(self, k, v)
-
-    def __delitem__(self, k):
-        if k in self.aliases:
-            k = self.aliases[k]
-        # delete aliases for this key
-        if k in self._keys:
-            aliases = self._keys[k]
-            for a in aliases:
-                # only delete alias if it still points to this key
-                if self.aliases[a] == k:
-                    del self.aliases[a]
-            del self._keys[k]
-        dict.__delitem__(self, k)
-
-    def __contains__(self, k):
-        if k in self.aliases:
-            k = self.aliases[k]
-        return dict.__contains__(self, k)
-
-    def __getitem__(self, k):
-        if k in self.aliases:
-            k = self.aliases[k]
-        return dict.__getitem__(self, k)
-    
-    def _updateAliases(self, k, *aliases):
-        """Update the aliases for a given key."""
-        for a in set(self._keys[k]) - set(aliases):
-            # remove old aliases, but only if they still
-            # point to this key
-            if self.aliases[a] == k:
-                del self.aliases[a]
-        for a in aliases:
-            self.aliases[a] = k
-        self._keys[k] = aliases
-
-class PrettyMultiDict(MultiDict):
-    def __repr__(self):
-        return '\n'.join(sorted(self.keys()))
 
 class ContextDict(dict):
     """Subclass of dict for holding context data.

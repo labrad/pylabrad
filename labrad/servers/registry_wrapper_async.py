@@ -14,7 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from twisted.internet.defer import inlineCallbacks, returnValue
-from labrad.util import SafeIterDict
+from labrad.support import SafeIterDict
 
 class RegistryWrapperAsync(SafeIterDict):
 
