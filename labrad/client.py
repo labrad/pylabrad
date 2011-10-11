@@ -19,13 +19,9 @@ labrad.client
 Contains a blocking client connection to labrad.
 """
 
-from labrad import constants as C, thread, util
+from labrad import constants as C
 from labrad.errors import Error
-from labrad.interfaces import ILabradManager
-from labrad.support import PrettyMultiDict, PacketResponse
-from labrad.thread import blockingCallFromThread as block, Future
-from labrad.wrappers import getConnection
-from labrad.util import mangle, indent, extractKey
+from labrad.support import mangle, indent, extractKey, PrettyMultiDict, PacketResponse
 
 class NotFoundError(Error):
     code = 10
@@ -84,7 +80,7 @@ class SettingWrapper(object):
 
     def _refresh(self):
         if not self._refreshed:
-            info = block(self._mgr.getSettingInfo, self._server.ID, self.ID)
+            info = self._mgr.getSettingInfo(self._server.ID, self.ID)
             self.__doc__, self._accepts, self._returns, self._notes = info
             self._refreshed = True
         
@@ -107,8 +103,8 @@ Returns:
 
 %s
 """ % (self._server.name, self.name, self.ID, self.description,
-       util.indent('\n'.join(self.accepts)),
-       util.indent('\n'.join(self.returns)), self.notes)
+       indent('\n'.join(self.accepts)),
+       indent('\n'.join(self.returns)), self.notes)
 
 
 class DynamicAttrDict(PrettyMultiDict):
@@ -189,6 +185,7 @@ class HasDynamicAttrs(object):
 
             self._refreshed = True
         except Exception, e:
+            print 'Error refreshing dynamic attributes:'
             print e, repr(e)
 
     def _getAttrs(self):
@@ -245,7 +242,7 @@ class ServerWrapper(HasDynamicAttrs):
     _wrapAttr = SettingWrapper
 
     def _getAttrs(self):
-        info = block(self._mgr.getServerInfo, self.ID)
+        info = self._mgr.getServerInfo(self.ID)
         self.__doc__, self.notes, self._slist = info
         return self._slist
 
@@ -383,8 +380,8 @@ class Client(HasDynamicAttrs):
     def _getAttrs(self):
         if not self.connected:
             return []
-        return block(self._mgr.getServersList)
-
+        return self._mgr.getServersList()
+        
     _staticAttrs = ['servers', 'connect', 'disconnect', 'context']
     _wrapAttr = ServerWrapper
 
@@ -458,37 +455,4 @@ LabRAD Client: '%s'
 Disconnected
 """ % self.name
 
-
-class Connection(object):
-    def __init__(self, name):
-        self.name = name or 'Python Client (%s)' % util.getNodeName()
-        self.connected = False
-        self._next_context = 1
-
-    def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
-        thread.startReactor()
-        self._cxn = block(getConnection, host, port, self.name, password)
-        self._mgr = ILabradManager(self._cxn)
-        self.ID = self._cxn.ID
-        self.host = host
-        self.port = port
-        self.connected = True
-
-    def disconnect(self):
-        if self.connected:
-            block(self._cxn.disconnect)
-            self.connected = False
-
-    def context(self):
-        context = 0, self._next_context
-        self._next_context += 1
-        return context
-
-    def _send(self, target, records, *args, **kw):
-        """Send a packet over this connection."""
-        return Future(self._cxn.sendRequest, target, records, *args, **kw)
-
-    def _sendMessage(self, target, records, *args, **kw):
-        """Send a message over this connection."""
-        return block(self._cxn.sendMessage, target, records, *args, **kw)
 

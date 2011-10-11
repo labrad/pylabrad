@@ -17,17 +17,16 @@
 labrad module for python.
 """
 
-from labrad import client, constants as C, manager, util
+from labrad import backend, client, constants
 from labrad.wrappers import connectAsync, runAsync
 
 __version__  = '0.92.8'
 __revision__ = '$Revision$'
 __date__     = '$Date$'
 
-def connect(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name=None, **kw):
+def connect(host=constants.MANAGER_HOST, port=constants.MANAGER_PORT, name=None, **kw):
     """Create a client connection to the labrad manager."""
-    cxn = client.Connection(name)
-    cxn.connect(host, port, **kw)
+    cxn = backend.connect(host=host, port=port, name=name, **kw)
     return client.Client(cxn)
 
 connection = connect

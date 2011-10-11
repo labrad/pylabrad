@@ -24,10 +24,9 @@ from twisted.python.components import registerAdapter
 
 from zope.interface import implements
 
-from labrad import constants as C, protocol
+from labrad import constants as C, manager, protocol
 from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
-from labrad.support import MultiDict, PacketResponse
-from labrad.util import mangle, extractKey
+from labrad.support import mangle, extractKey, MultiDict, PacketResponse
 
 
 class AsyncSettingWrapper(object):

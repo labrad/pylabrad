@@ -1,4 +1,36 @@
+"""A collection of miscellaneous support functions and classes.
+
+Most of these used to be located in labrad.util but have been moved here
+to break the explicit dependency on twisted.
+"""
+
 from collections import defaultdict
+import os
+import socket
+
+def getNodeName():
+    return os.environ.get('LABRADNODE', socket.gethostname().lower())
+
+ALLOWED = 'abcdefghijklmnopqrstuvwxyz1234567890_'
+FIRST = 'abcdefghijklmnopqrstuvwxyz_'
+
+def mangle(name):
+    """Return a modified string that is usable as a method name."""
+    newname = ''.join(c if c in ALLOWED else '_' for c in name.lower())
+    if newname[0] not in FIRST:
+        newname = '_' + newname
+    return newname
+
+def indent(s, level=1):
+    spc = ' ' * (4 * level)
+    return '\n'.join(spc + line for line in s.split('\n'))
+
+def extractKey(d, key, default):
+    if key not in d:
+        return default
+    val = d[key]
+    del d[key]
+    return val
 
 class SafeIterDict(dict):
     """A dict subclass that allows insertion and deletion while iterating.

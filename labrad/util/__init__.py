@@ -18,6 +18,7 @@ import copy, re, textwrap
 from twisted.internet import defer, reactor
 from twisted.python import failure, log, reflect, util
 
+from labrad.support import getNodeName
 from labrad.util.unwrap import unwrap
 
 def fancyHelp(ID, name, accepts, returns, units, about):
@@ -86,20 +87,6 @@ def dump(src, length=16):
         N += length
     return result
 
-ALLOWED = 'abcdefghijklmnopqrstuvwxyz1234567890_'
-FIRST = 'abcdefghijklmnopqrstuvwxyz_'
-
-def mangle(name):
-    """Return a modified string that is usable as a method name."""
-    newname = ''.join(c if c in ALLOWED else '_' for c in name.lower())
-    if newname[0] not in FIRST:
-        newname = '_' + newname
-    return newname
-
-def indent(s, level=1):
-    spc = ' ' * (4 * level)
-    return '\n'.join(spc + line for line in s.split('\n'))
-
 def linspace(star, stop, N):
     """Linearly-spaced list of numbers."""
     return [star + (stop - star) * n / (N-1) for n in range(N)]
@@ -111,13 +98,6 @@ def wakeupCall(delay, args=None):
     d = defer.Deferred()
     reactor.callLater(delay, d.callback, args)
     return d
-
-def extractKey(d, key, default):
-    if key not in d:
-        return default
-    val = d[key]
-    del d[key]
-    return val
 
 class ContextDict(dict):
     """Subclass of dict for holding context data.
@@ -226,10 +206,6 @@ class MyLogObserver(log.FileLogObserver):
 
         util.untilConcludes(self.write, timeStr + " " + msgStr)
         util.untilConcludes(self.flush)  # Hoorj!
-
-def getNodeName():
-    import os, socket
-    return os.environ.get('LABRADNODE', socket.gethostname().lower())
 
 def firstToFire(n=2):
     heads = [defer.Deferred() for _ in range(n)]
