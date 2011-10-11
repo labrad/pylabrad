@@ -52,23 +52,34 @@ class BaseConnection(object):
         """Implemented by subclass"""
 
 try:
-    from labrad.thread import blockingCallFromThread as block, Future as TFuture, startReactor
+    from twisted.internet import defer, reactor
+    
+    from labrad.thread import startReactor
     from labrad.wrappers import getConnection
 
     class TwistedConnection(BaseConnection):
         def _doConnect(self, password):
             startReactor()
-            self._cxn = block(getConnection, self.host, self.port, self.name, password)
+            self._cxn = self._call(getConnection, self.host, self.port, self.name, password).wait()
             return self._cxn.ID
             
         def _doDisconnect(self):
-            block(self._cxn.disconnect)
+            self._call(self._cxn.disconnect).wait()
+            
+        def _call(self, func, *args, **kw):
+            f = Future()
+            def wrapped_func():
+                d = defer.maybeDeferred(func, *args, **kw)
+                d.addCallbacks(lambda result: f.callback(result),
+                               lambda failure: f.errback(failure))
+            reactor.callFromThread(wrapped_func)
+            return f
             
         def _send(self, target, records, *args, **kw):
-            return TFuture(self._cxn.sendRequest, target, records, *args, **kw)
+            return self._call(self._cxn.sendRequest, target, records, *args, **kw)
     
         def _sendMessage(self, target, records, *args, **kw):
-            return block(self._cxn.sendMessage, target, records, *args, **kw)
+            return self._call(self._cxn.sendMessage, target, records, *args, **kw).wait()
     
     backends['twisted'] = TwistedConnection
 
@@ -80,7 +91,7 @@ class AsyncoreConnection(BaseConnection):
     def _doConnect(self, password):
         if password is None:
             password = getPassword()
-        self.disconnected = True
+        self.connected = False
         self._clearCache()
         self._writeQueue = Queue.Queue()
         self._map = {}     
@@ -88,7 +99,7 @@ class AsyncoreConnection(BaseConnection):
         self._loop = threading.Thread(target=self._run)
         self._loop.setDaemon(True)
         self._loop.start()
-        self.disconnected = False
+        self.connected = True
         return self._doLogin(password, self.name)
     
     def _run(self):
@@ -185,8 +196,8 @@ class AsyncoreConnection(BaseConnection):
 
     def _sendRequestNoLookup(self, target, records, context=(0, 0), timeout=None):
         """Send a request without doing any lookups of server or setting IDs."""
-        if self.disconnected:
-            raise Exception('Already disconnected.')
+        if not self.connected:
+            raise Exception('Not connected.')
         d = Future()
         if timeout is not None:
             raise Exception('Timeouts not supported in asyncore backend')
@@ -315,7 +326,9 @@ class Future(object):
                 break
         self.done = True
         result = self.result
-        if isinstance(result, Failure):
+        if hasattr(result, 'raiseException'):
+            # this can be a twisted Failure our
+            # own Failure class, as defined above
             result.raiseException()
         else:
             for f, args, kw in self.callbacks:
@@ -356,7 +369,6 @@ class AsyncoreProtocol(asyncore.dispatcher):
         pass
     
     def handle_close(self):
-        self.disconnected = True
         for d in self.requests.values():
             d.errback(Exception('Connection lost.'))
         
