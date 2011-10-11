@@ -109,25 +109,7 @@ class AsyncoreConnection(BaseConnection):
         self._cxn.disconnect()
         self._loop.join()
 
-    def _send(self, target, records, *args, **kw):
-        return self._sendRequest(target, records, *args, **kw)
-
-    def _sendMessage(self, target, records, *args, **kw):
-        return self._sendMessageBase(target, records, *args, **kw)
-        
-    
-    # sending
-    def _sendPacket(self, target, context, records, future=None):
-        """Send a raw packet to the specified target."""
-        flatrecs = _flattenRecords(records)
-        self._writeQueue.put((target, context, flatrecs, future))
-    
-    def _sendMessageBase(self, target, records, context=(0, 0)):
-        """Send a message to the specified target."""
-        target, records = self._lookupNames(target, records)
-        self._sendPacket(target, context, records)
-
-    def _sendRequest(self, target, records, context=(0, 0), timeout=None):
+    def _send(self, target, records, context=(0, 0), timeout=None):
         """Send a request to the given target server.
 
         Returns a deferred that will fire the resulting data packet when
@@ -141,6 +123,11 @@ class AsyncoreConnection(BaseConnection):
         target, records = self._lookupNames(target, records)
         resp = self._sendRequestNoLookup(target, records, context, timeout)
         return resp
+
+    def _sendMessage(self, target, records, context=(0, 0)):
+        """Send a message to the specified target."""
+        target, records = self._lookupNames(target, records)
+        self._sendPacket(target, context, records)
         
     def _lookupNames(self, server, records):
         """Translate server and setting names into IDs.
@@ -204,11 +191,16 @@ class AsyncoreConnection(BaseConnection):
         self._sendPacket(target, context, records, d)
         return d
 
+    def _sendPacket(self, target, context, records, future=None):
+        """Send a raw packet to the specified target."""
+        flatrecs = _flattenRecords(records)
+        self._writeQueue.put((target, context, flatrecs, future))
+
     # login protocol
     def _doLogin(self, password, *ident):
         """Implements the LabRAD login protocol."""
         # send login packet
-        resp = self._sendRequest(C.MANAGER_ID, []).wait()
+        resp = self._send(C.MANAGER_ID, []).wait()
         challenge = resp[0][1] # get password challenge
     
         # send password response
@@ -216,14 +208,14 @@ class AsyncoreConnection(BaseConnection):
         m.update(challenge)
         m.update(password)
         try:
-            resp = self._sendRequest(C.MANAGER_ID, [(0L, m.digest())]).wait()
+            resp = self._send(C.MANAGER_ID, [(0L, m.digest())]).wait()
         except Exception:
             raise errors.LoginFailedError('Incorrect password.')
         self._loginMessage = resp[0][1] # get welcome message
     
         # send identification
         try:
-            resp = self._sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)]).wait()
+            resp = self._send(C.MANAGER_ID, [(0L, (1L,) + ident)]).wait()
         except:
             raise errors.LoginFailedError('Bad identification.')
         return resp[0][1] # get assigned ID
@@ -282,7 +274,7 @@ def _flattenRecord(ID, data, types=[]):
     s, t = T.flatten(data, types)
     return RECORD_TYPE.__flatten__((ID, str(t), str(s)))
 
-class Failure(object):
+class AsyncFailure(object):
     def __init__(self, error=None):
         if error is None:
             self.exctype, self.value = sys.exc_info()[:2]
@@ -314,7 +306,9 @@ class Future(object):
         self.e.set()
     
     def errback(self, error):
-        self.result = Failure(error)
+        if not hasattr(error, 'raiseException'):
+            error = AsyncFailure(error)
+        self.result = error
         self.e.set()
     
     def wait(self):
