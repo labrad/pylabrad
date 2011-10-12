@@ -357,7 +357,7 @@ Data:
 class Client(HasDynamicAttrs):
     def __init__(self, cxn, context=None):
         HasDynamicAttrs.__init__(self)
-        self.__cxn = cxn
+        self._backend = cxn
         if context is None:
             context = cxn.context()
         self._ctx = context
@@ -393,52 +393,52 @@ class Client(HasDynamicAttrs):
     # attributes proxied to the underlying connection, which may be shared among multiple clients
     @property
     def name(self):
-        return self.__cxn.name
+        return self._backend.name
     
     @property
     def ID(self):
-        return self.__cxn.ID
+        return self._backend.ID
     
     @property
     def host(self):
-        return self.__cxn.host
+        return self._backend.host
     
     @property
     def port(self):
-        return self.__cxn.port
+        return self._backend.port
     
     @property
     def connected(self):
-        return self.__cxn.connected
+        return self._backend.connected
     
     @property
     def _cxn(self):
-        return self.__cxn._cxn
+        return self._backend._cxn
     
     @property
     def _mgr(self):
-        return self.__cxn._mgr
+        return self._backend._mgr
 
     def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
-        self.__cxn.connect(host, port=port, timeout=timeout, password=password)
+        self._backend.connect(host, port=port, timeout=timeout, password=password)
 
     def disconnect(self):
-        self.__cxn.disconnect()
+        self._backend.disconnect()
 
     def context(self):
-        return self.__cxn.context()
+        return self._backend.context()
 
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
         if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
-        return self.__cxn._send(target, records, *args, **kw)
+        return self._backend._send(target, records, *args, **kw)
 
     def _sendMessage(self, target, records, *args, **kw):
         """Send a message over this connection."""
         if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
-        return self.__cxn._sendMessage(target, records, *args, **kw)
+        return self._backend._sendMessage(target, records, *args, **kw)
 
     def __repr__(self):
         if self.connected:

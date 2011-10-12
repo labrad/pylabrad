@@ -17,12 +17,12 @@ from labrad.support import getNodeName
 backends = {}
 
 class BaseConnection(object):
-    def __init__(self, name):
+    def __init__(self, name=None):
         self.name = name or 'Python Client (%s)' % getNodeName()
         self.connected = False
         self._next_context = 1
 
-    def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
+    def connect(self, host=C.MANAGER_HOST, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
         self.host = host
         self.port = port
         self.ID = self._doConnect(password)
@@ -94,18 +94,21 @@ class AsyncoreConnection(BaseConnection):
         self.connected = False
         self._clearCache()
         self._writeQueue = Queue.Queue()
-        self._map = {}     
-        self._cxn = AsyncoreProtocol(self.host, self.port, self._writeQueue, map=self._map)
+        self._map = {}
         self._loop = threading.Thread(target=self._run)
         self._loop.daemon = True
-        self._loop.start()
         try:
-            self._cxn.awaitConnection()
-            self.connected = True
-            return self._doLogin(password, self.name)
+            self._cxn = AsyncoreProtocol(self.host, self.port, self._writeQueue, map=self._map)
+            self._loop.start()
+            try:
+                self._cxn.awaitConnection()
+                self.connected = True
+                return self._doLogin(password, self.name)
+            except Exception, e:
+                self._cxn.disconnect()
+                raise
         except Exception, e:
-            self._cxn.disconnect()
-            raise
+            raise errors.LoginFailedError(e)
     
     def _run(self):
         asyncore.loop(map=self._map)
