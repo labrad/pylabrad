@@ -97,10 +97,15 @@ class AsyncoreConnection(BaseConnection):
         self._map = {}     
         self._cxn = AsyncoreProtocol(self.host, self.port, self._writeQueue, map=self._map)
         self._loop = threading.Thread(target=self._run)
-        self._loop.setDaemon(True)
+        self._loop.daemon = True
         self._loop.start()
-        self.connected = True
-        return self._doLogin(password, self.name)
+        try:
+            self._cxn.awaitConnection()
+            self.connected = True
+            return self._doLogin(password, self.name)
+        except Exception, e:
+            self._cxn.disconnect()
+            raise
     
     def _run(self):
         asyncore.loop(map=self._map)
@@ -305,7 +310,7 @@ class Future(object):
         self.result = result
         self.e.set()
     
-    def errback(self, error):
+    def errback(self, error=None):
         if not hasattr(error, 'raiseException'):
             error = AsyncFailure(error)
         self.result = error
@@ -316,13 +321,13 @@ class Future(object):
             return self.result
         while True:
             self.e.wait(1)
-            if self.e.isSet():
+            if self.e.is_set():
                 break
         self.done = True
         result = self.result
         if hasattr(result, 'raiseException'):
             # this can be a twisted Failure our
-            # own Failure class, as defined above
+            # own AsyncFailure class, as defined above
             result.raiseException()
         else:
             for f, args, kw in self.callbacks:
@@ -341,11 +346,16 @@ class AsyncoreProtocol(asyncore.dispatcher):
     
     def __init__(self, host, port, writeQueue, **kw):
         asyncore.dispatcher.__init__(self, **kw)
+        
+        self._connectFuture = Future()
+        self._disconnectEvent = threading.Event()
+        
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connect((host, port))
         
+        self.status = 'connecting'
+        
         self.writeQueue = writeQueue
-        self._done = threading.Event()
         self._nextRequest = 1
         self._reuse = set()
         self.requests = {}
@@ -355,19 +365,29 @@ class AsyncoreProtocol(asyncore.dispatcher):
         self.packetStream = packetStream(self.packetReceived)
         self.packetStream.next() # start the packet stream
         
+    def awaitConnection(self):
+        self._connectFuture.wait()
+        
     def disconnect(self):
         """Close down our connection to LabRAD."""
-        self._done.set()
+        self._disconnectEvent.set()
     
     def handle_connect(self):
-        pass
+        self._connectFuture.callback(None)
+        self.status = 'connected'
+    
+    def handle_error(self):
+        if self.status == 'connecting':
+            self._connectFuture.errback()
+        self.close()
     
     def handle_close(self):
         for d in self.requests.values():
             d.errback(Exception('Connection lost.'))
-        
+        self.close()
+    
     def handle_write(self):
-        if self._done.isSet():
+        if self._disconnectEvent.is_set():
             self.close()
             return
         while True:
@@ -402,10 +422,10 @@ class AsyncoreProtocol(asyncore.dispatcher):
     
     def packetReceived(self, source, context, request, records):
         """Process incoming packet."""
-        if request > 0:
-            self.requestReceived(source, context, request, records)
-        elif request < 0:
+        if request < 0:
             self.responseReceived(source, context, request, records)
+        elif request > 0:
+            self.requestReceived(source, context, request, records)
         else:
             self.messageReceived(source, context, records)
             

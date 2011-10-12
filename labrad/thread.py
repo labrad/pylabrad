@@ -31,7 +31,7 @@ threadable.init(1)
 class ReactorThread(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self, name='ReactorThread')
-        self.setDaemon(True)
+        self.daemon = True
     def run(self):
         reactor.run(installSignalHandlers=0)
 
