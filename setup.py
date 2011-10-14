@@ -38,16 +38,14 @@ setup(
     provides = ['labrad'],
     packages = [
         'labrad',
-        'labrad.config',
-        'labrad.node', 
-        'labrad.pipeline',
+        'labrad.node',
         'labrad.servers',
         'labrad.test',
         'labrad.util',
         ],
     package_data = {
         'labrad': ['LICENSE.txt'],
-        'labrad.config': ['*.ini'],
+        'labrad.node': ['*.ini'],
         },
     py_modules = [
         'twisted.plugins.labrad_node',
