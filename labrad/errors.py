@@ -51,7 +51,6 @@ class RequestTimeoutError(Error):
 class RequestResponseError(Error):
     code = 5
     def __init__(self, errors):
-        messages = ['error in setting %d (code=%d)\n%s' % \
-                        (ID, err.code, err.message)
+        messages = ['error in setting %d (code=%d)\n%s' % (ID, err.code, err.message)
                     for (ID, err) in errors]
         self.msg = '\n'.join(messages)

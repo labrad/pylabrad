@@ -451,7 +451,7 @@ class Unit(object):
                     if term not in _unit_table:
                         _unit_table[term] = cls._stringUnit(term)
                     unit = unit * _unit_table[term]**(sign*Ratio(num, denom))
-        except:
+        except Exception:
             # TODO handle errors more intelligently here.
             # (might need to change unit grammar)
             # most likely this was a parsing error
@@ -537,7 +537,7 @@ class Unit(object):
         if isinstance(other, str):
             try:
                 return self.name == other or self == Unit(other)
-            except:
+            except Exception:
                 # might fail to convert other to Unit
                 pass
         elif isinstance(other, Unit):

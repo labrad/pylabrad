@@ -14,17 +14,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python.components import registerAdapter
-
-from zope.interface import implements
 
 from labrad import constants as C
-from labrad.interfaces import ILabradProtocol, ILabradManager
 
-class ClientManager:
+class AsyncManager:
     """Adapt client to the ILabradManager interface."""
-    
-    implements(ILabradManager)
     
     ID = C.MANAGER_ID
     
@@ -93,4 +87,3 @@ class ClientManager:
         packet = [(C.MESSAGE_SUBSCRIBE, (name, long(ID), enable))]
         returnValue((yield self._send(packet)))
 
-registerAdapter(ClientManager, ILabradProtocol, ILabradManager)

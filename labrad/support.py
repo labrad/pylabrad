@@ -5,11 +5,22 @@ to break the explicit dependency on twisted.
 """
 
 from collections import defaultdict
+import getpass
 import os
 import socket
 
+from labrad import constants
+
 def getNodeName():
     return os.environ.get('LABRADNODE', socket.gethostname().lower())
+
+def getPassword():
+    """Get a password, either from the environment, or the command line."""
+    if constants.PASSWORD is not None:
+        pw = constants.PASSWORD
+    else:
+        pw = getpass.getpass('Enter LabRAD password: ')
+    return pw
 
 ALLOWED = 'abcdefghijklmnopqrstuvwxyz1234567890_'
 FIRST = 'abcdefghijklmnopqrstuvwxyz_'

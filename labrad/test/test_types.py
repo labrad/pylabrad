@@ -13,8 +13,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from datetime import datetime
-
-from twisted.trial import unittest
+import unittest
 
 from labrad import types as T
 

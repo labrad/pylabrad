@@ -26,7 +26,7 @@ from zope.interface import implements
 
 from labrad import constants as C, manager, protocol
 from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
-from labrad.support import mangle, extractKey, MultiDict, PacketResponse
+from labrad.support import mangle, extractKey, MultiDict, PacketResponse, getPassword
 
 
 class AsyncSettingWrapper(object):
@@ -74,7 +74,7 @@ class AsyncSettingWrapper(object):
         self._num_listeners += 1
         try:
             yield self.__call__(self.ID, context=context, *connectargs, **connectkw)
-        except:
+        except Exception:
             self._prot.removeListener(handler,
                                       source=self._server.ID, context=context, ID=self.ID)
             self._num_listeners -= 1
@@ -339,7 +339,7 @@ def getConnection(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client"
     """Connect to LabRAD and return a deferred that fires the protocol object."""
     p = yield protocol.factory.connectTCP(host, port, C.TIMEOUT)
     if password is None:
-        password = protocol.getPassword()
+        password = getPassword()
     yield p.loginClient(password, name)
     returnValue(p)
 
@@ -372,7 +372,7 @@ class ClientAsync(object):
         self.servers = MultiDict()
         self._cache = {}
         self._cxn = prot
-        self._mgr = ILabradManager(self._cxn)
+        self._mgr = manager.AsyncManager(self._cxn)
         self._next_context = 1
         self._refreshLock = defer.DeferredLock()
         
@@ -397,7 +397,7 @@ class ClientAsync(object):
             raise
             
     @inlineCallbacks
-    def _serverConnected(self, c, data):
+    def _serverConnected(self, _c, data):
         """Add a wrapper when a server connects."""
         ID, name = data
         try:
@@ -407,7 +407,7 @@ class ClientAsync(object):
             print str(e)
         
     @inlineCallbacks
-    def _serverDisconnected(self, c, data):
+    def _serverDisconnected(self, _c, data):
         """Remove the wrapper when a server disconnects."""
         ID, name = data
         try:
@@ -524,5 +524,5 @@ registerAdapter(ClientAsync, ILabradProtocol, IClientAsync)
 def wrapAsync(cls, *args, **kw):
     obj = cls(*args, **kw)
     d = obj.refresh()
-    d.addCallback(lambda x: obj)
+    d.addCallback(lambda _: obj)
     return d

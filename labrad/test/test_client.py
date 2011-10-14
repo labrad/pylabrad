@@ -74,7 +74,7 @@ class ClientTests(unittest.TestCase):
         # test using keys to refer to parts of a packet
         pkt2 = pts.packet()
         resp = pkt2.echo(1L, key='one')\
-                   .echo_delay(T.Value(2, 's'))\
+                   .echo_delay(T.Value(0.1, 's'))\
                    .delayed_echo('blah', key='two')\
                    .send()
         self.assertTrue(hasattr(resp, 'one'))
@@ -105,6 +105,7 @@ class ClientTests(unittest.TestCase):
     def testExceptions(self):
         pts = self._get_tester()
 
+        pts.echo_delay(T.Value(0.1, 's'))
         self.assertRaises(Exception, pts.exc_in_handler)
         self.assertRaises(Exception, pts.exc_in_subfunction)
         self.assertRaises(Exception, pts.exc_in_deferred)

@@ -20,6 +20,7 @@ Contains a blocking client connection to labrad.
 """
 
 from labrad import constants as C
+from labrad.backend import ManagerService
 from labrad.errors import Error
 from labrad.support import mangle, indent, extractKey, PrettyMultiDict, PacketResponse
 
@@ -42,7 +43,6 @@ class SettingWrapper(object):
         self._server = server
         self._mgr = server._mgr
         self._refreshed = False
-        self._num_listeners = 0
 
     def __call__(self, *args, **kw):
         wait = extractKey(kw, 'wait', True)
@@ -52,10 +52,10 @@ class SettingWrapper(object):
             args = None
         elif len(args) == 1:
             args = args[0]
-        resp = self._server._send([(self.ID, args, tag)], **kw)
+        future = self._server._send([(self.ID, args, tag)], **kw)
         if wrap:
-            resp.addCallback(lambda resp: resp[0][1])
-        return resp.wait() if wait else resp
+            future.addCallback(lambda resp: resp[0][1])
+        return future.wait() if wait else future
 
     # data to be loaded on demand
     @property
@@ -229,14 +229,11 @@ class ServerWrapper(HasDynamicAttrs):
     def __init__(self, cxn, name, pyName, ID, context=None):
         HasDynamicAttrs.__init__(self)
         self._cxn = cxn
+        self._mgr = cxn._mgr
         self.name = self._labrad_name = name
         self._py_name = pyName
         self.ID = ID
         self._ctx = context
-
-    @property
-    def _mgr(self):
-        return self._cxn._mgr
 
     _staticAttrs = ['settings', 'context', 'packet', 'sendMessage']
     _wrapAttr = SettingWrapper
@@ -305,9 +302,9 @@ class PacketWrapper(HasDynamicAttrs):
     def send(self, wait=True, **kw):
         """Send this packet to the server."""
         records = [rec[:3] for rec in self._packet]
-        resp = self._server._send(records, **dict(self._kw, **kw))
-        resp.addCallback(PacketResponse, self._server, self._packet)
-        return resp.wait() if wait else resp
+        future = self._server._send(records, **dict(self._kw, **kw))
+        future.addCallback(PacketResponse, self._server, self._packet)
+        return future.wait() if wait else future
 
     @property
     def settings(self):
@@ -358,6 +355,7 @@ class Client(HasDynamicAttrs):
     def __init__(self, cxn, context=None):
         HasDynamicAttrs.__init__(self)
         self._backend = cxn
+        self._mgr = ManagerService(cxn)
         if context is None:
             context = cxn.context()
         self._ctx = context
@@ -375,7 +373,7 @@ class Client(HasDynamicAttrs):
         return False
     
     def __call__(self, context=None):
-        return Client(self, context)
+        return Client(self._backend, context)
     
     def _getAttrs(self):
         if not self.connected:
@@ -410,14 +408,6 @@ class Client(HasDynamicAttrs):
     @property
     def connected(self):
         return self._backend.connected
-    
-    @property
-    def _cxn(self):
-        return self._backend._cxn
-    
-    @property
-    def _mgr(self):
-        return self._backend._mgr
 
     def connect(self, host, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
         self._backend.connect(host, port=port, timeout=timeout, password=password)
@@ -432,13 +422,13 @@ class Client(HasDynamicAttrs):
         """Send a packet over this connection."""
         if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
-        return self._backend._send(target, records, *args, **kw)
+        return self._backend.sendRequest(target, records, *args, **kw)
 
     def _sendMessage(self, target, records, *args, **kw):
         """Send a message over this connection."""
         if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
-        return self._backend._sendMessage(target, records, *args, **kw)
+        return self._backend.sendMessage(target, records, *args, **kw)
 
     def __repr__(self):
         if self.connected:

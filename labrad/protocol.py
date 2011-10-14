@@ -21,62 +21,17 @@ as well as the protocol for connecting to the Manager and
 authenticating.
 """
 
-from labrad import errors, types as T, util, constants as C
-from labrad.interfaces import ILabradProtocol, IMessageContext
+import hashlib
 
 from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
 from zope.interface import implements
 
-import hashlib
-import getpass
+from labrad import constants as C, errors, util
+from labrad.interfaces import ILabradProtocol, IMessageContext
+from labrad.stream import packetStream, flattenPacket
 
-DEBUG = 0
-DEBUG_SEND = 0
-DEBUG_RECV = 0
-
-HEADER_TYPE = T.parseTypeTag('(ww)iww')
-PACKET_TYPE = T.parseTypeTag('(ww)iws')
-RECORD_TYPE = T.parseTypeTag('wss')
-
-def packetStream(packetHandler):
-    """A generator that assembles packets.
-
-    Accepts a function packetHandler that will be called with four arguments
-    whenever a packet is completed: source, context, request, records.
-    """
-    buf = ''
-    while True:
-        # get packet header (20 bytes)
-        while len(buf) < 20:
-            buf += yield 0
-        hdr, buf = buf[:20], buf[20:]
-        context, request, source, length = T.unflatten(hdr, HEADER_TYPE)
-
-        # get packet data
-        while len(buf) < length:
-            buf += yield 0
-        s, buf = buf[:length], buf[length:]
-
-        # unflatten the data
-        records = []
-        s = T.Buffer(s)
-        while len(s):
-            ID, tag, data = T.unflatten(s, RECORD_TYPE)
-            rec = ID, T.unflatten(data, tag)
-            records.append(rec)
-        packetHandler(source, context, request, records)
-
-def _flattenPacket(target, context, request, records):
-    """Flatten a packet to the specified target."""
-    data = ''.join(_flattenRecord(*rec) for rec in records)
-    return PACKET_TYPE.__flatten__((context, request, target, data))
-
-def _flattenRecord(ID, data, types=[]):
-    """Flatten a piece of data into a record with datatype and property."""
-    s, t = T.flatten(data, types)
-    return RECORD_TYPE.__flatten__((ID, str(t), str(s)))
     
 class LabradProtocol(protocol.Protocol):
     """Receive and send labrad packets."""
@@ -86,7 +41,7 @@ class LabradProtocol(protocol.Protocol):
     def __init__(self):
         self.disconnected = False
         self._nextRequest = 1
-        self._reuse = set()
+        self.pool = set()
         self.requests = {}
         self.listeners = {}
         self._messageLock = defer.DeferredLock()
@@ -126,7 +81,7 @@ class LabradProtocol(protocol.Protocol):
     # sending
     def sendPacket(self, target, context, request, records):
         """Send a raw packet to the specified target."""
-        raw = _flattenPacket(target, context, request, records)
+        raw = flattenPacket(target, context, request, records)
         self.transport.write(raw)
     
     @inlineCallbacks        
@@ -208,8 +163,8 @@ class LabradProtocol(protocol.Protocol):
         """Send a request without doing any lookups of server or setting IDs."""
         if self.disconnected:
             raise Exception('Already disconnected.')
-        if len(self._reuse):
-            n = self._reuse.pop()
+        if len(self.pool):
+            n = self.pool.pop()
         else:
             n = self._nextRequest
             self._nextRequest += 1
@@ -232,7 +187,7 @@ class LabradProtocol(protocol.Protocol):
     def _finishRequest(self, result, n):
         """Finish a request."""
         del self.requests[n]
-        self._reuse.add(n) # reuse request numbers
+        self.pool.add(n) # reuse request numbers
         return result
     
     # receiving
@@ -292,7 +247,7 @@ class LabradProtocol(protocol.Protocol):
                                          msgCtx, data, listener)
                         else:
                             yield d
-                    except:
+                    except Exception:
                         self._handleListenerError(
                             failure.Failure(), msgCtx, data, listener)
                         
@@ -360,18 +315,10 @@ class LabradProtocol(protocol.Protocol):
         # send identification
         try:
             resp = yield self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)])
-        except:
+        except Exception:
             raise errors.LoginFailedError('Bad identification.')
         self.ID = resp[0][1] # get assigned ID
 
-
-def getPassword():
-    """Get a password, either from the environment, or the command line."""
-    if C.PASSWORD is not None:
-        pw = C.PASSWORD
-    else:
-        pw = getpass.getpass('Enter LabRAD password: ')
-    return pw
 
 class MessageContext(object):
     """Object to be passed as the first argument to message handlers."""

@@ -131,7 +131,7 @@ def parseTypeTag(s):
             return types[0]
         else:
             return LRCluster(*types)
-    except:
+    except Exception:
         print 'failed to parse:', s
         raise
 

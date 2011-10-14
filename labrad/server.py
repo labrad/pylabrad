@@ -427,7 +427,7 @@ class LabradServer(ClientFactory):
         finally:
             try:
                 self._cxn.disconnect()
-            except:
+            except Exception:
                 pass
             # remove the event trigger, so we don't get
             # called again if the reactor shuts down later

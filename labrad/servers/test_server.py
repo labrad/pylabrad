@@ -67,7 +67,7 @@ class TestServer(LabradServer):
             print '  servers that have not been connected:', list(mgrServers - cxnServers)
     
     def initContext(self, c):
-        c['delay'] = 5
+        c['delay'] = 1
         c['dict'] = {}
     
     @setting(2, "Delayed Echo", data='?')
@@ -123,7 +123,7 @@ class TestServer(LabradServer):
         self.log('Exception in deferred.')
         d = defer.Deferred()
         d.addCallback(owie)
-        reactor.callLater(1, d.callback, None)
+        reactor.callLater(c['delay'], d.callback, None)
         return d
 
     @setting(8, "Exc in Errback", data='?')
