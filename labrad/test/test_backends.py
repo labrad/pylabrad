@@ -1,5 +1,4 @@
 import unittest
-import time
 
 from labrad import backend
 from labrad.errors import LoginFailedError
