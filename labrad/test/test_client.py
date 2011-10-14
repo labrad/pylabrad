@@ -1,4 +1,4 @@
-from twisted.trial import unittest
+import unittest
 
 import labrad
 from labrad import types as T
