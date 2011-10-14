@@ -16,8 +16,9 @@
 import copy, re, textwrap
 
 from twisted.internet import defer, reactor
-from twisted.python import failure, log, reflect, util
+from twisted.python import log, reflect, util
 
+from labrad import constants as C
 from labrad.support import getNodeName
 from labrad.util.unwrap import unwrap
 
@@ -91,77 +92,11 @@ def linspace(star, stop, N):
     """Linearly-spaced list of numbers."""
     return [star + (stop - star) * n / (N-1) for n in range(N)]
 
-def wakeupCall(delay, args=None):
-    """Return a deferred that will be called back
-    after a specified delay.
-    """
-    d = defer.Deferred()
-    reactor.callLater(delay, d.callback, args)
-    return d
-
 class ContextDict(dict):
     """Subclass of dict for holding context data.
 
     Using a subclass allows us to set attributes: ID and source.
     """
-
-
-from labrad import constants as C
-
-def runServer(srv):
-    """Run a server of the specified class."""
-    
-    import os, sys, time
-    from twisted.internet import reactor
-    from twisted.python import usage
-
-    class ServerOptions(usage.Options):
-        optParameters = [['name', 'n', srv.name, 'Server name.'],
-                         ['node', 'd', getNodeName(), 'Node name.'],
-                         ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
-                         ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
-                         ['password', 'w', C.PASSWORD, 'Login password.']]
-
-    config = ServerOptions()
-    try:
-        config.parseOptions()
-    except usage.UsageError, errortext:
-        print '%s: %s' % (sys.argv[0], errortext)
-        print '%s: Try --help for usage details.' % (sys.argv[0])
-        sys.exit(1)
-
-    def _ensureReactorStop():
-        try:
-            reactor.stop()
-        except RuntimeError:
-            pass
-
-    def _disconnect(data):
-        log.msg('Disconnected cleanly.')
-        _ensureReactorStop()
-
-    def _error(failure):
-        log.msg('There was an error: ' + failure.getErrorMessage())
-        _ensureReactorStop()
-
-    srv.onStartup().addErrback(_error)
-    srv.onShutdown().addCallbacks(_disconnect, _error)
-
-    if config['name']:
-        srv.name = config['name']
-    env = dict(os.environ)
-    env['LABRADNODE'] = config['node']
-    srv.name = interpEnvironmentVars(srv.name, env)
-    if hasattr(srv, 'instanceName'):
-        srv.instanceName = interpEnvironmentVars(srv.instanceName, env)
-
-    srv.password = config['password']
-
-    log.startLogging(sys.stdout)
-    #observer = MyLogObserver(sys.stdout)
-    #log.startLoggingWithObserver(observer.emit)
-    reactor.connectTCP(config['host'], int(config['port']), srv)
-    reactor.run()
 
 def findEnvironmentVars(string):
     """Find all environment variables of the form %VAR% in a string."""
@@ -183,48 +118,6 @@ def interpEnvironmentVars(string, env=None):
         string = string.replace(tag, env[label.upper()])
     return string
 
-class MyLogObserver(log.FileLogObserver):
-    timeFormat = '%Y/%m/%d %H:%M -'
-
-    def emit(self, eventDict):
-        edm = eventDict['message']
-        if not edm:
-            if eventDict['isError'] and eventDict.has_key('failure'):
-                text = ((eventDict.get('why') or 'Unhandled Error')
-                        + '\n' + eventDict['failure'].getTraceback())
-            elif eventDict.has_key('format'):
-                text = self._safeFormat(eventDict['format'], eventDict)
-            else:
-                # we don't know how to log this
-                return
-        else:
-            text = ' '.join(map(reflect.safe_str, edm))
-
-        timeStr = self.formatTime(eventDict['time'])
-        fmtDict = {'text': text.replace("\n", "\n\t")}
-        msgStr = self._safeFormat("%(text)s\n", fmtDict)
-
-        util.untilConcludes(self.write, timeStr + " " + msgStr)
-        util.untilConcludes(self.flush)  # Hoorj!
-
-def firstToFire(n=2):
-    heads = [defer.Deferred() for _ in range(n)]
-    first = defer.DeferredList(heads, fireOnOneCallback=True,
-                                      fireOnOneErrback=True,
-                                      consumeErrors=True)
-    first.addCallback(lambda result: result[0])
-    return first, heads
-
-def maybeTimeout(deferred, timeout, timeoutResult):
-    """Takes a deferred and returns a new deferred that might timeout."""
-    td = defer.Deferred()
-    reactor.callLater(timeout, td.callback, timeoutResult)
-    d = defer.DeferredList([deferred, td], fireOnOneCallback=True,
-                                           fireOnOneErrback=True,
-                                           consumeErrors=True)
-    d.addCallback(lambda (result, index): result)
-    return d
-
 def timedeltaToSeconds(td):
     return td.seconds + td.microseconds / 1.0e6
 
@@ -241,54 +134,7 @@ def timing(f, n=100, **kw):
     avg = total / float(n)
     return avg
 
-class DeferredSignal(object):
-    """An object that can create multiple deferreds on demand.
-    
-    When the signal is fired, all created deferreds will be fired
-    or have their errback method called, as appropriate.
-    """
-    def __init__(self):
-        self.waiters = []
-        self.listeners = []
-        self.fired = None
-        
-    def callback(self, data=None):
-        self._fire(True, data)
 
-    def errback(self, reason=None):
-        self._fire(False, reason)
-
-    def _fire(self, success, data):
-        self.fired = success, data
-        waiters = self.waiters
-        self.waiters = []
-        for d in waiters:
-            if success:
-                d.callback(data)
-            else:
-                d.errback(data)
-        if success:
-            for func in self.listeners:
-                func(data)
-        
-    def __call__(self):
-        if self.fired:
-            success, data = self.fired
-            if success:
-                return defer.succeed(data)
-            else:
-                return defer.fail(data)
-        else:
-            d = defer.Deferred()
-            self.waiters.append(d)
-            return d
-    
-    def connect(self, listener):
-        if listener not in self.listeners:
-            self.listeners.append(listener)
-
-    def disconnect(self, listener):
-        self.listeners.remove(listener)
 
 # convenience functions for dealing with units
 def convert(v, u):
@@ -357,3 +203,167 @@ def convertUnits(**unitdict):
             return f(*a, **kw)
         return wrapped
     return wrap
+
+
+
+
+
+# deferred helpers
+
+def wakeupCall(delay, args=None):
+    """Return a deferred that will be called back
+    after a specified delay.
+    """
+    d = defer.Deferred()
+    reactor.callLater(delay, d.callback, args)
+    return d
+
+def firstToFire(n=2):
+    heads = [defer.Deferred() for _ in range(n)]
+    first = defer.DeferredList(heads, fireOnOneCallback=True,
+                                      fireOnOneErrback=True,
+                                      consumeErrors=True)
+    first.addCallback(lambda result: result[0])
+    return first, heads
+
+def maybeTimeout(deferred, timeout, timeoutResult):
+    """Takes a deferred and returns a new deferred that might timeout."""
+    td = defer.Deferred()
+    reactor.callLater(timeout, td.callback, timeoutResult)
+    d = defer.DeferredList([deferred, td], fireOnOneCallback=True,
+                                           fireOnOneErrback=True,
+                                           consumeErrors=True)
+    d.addCallback(lambda (result, index): result)
+    return d
+
+class DeferredSignal(object):
+    """An object that can create multiple deferreds on demand.
+    
+    When the signal is fired, all created deferreds will be fired
+    or have their errback method called, as appropriate.
+    """
+    def __init__(self):
+        self.waiters = []
+        self.listeners = []
+        self.fired = None
+        
+    def callback(self, data=None):
+        self._fire(True, data)
+
+    def errback(self, reason=None):
+        self._fire(False, reason)
+
+    def _fire(self, success, data):
+        self.fired = success, data
+        waiters = self.waiters
+        self.waiters = []
+        for d in waiters:
+            if success:
+                d.callback(data)
+            else:
+                d.errback(data)
+        if success:
+            for func in self.listeners:
+                func(data)
+        
+    def __call__(self):
+        if self.fired:
+            success, data = self.fired
+            if success:
+                return defer.succeed(data)
+            else:
+                return defer.fail(data)
+        else:
+            d = defer.Deferred()
+            self.waiters.append(d)
+            return d
+    
+    def connect(self, listener):
+        if listener not in self.listeners:
+            self.listeners.append(listener)
+
+    def disconnect(self, listener):
+        self.listeners.remove(listener)
+
+
+# run labrad server
+
+def runServer(srv):
+    """Run a server of the specified class."""
+    
+    import os, sys, time
+    from twisted.internet import reactor
+    from twisted.python import usage
+
+    class ServerOptions(usage.Options):
+        optParameters = [['name', 'n', srv.name, 'Server name.'],
+                         ['node', 'd', getNodeName(), 'Node name.'],
+                         ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
+                         ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
+                         ['password', 'w', C.PASSWORD, 'Login password.']]
+
+    config = ServerOptions()
+    try:
+        config.parseOptions()
+    except usage.UsageError, errortext:
+        print '%s: %s' % (sys.argv[0], errortext)
+        print '%s: Try --help for usage details.' % (sys.argv[0])
+        sys.exit(1)
+
+    def _ensureReactorStop():
+        try:
+            reactor.stop()
+        except RuntimeError:
+            pass
+
+    def _disconnect(data):
+        log.msg('Disconnected cleanly.')
+        _ensureReactorStop()
+
+    def _error(failure):
+        log.msg('There was an error: ' + failure.getErrorMessage())
+        _ensureReactorStop()
+
+    srv.onStartup().addErrback(_error)
+    srv.onShutdown().addCallbacks(_disconnect, _error)
+
+    if config['name']:
+        srv.name = config['name']
+    env = dict(os.environ)
+    env['LABRADNODE'] = config['node']
+    srv.name = interpEnvironmentVars(srv.name, env)
+    if hasattr(srv, 'instanceName'):
+        srv.instanceName = interpEnvironmentVars(srv.instanceName, env)
+
+    srv.password = config['password']
+
+    log.startLogging(sys.stdout)
+    #observer = MyLogObserver(sys.stdout)
+    #log.startLoggingWithObserver(observer.emit)
+    reactor.connectTCP(config['host'], int(config['port']), srv)
+    reactor.run()
+
+class MyLogObserver(log.FileLogObserver):
+    timeFormat = '%Y/%m/%d %H:%M -'
+
+    def emit(self, eventDict):
+        edm = eventDict['message']
+        if not edm:
+            if eventDict['isError'] and 'failure' in eventDict:
+                text = ((eventDict.get('why') or 'Unhandled Error')
+                        + '\n' + eventDict['failure'].getTraceback())
+            elif 'format' in eventDict:
+                text = self._safeFormat(eventDict['format'], eventDict)
+            else:
+                # we don't know how to log this
+                return
+        else:
+            text = ' '.join(map(reflect.safe_str, edm))
+
+        timeStr = self.formatTime(eventDict['time'])
+        fmtDict = {'text': text.replace("\n", "\n\t")}
+        msgStr = self._safeFormat("%(text)s\n", fmtDict)
+
+        util.untilConcludes(self.write, timeStr + " " + msgStr)
+        util.untilConcludes(self.flush)  # Hoorj!
+

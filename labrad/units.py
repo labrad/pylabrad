@@ -61,7 +61,7 @@ from math import floor, pi
 #    useNumpy = False
 
 from labrad import grammar
-from labrad.util.ratio import Ratio
+from labrad.ratio import Ratio
 
 
 # Dictionary containing numbers
