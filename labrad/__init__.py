@@ -18,7 +18,6 @@ labrad module for python.
 """
 
 from labrad import backend, client, constants
-from labrad.wrappers import connectAsync, runAsync
 
 __version__  = '0.92.8'
 __revision__ = '$Revision$'
