@@ -10,7 +10,8 @@ import sys
 import threading
 import Queue
 
-from labrad import constants as C, errors
+from labrad import constants as C
+from labrad.errors import LoginFailedError
 from labrad.stream import packetStream, flattenPacket, flattenRecords
 from labrad.support import getNodeName, getPassword
 
@@ -34,13 +35,13 @@ class BaseConnection(object):
         self.ID = self._connect(password, timeout)
         self.connected = True
 
-    def _connect(self, password=None, timeout=None):
-        """Implemented by subclass"""
-
     def disconnect(self):
         if self.connected:
             self._disconnect()
             self.connected = False
+
+    def _connect(self, password=None, timeout=None):
+        """Implemented by subclass"""
 
     def _disconnect(self):
         """Implemented by subclass"""
@@ -100,20 +101,20 @@ class AsyncoreConnection(BaseConnection):
             self.loop.daemon = True
             self.loop.start()
             try:
-                return self._doLogin(password, self.name)
+                return self.login(password, self.name)
             except Exception, e:
                 self.disconnect()
                 raise
+        except LoginFailedError:
+            raise
         except Exception, e:
-            raise errors.LoginFailedError(e)
+            raise LoginFailedError(e)
     
     def _disconnect(self):
         self.cxn.drop()
         self.loop.join()
     
-    # login protocol
-    def _doLogin(self, password, *ident):
-        """Implements the LabRAD login protocol."""
+    def login(self, password, *ident):
         # send login packet
         resp = self.sendRequest(C.MANAGER_ID, []).wait()
         challenge = resp[0][1] # get password challenge
@@ -127,14 +128,14 @@ class AsyncoreConnection(BaseConnection):
         try:
             resp = self.sendRequest(C.MANAGER_ID, [(0L, m.digest())]).wait()
         except Exception:
-            raise errors.LoginFailedError('Incorrect password.')
+            raise LoginFailedError('Incorrect password.')
         self.loginMessage = resp[0][1] # get welcome message
     
         # send identification
         try:
             resp = self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)]).wait()
         except Exception:
-            raise errors.LoginFailedError('Bad identification.')
+            raise LoginFailedError('Bad identification.')
         return resp[0][1] # get assigned ID
 
     def sendRequest(self, target, records, context=(0, 0), timeout=None):
@@ -232,8 +233,8 @@ class AsyncoreProtocol(asyncore.dispatcher):
         self.alive = True
         self.lock = threading.Condition()
         self.nextRequest = 1
-        self.pool = set()
         self.requests = {}
+        self.pool = set()
         self.queue = Queue.Queue()
         self.buffer = ''
     
@@ -300,7 +301,6 @@ class AsyncoreProtocol(asyncore.dispatcher):
         return True
 
     def startRequest(self, future):
-        """Send a request without doing any lookups of server or setting IDs."""
         if len(self.pool):
             n = self.pool.pop()
         else:
@@ -314,12 +314,11 @@ class AsyncoreProtocol(asyncore.dispatcher):
         self.stream.send(data)
     
     def handleResponse(self, _source, _context, request, records):
-        """Process incoming response."""
         n = -request # reply has request number negated
         if n not in self.requests:
             # probably a response for a request that has already
             # timed out.  If a message or incoming request, we
-            # just ignore it, since these shouldn't happen.
+            # simply ignore it, since these shouldn't happen.
             return
         future = self.requests[n]
         del self.requests[n]
@@ -330,71 +329,6 @@ class AsyncoreProtocol(asyncore.dispatcher):
             future.errback(errors[0])
         else:
             future.callback(records)
-
-
-class RequestManager(object):
-    def __init__(self):
-        self.lock = threading.Lock()
-        self.nextRequest = 1
-        self.requests = {}
-        self.pool = set()
-        
-    def startRequest(self, future):
-        self.lock.acquire()
-        try:
-            if len(self.pool):
-                n = self.pool.pop()
-            else:
-                n = self.nextRequest
-                self.nextRequest += 1
-            self.requests[n] = future
-            return n
-        finally:
-            self.lock.release()
-    
-    def finishRequest(self, _source, _context, request, records):
-        self.lock.acquire()
-        try:
-            n = -request # reply has request number negated
-            if n not in self.requests:
-                # probably a response for a request that has already
-                # timed out.  If not, something bad has happened.
-                #print 'Invalid response: %s, %s, %s, %s' % (source, context, request, records)
-                return
-            future = self.requests[n]
-            self.pool.add(n)
-            del self.requests[n]
-        finally:
-            self.lock.release()
-        errors = [r[1] for r in records if isinstance(r[1], Exception)]
-        if errors:
-            # fail on the first error
-            future.errback(errors[0])
-        else:
-            future.callback(records)
-    
-    def fail(self, n, reason):
-        self.lock.acquire()
-        try:
-            if n not in self.requests:
-                return
-            future = self.requests[n]
-            self.pool.add(n)
-            del self.requests[n]
-        finally:
-            self.lock.release()
-        future.errback(reason)
-    
-    def failAll(self, reason):
-        self.lock.acquire()
-        try:
-            futures = list(self.requests.values())
-            self.pool.update(self.requests.keys())
-            self.requests.clear()
-        finally:
-            self.lock.release()
-        for future in futures:
-            future.errback(reason)
 
 
 class Failure(object):
