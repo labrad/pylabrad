@@ -164,4 +164,4 @@ class labradTypesTests(unittest.TestCase):
         # TODO: flesh this out with more array types
         a = np.array([1,2,3,4,5])
         b = T.unflatten(*T.flatten(a)).asarray
-        self.assert_(np.all(a == b))
+        self.assertTrue(np.all(a == b))

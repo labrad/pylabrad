@@ -13,11 +13,11 @@ class ClientTests(unittest.TestCase):
         self.cxn.disconnect()
 
     def _get_manager(self):
-        self.assert_(hasattr(self.cxn, 'manager'))
+        self.assertTrue(hasattr(self.cxn, 'manager'))
         return self.cxn.manager
 
     def _get_tester(self):
-        self.assert_(hasattr(self.cxn, 'python_test_server'))
+        self.assertTrue(hasattr(self.cxn, 'python_test_server'))
         return self.cxn.python_test_server
 
     def testConnection(self):
