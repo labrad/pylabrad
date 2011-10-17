@@ -29,6 +29,11 @@ class NotFoundError(Error):
     def __init__(self, key):
         self.msg = 'Could not find "%s".' % key
 
+def unwrap(s, after='|'):
+    def trim(line):
+        return line.split(after, 1)[-1]
+    return '\n'.join(trim(line) for line in s.split('\n'))
+
 class SettingWrapper(object):
     """Object to wrap a single setting on a single server.
 
@@ -90,21 +95,20 @@ class SettingWrapper(object):
         self._refreshed = False
 
     def __repr__(self):
-        return """\
-LabRAD Setting: "%s" >> "%s" (ID=%d)
-
-%s
-
-Accepts:
-%s
-
-Returns:
-%s
-
-%s
-""" % (self._server.name, self.name, self.ID, self.description,
-       indent('\n'.join(self.accepts)),
-       indent('\n'.join(self.returns)), self.notes)
+        return unwrap("""\
+            |LabRAD Setting: "%s" >> "%s" (ID=%d)
+            |
+            |%s
+            |
+            |Accepts:
+            |%s
+            |
+            |Returns:
+            |%s
+            |
+            |%s """) % (self._server.name, self.name, self.ID, self.description,
+                        indent('\n'.join(self.accepts)),
+                        indent('\n'.join(self.returns)), self.notes)
 
 
 class DynamicAttrDict(PrettyMultiDict):
@@ -277,17 +281,17 @@ class ServerWrapper(HasDynamicAttrs):
         self._cxn._sendMessage(self.ID, [(ID, args, tag)], **kw)
 
     def __repr__(self):
-        return """\
-LabRAD Server: %s (ID=%d)
-
-%s
-
-Settings:
-%s
-
-%s
-""" % (self.name, self.ID, self.__doc__,
-       indent(repr(self.settings)), self.notes)
+        doc = self.__doc__
+        if self.notes:
+            doc += "\n" + self.notes
+        return unwrap("""\
+            |LabRAD Server: %s (ID=%d)
+            |
+            |%s
+            |
+            |Settings:
+            |%s""") % (self.name, self.ID, self.__doc__,
+                       indent(repr(self.settings)))
 
 
 class PacketWrapper(HasDynamicAttrs):
@@ -343,12 +347,11 @@ class PacketWrapper(HasDynamicAttrs):
 
     def __repr__(self):
         data_str = '\n'.join(self._recordRepr(*rec) for rec in self._packet)
-        return """\
-Packet for server: '%s'
-
-Data:
-%s
-""" % (self._server.name, indent(data_str))
+        return unwrap("""\
+            |Packet for server: '%s'
+            |
+            |Data:
+            |%s""") % (self._server.name, indent(data_str))
 
 
 class Client(HasDynamicAttrs):
@@ -432,17 +435,16 @@ class Client(HasDynamicAttrs):
 
     def __repr__(self):
         if self.connected:
-            return """\
-LabRAD Client: '%s' on %s:%s
-
-Available servers:
-%s
-""" % (self.name, self.host, self.port, indent(repr(self.servers)))
+            return unwrap("""\
+                |LabRAD Client: '%s' on %s:%s
+                |
+                |Available servers:
+                |%s""") % (self.name, self.host, self.port,
+                           indent(repr(self.servers)))
         else:
-            return """\
-LabRAD Client: '%s'
-
-Disconnected
-""" % self.name
+            return unwrap("""\
+                |LabRAD Client: '%s'
+                |
+                |Disconnected""") % self.name
 
 
