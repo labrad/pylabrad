@@ -19,7 +19,7 @@ labrad.util.hydrant
 Generate random LabRAD data for use in testing.
 """
 
-from random import choice, randint, random, gauss
+from random import choice, randint, gauss
 from datetime import datetime, timedelta
 
 from labrad import types as T
