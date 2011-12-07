@@ -24,27 +24,42 @@ def packetStream(packetHandler):
         s, buf = buf[:length], buf[length:]
 
         # unflatten the data
-        records = []
-        s = T.Buffer(s)
-        while len(s):
-            ID, tag, data = T.unflatten(s, RECORD_TYPE)
-            rec = ID, T.unflatten(data, tag)
-            records.append(rec)
+        records = unflattenRecords(s)
+        
         packetHandler(source, context, request, records)
 
-def flattenPacket(target, context, request, records):
+def unflattenPacket(data, endianness='>'):
+    """Unflatten a single labrad packet"""
+    hdr, rest = data[:20], data[20:]
+    context, request, source, length = T.unflatten(hdr, HEADER_TYPE, endianness)
+    assert len(rest) == length
+    records = unflattenRecords(rest, endianness)
+    return context, request, source, records
+
+def unflattenRecords(data, endianness='>'):
+    """Unflatten a list of records from the data segment of a packet"""
+    records = []
+    s = T.Buffer(data)
+    while len(s):
+        ID, tag, data = T.unflatten(s, RECORD_TYPE, endianness)
+        rec = ID, T.unflatten(data, tag, endianness)
+        records.append(rec)
+    return records
+
+def flattenPacket(target, context, request, records, endianness='>'):
     """Flatten a packet to the specified target."""
     if isinstance(records, str):
         data = records
     else:
         data = ''.join(flattenRecord(*rec) for rec in records)
-    return PACKET_TYPE.__flatten__((context, request, target, data))
+    return PACKET_TYPE.__flatten__((context, request, target, data), endianness)
 
-def flattenRecords(records):
-    return ''.join(flattenRecord(*rec) for rec in records)
+def flattenRecords(records, endianness='>'):
+    kw = dict(endianness=endianness)
+    return ''.join(flattenRecord(*rec, **kw) for rec in records)
 
-def flattenRecord(ID, data, types=[]):
+def flattenRecord(ID, data, types=[], endianness='>'):
     """Flatten a piece of data into a record with datatype and property."""
     s, t = T.flatten(data, types)
-    return RECORD_TYPE.__flatten__((ID, str(t), str(s)))
+    return RECORD_TYPE.__flatten__((ID, str(t), str(s)), endianness)
 
