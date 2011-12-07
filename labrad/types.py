@@ -83,31 +83,37 @@ class Buffer(object):
     def __init__(self, s):
         if isinstance(s, Buffer):
             self.s = s.s
+            self.ofs = s.ofs
         else:
             self.s = s
+            self.ofs = 0
 
     def get(self, i=1):
-        temp, self.s = self.s[:i], self.s[i:]
+        temp = self.s[self.ofs:self.ofs+i]
+        self.ofs += i
         return temp
         
     def skip(self, i=1):
-        self.s = self.s[i:]
+        self.ofs += i
     
     def __len__(self):
-        return len(self.s)
+        return len(self.s) - self.ofs
 
     def __str__(self):
-        return self.s
+        return self.s[self.ofs:]
         
     def __getitem__(self, key):
+        self.s = self.s[self.ofs:]
+        self.ofs = 0
         return self.s[key]
         
     def strip(self, chars):
-        self.s = self.s.strip(chars)
+        self.s = self.s[self.ofs:].strip(chars)
+        self.ofs = 0
         return self
 
     def index(self, char):
-        return self.s.index(char)
+        return self.s.index(char, self.ofs)
         
 
 
