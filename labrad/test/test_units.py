@@ -16,7 +16,7 @@ import unittest
 
 from labrad import units
 
-class labradUnitsTests(unittest.TestCase):
+class LabradUnitsTests(unittest.TestCase):
     def testParsing(self):
         # prefixes
         # multiplication

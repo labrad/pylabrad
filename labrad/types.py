@@ -278,7 +278,7 @@ def flatten(obj, types=[], endianness='>'):
     for the object type, or a superclass.
     """
     if hasattr(obj, '__lrflatten__'):
-        return obj.__lrflatten__()
+        return obj.__lrflatten__(endianness)
 
     if not isinstance(types, list):
         types = [types]
@@ -571,16 +571,24 @@ class LRValue(LRType):
         # or the other value does not.  In other words, the only case
         # disallowed is the case where we have no unit but the other
         # type does.  This prevents the unit from getting lost in the coercion.
-        return (type(other) == LRAny or
-                (type(self) == type(other) and
-                 (self.unit is not None or other.unit is None)))
+        if type(other) == LRAny:
+            return True
+        if type(self) != type(other):
+            return False
+        if self.unit is None and other.unit is None:
+            return True
+        if self.unit is not None and other.unit is not None:
+            return True
+        return False
 
     def isFullySpecified(self):
         return self.unit is not None
 
     def __unflatten__(self, s, endianness):
         v = unpack(endianness + 'd', s.get(8))[0]
-        return Value(v, self.unit)
+        if self.unit is not None:
+            v = Value(v, self.unit)
+        return v
         
     @classmethod
     def __lrtype__(cls, v):
@@ -589,10 +597,19 @@ class LRValue(LRType):
         return cls()
         
     def __flatten__(self, v, endianness):
-        # update unit to reflect the actual flattened value
-        if isinstance(v, U.WithUnit):
-            self.unit = v.unit
+        v = self.__check_units__(v)
         return pack(endianness + 'd', float(v))
+        
+    def __check_units__(self, v):
+        # TODO: implement full labrad unit conversion semantics in pylabrad
+        if isinstance(v, U.WithUnit):
+            if self.unit is None:
+                raise FlatteningError(v, self)
+            v = v[self.unit]
+        else:
+            if self.unit is not None:
+                raise FlatteningError(v, self)
+        return v
 
 registerTypeFunc((float, Value), LRValue.__lrtype__)
 
@@ -605,9 +622,13 @@ class LRComplex(LRValue):
     
     def __unflatten__(self, s, endianness):
         real, imag = unpack(endianness + 'dd', s.get(16))
-        return Complex(complex(real, imag), self.unit)
+        c = complex(real, imag)
+        if self.unit is not None:
+            c = Complex(c, self.unit)
+        return c
     
     def __flatten__(self, c, endianness):
+        c = self.__check_units__(c)
         c = complex(c)
         return pack(endianness + 'dd', c.real, c.imag)
 

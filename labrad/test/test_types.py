@@ -16,8 +16,9 @@ from datetime import datetime
 import unittest
 
 from labrad import types as T
+from labrad import units as U
 
-class labradTypesTests(unittest.TestCase):
+class LabradTypesTests(unittest.TestCase):
     def testTags(self):
         """Test the parsing of type tags into LRType objects."""
         tests = {
@@ -115,7 +116,7 @@ class labradTypesTests(unittest.TestCase):
             # convert to first compatible type
             (1, ['s', 'w'], 'w'),
             (1, ['s', 'v'], 'v'),
-            (1, ['s', 'v[m]'], 'v[m]'),
+            (1*U.m, ['s', 'v[m]'], 'v[m]'),
 
             # empty list gets type from hint
             ([], ['s', '*(ww)'], '*(ww)'),
@@ -138,7 +139,8 @@ class labradTypesTests(unittest.TestCase):
         """Test specialization of the type during flattening."""
         tests = [
             # specialization without hints
-            ([([],), ([5.0],), ([T.Value(5, 'm')],)], '*(*v[m])'),
+            ([([],), ([5.0],)], '*(*v)'),
+            ([([],), ([T.Value(5, 'm')],)], '*(*v[m])'),
         ]
         for data, tag in tests:
             self.assertEqual(T.flatten(data)[1], T.parseTypeTag(tag))
@@ -151,7 +153,6 @@ class labradTypesTests(unittest.TestCase):
         Basically, for purposes of flattening, a unit is a unit.
         """
         tests = [
-            (5.0, ['v[m]'], 'v[m]'),
             (T.Value(5.0, 'ft'), ['v[m]'], 'v[ft]'),
         ]
         for data, hints, tag in tests:
