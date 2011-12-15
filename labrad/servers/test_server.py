@@ -15,6 +15,7 @@
 
 from labrad import types as T, util
 from labrad.server import LabradServer, setting
+from labrad.units import m, s
 from labrad.util import hydrant
 
 from twisted.internet import defer, reactor
@@ -67,20 +68,20 @@ class TestServer(LabradServer):
             print '  servers that have not been connected:', list(mgrServers - cxnServers)
     
     def initContext(self, c):
-        c['delay'] = 1
+        c['delay'] = 1*s
         c['dict'] = {}
     
     @setting(2, "Delayed Echo", data='?')
     def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""
-        yield util.wakeupCall(c['delay'])
+        yield util.wakeupCall(c['delay'][s])
         returnValue(data)
 
     @setting(3, "Delayed Echo Deferred", data='?')
     def delayed_echo_deferred(self, c, data):
         """Echo a packet after a specified delay."""
         d = defer.Deferred()
-        reactor.callLater(c['delay'], d.callback, data)
+        reactor.callLater(c['delay'][s], d.callback, data)
         return d
 
     @setting(4, "Echo Delay", delay='v[s]', returns='v[s]')
@@ -88,7 +89,7 @@ class TestServer(LabradServer):
         """Get or set the echo delay."""
         self.log('Echo delay: %s' % delay)
         if delay is not None:
-            c['delay'] = float(delay)
+            c['delay'] = delay
         return c['delay']
 
     @setting(40, "Speed", speed='v[m/s]', returns='v[m/s]')
@@ -123,7 +124,7 @@ class TestServer(LabradServer):
         self.log('Exception in deferred.')
         d = defer.Deferred()
         d.addCallback(owie)
-        reactor.callLater(c['delay'], d.callback, None)
+        reactor.callLater(c['delay'][s], d.callback, None)
         return d
 
     @setting(8, "Exc in Errback", data='?')
@@ -138,7 +139,7 @@ class TestServer(LabradServer):
     def exc_in_inlinecallback(self, c, data):
         """Raises an exception in an inlineCallback."""
         self.log('Exception from an inlineCallback.')
-        yield util.wakeupCall(c['delay'])
+        yield util.wakeupCall(c['delay'][s])
         raise Exception('Raised in inlineCallback.')
 
     @setting(10, "Bad Return Type", data='?', returns='s')
