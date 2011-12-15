@@ -51,15 +51,16 @@ def flattenPacket(target, context, request, records, endianness='>'):
     if isinstance(records, str):
         data = records
     else:
-        data = ''.join(flattenRecord(*rec) for rec in records)
+        kw = {'endianness': endianness}
+        data = ''.join(flattenRecord(*rec, **kw) for rec in records)
     return PACKET_TYPE.__flatten__((context, request, target, data), endianness)
 
 def flattenRecords(records, endianness='>'):
-    kw = dict(endianness=endianness)
+    kw = {'endianness': endianness}
     return ''.join(flattenRecord(*rec, **kw) for rec in records)
 
 def flattenRecord(ID, data, types=[], endianness='>'):
     """Flatten a piece of data into a record with datatype and property."""
-    s, t = T.flatten(data, types)
+    s, t = T.flatten(data, types, endianness)
     return RECORD_TYPE.__flatten__((ID, str(t), str(s)), endianness)
 
