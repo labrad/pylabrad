@@ -44,11 +44,16 @@ class LoopServer(LabradServer):
     def readLoop(self):
         cxn = self.client
         while self.alive:
+            yield cxn.refresh()
             for s in self.queries:
-                yield cxn.refresh()
-                rslt = yield cxn[s['server']][s['setting']]()
-                s['last'] = str(rslt[0]), datetime.now()
-                yield util.wakeupCall(self.delayTime)
+                server = s['server']
+                setting = s['setting']
+                try:
+                    rslt = yield cxn[server][setting]()
+                    s['last'] = str(rslt[0]), datetime.now()
+                except Exception:
+                    pass
+            yield util.wakeupCall(self.delayTime)
 
 
     @setting(2, 'Queries', returns=['*s'])
