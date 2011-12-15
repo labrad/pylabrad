@@ -928,7 +928,7 @@ class LRList(LRType):
 
         Lists must be homogeneous and rectangular.
         """
-        if hasattr(L, 'asList') and not hasattr(L, '_list'):
+        if hasattr(L, 'aslist') and not hasattr(L, '_list'):
             # if we get a LazyList that hasn't been unflattened,
             # we can just return the original data unchanged
             # if  it has been unflattened, though, then it may
