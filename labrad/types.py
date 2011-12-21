@@ -602,14 +602,21 @@ class LRValue(LRType):
         
     def __check_units__(self, v):
         # TODO: implement full labrad unit conversion semantics in pylabrad
-        if isinstance(v, U.WithUnit):
-            if self.unit is None:
-                raise FlatteningError(v, self)
-            v = v[self.unit]
-        else:
-            if self.unit is not None:
-                raise FlatteningError(v, self)
-        return v
+        # If we're trying to flatten to unitless value, then v must be float
+        # or Value with units either None or ''
+        try:
+            if self.unit in [None,'']:
+                if isinstance(v,float):
+                    return v
+                elif v.unit in [None,'']:
+                    return float(v)
+                else:
+                    raise FlatteningError(v,self)
+            else:
+                v=v[self.unit]
+                return v
+        except:
+            raise FlatteningError(v,self)
 
 registerTypeFunc((float, Value), LRValue.__lrtype__)
 
@@ -894,12 +901,14 @@ class LRList(LRType):
 
     @classmethod
     def __lrtype_array__(cls, L):
+        #numpy.dtype overloads the == operator, and 'in'
+        #uses ==, so our use of in here should be ok
         if L.dtype == 'bool': t = LRBool()
-        elif L.dtype == 'int32': t = LRInt()
-        elif L.dtype == 'uint32': t = LRWord()
-        elif L.dtype == 'int64': t = LRWord()
-        elif L.dtype == 'float64': t = LRValue()
-        elif L.dtype == 'complex128': t = LRComplex()
+        elif L.dtype in ['>i4','<i4'] : t = LRInt()
+        elif L.dtype in ['>u4','<u4'] : t = LRWord()
+        elif L.dtype in ['>u8','<u8'] : t = LRWord()
+        elif L.dtype in ['>f8','<f8'] : t = LRValue()
+        elif L.dtype in ['>c16','<c16']: t = LRComplex()
         else:
             raise Exception("Can't flatten array of %s" % L.dtype)
         return cls(t, depth=len(L.shape))
