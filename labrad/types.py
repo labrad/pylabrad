@@ -605,18 +605,18 @@ class LRValue(LRType):
         # If we're trying to flatten to unitless value, then v must be float
         # or Value with units either None or ''
         try:
-            if self.unit in [None,'']:
-                if isinstance(v,float):
+            if self.unit in [None, '']:
+                if isinstance(v, float):
                     return v
-                elif v.unit in [None,'']:
+                elif v.unit in [None, '']:
                     return float(v)
                 else:
-                    raise FlatteningError(v,self)
+                    raise FlatteningError(v, self)
             else:
-                v=v[self.unit]
+                v = v[self.unit]
                 return v
         except:
-            raise FlatteningError(v,self)
+            raise FlatteningError(v, self)
 
 registerTypeFunc((float, Value), LRValue.__lrtype__)
 
@@ -904,11 +904,11 @@ class LRList(LRType):
         #numpy.dtype overloads the == operator, and 'in'
         #uses ==, so our use of in here should be ok
         if L.dtype == 'bool': t = LRBool()
-        elif L.dtype in ['>i4','<i4'] : t = LRInt()
-        elif L.dtype in ['>u4','<u4'] : t = LRWord()
-        elif L.dtype in ['>u8','<u8'] : t = LRWord()
-        elif L.dtype in ['>f8','<f8'] : t = LRValue()
-        elif L.dtype in ['>c16','<c16']: t = LRComplex()
+        elif L.dtype in ['>i4', '<i4']: t = LRInt()
+        elif L.dtype in ['>u4', '<u4']: t = LRWord()
+        elif L.dtype in ['>u8', '<u8']: t = LRWord()
+        elif L.dtype in ['>f8', '<f8']: t = LRValue()
+        elif L.dtype in ['>c16', '<c16']: t = LRComplex()
         else:
             raise Exception("Can't flatten array of %s" % L.dtype)
         return cls(t, depth=len(L.shape))
@@ -997,7 +997,7 @@ class LRList(LRType):
         
         if wanted_dtype is not None:
             if wanted_dtype == 'u4':
-                if a.dtype == 'i8' or a.dtype == '>i8':
+                if a.dtype in ['<i8', '>i8']:
                     a = a.astype(endianness + 'u4')
             if a.dtype.itemsize > dtype(wanted_dtype).itemsize:
                 raise Exception("Narrowing type cast while flattening numpy array: dtype=%s, wanted_dtype=%s" % (a.dtype, dtype(wanted_dtype)))
