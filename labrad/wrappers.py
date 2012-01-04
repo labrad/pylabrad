@@ -193,6 +193,10 @@ class AsyncPacketWrapper(object):
                 self._packet.pop(i)
         
     # TODO implement flattened versions of packet object to allow for packet forwarding
+    # naively, this can be done just by converting to a tuple of setting/parameter tuples,
+    # but we would also like to preserve the type hints provided by the accepted types
+    # for the settings themselves, so we can either flatten right here or else pass that
+    # information along to be used later.
     #def __lrtype__(self):
     #    pass
     
