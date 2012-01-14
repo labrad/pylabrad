@@ -15,6 +15,7 @@ GENERAL:
     make self.log work in a reasonable way before servers have started serving
     allow logs to be accessed and manipulated remotely
     configurable debug/logging verbosity levels (change on the fly)
+    syslog/systemd/windows event log integration
   
   MESSAGE HANDLING:
     declarative message handling for servers and clients
