@@ -604,19 +604,14 @@ class LRValue(LRType):
         # TODO: implement full labrad unit conversion semantics in pylabrad
         # If we're trying to flatten to unitless value, then v must be float
         # or Value with units either None or ''
-        try:
-            if self.unit in [None, '']:
-                if isinstance(v, float):
-                    return v
-                elif v.unit in [None, '']:
-                    return float(v)
-                else:
-                    raise FlatteningError(v, self)
-            else:
-                v = v[self.unit]
-                return v
-        except:
-            raise FlatteningError(v, self)
+        if not isinstance(v, U.WithUnit):
+            # v is a float or complex; only accept if out unit is None or ''
+            if self.unit not in [None, '']:
+                raise FlatteningError(v, self)
+        else:
+            # v has units; convert to desired units
+            v = v[self.unit]
+        return v
 
 registerTypeFunc((float, Value), LRValue.__lrtype__)
 
