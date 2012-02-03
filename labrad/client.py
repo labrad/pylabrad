@@ -244,7 +244,8 @@ class ServerWrapper(HasDynamicAttrs):
 
     def _getAttrs(self):
         info = self._mgr.getServerInfo(self.ID)
-        self.__doc__, self.notes, self._slist = info
+        doc, notes, self._slist = info
+        self.__doc__ = doc + '\n' + notes
         return self._slist
 
     @property
@@ -281,9 +282,6 @@ class ServerWrapper(HasDynamicAttrs):
         self._cxn._sendMessage(self.ID, [(ID, args, tag)], **kw)
 
     def __repr__(self):
-        doc = self.__doc__
-        if self.notes:
-            doc += "\n" + self.notes
         return unwrap("""\
             |LabRAD Server: %s (ID=%d)
             |
