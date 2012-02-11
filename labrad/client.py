@@ -282,6 +282,7 @@ class ServerWrapper(HasDynamicAttrs):
         self._cxn._sendMessage(self.ID, [(ID, args, tag)], **kw)
 
     def __repr__(self):
+        self._refresh()
         return unwrap("""\
             |LabRAD Server: %s (ID=%d)
             |
