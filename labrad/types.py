@@ -427,7 +427,7 @@ class LRAny(LRType, Singleton):
 
 class LRNone(LRType, Singleton):
     """An empty piece of LabRAD data."""
-    tag = ''
+    tag = '_'
     
     def __unflatten__(self, s, endianness):
         return None
@@ -575,11 +575,11 @@ class LRValue(LRType):
             return True
         if type(self) != type(other):
             return False
-        if self.unit is None and other.unit is None:
+        if other.unit is None:
             return True
-        if self.unit is not None and other.unit is not None:
-            return True
-        return False
+        if self.unit is None:
+            return False
+        return True
 
     def isFullySpecified(self):
         return self.unit is not None
@@ -594,7 +594,7 @@ class LRValue(LRType):
     def __lrtype__(cls, v):
         if isinstance(v, U.WithUnit):
             return cls(v.unit)
-        return cls()
+        return cls(U.Unit(''))
         
     def __flatten__(self, v, endianness):
         v = self.__check_units__(v)
@@ -886,12 +886,16 @@ class LRList(LRType):
                 return iter(ls)
 
         t = LRAny()
+        size = 0
         for elem in iterND(L):
+            size += 1
             elem_t = getType(elem)
             if elem_t <= t:
                 t = elem_t
             if t.isFullySpecified():
                 break
+        if size == 0:
+            t = LRNone()
         return cls(t, depth)
 
     @classmethod
