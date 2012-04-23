@@ -279,7 +279,7 @@ class LabradProtocol(protocol.Protocol):
     def removeListener(self, listener, source=None, context=None, ID=None):
         """Remove a listener for messages."""
         key = (source, context, ID)
-        listeners = [l for l in self.listeners[key] if l[0] != listener]
+        listeners = [l for l in self.listeners[key] if l[0][0] != listener]
         if len(listeners):
             self.listeners[key] = listeners
         else:
