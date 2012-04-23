@@ -1,3 +1,7 @@
+version 0.93.0
+- labrad.protocol; BUGFIX: fixed issue in LabradProtocol.removeListener (thanks Michael Ramm)
+- refactored async code to make it easier to remove twisted dependency
+
 version 0.92.7
 - labrad.gpib: BUGFIX: added missing @inlineCallbacks annotations in GPIBDeviceWrapper methods
 

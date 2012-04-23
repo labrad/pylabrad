@@ -19,7 +19,7 @@ labrad module for python.
 
 from labrad import backend, client, constants
 
-__version__  = '0.92.8'
+__version__  = '0.93.0'
 __revision__ = '$Revision$'
 __date__     = '$Date$'
 
