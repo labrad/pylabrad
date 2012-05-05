@@ -124,10 +124,11 @@ def parseTypeTag(s):
     try:
         if isinstance(s, LRType):
             return s
-        s = Buffer(stripComments(s))
+        s = stripComments(s)
         ## this is a workaround for a bug in the manager
-        if s[:1] == '_':
+        if s == '' or s[:1] == '_':
             return LRNone()
+        s = Buffer(stripComments(s))
         types = []
         while len(s):
             types.append(parseSingleType(s))
@@ -158,7 +159,7 @@ def stripComments(s):
     Inline comments are delimited by curly brackets {} and may not be nested.
     In addition, anything after a colon : is considered a comment.
     """
-    return COMMENTS.sub('', s).split(':')[0]
+    return COMMENTS.sub('', s).split(':')[0].strip()
 
 def parseNumber(s):
     """Parse an integer at the beginning of a string."""
@@ -438,6 +439,8 @@ class LRNone(LRType, Singleton):
         return ''
 
 registerType(type(None), LRNone())
+# register LRNone parser for the empty string as well
+_parsers[''] = LRNone.__parse__
 
 
 class LRBool(LRType, Singleton):

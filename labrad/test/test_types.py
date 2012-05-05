@@ -22,7 +22,7 @@ class LabradTypesTests(unittest.TestCase):
     def testTags(self):
         """Test the parsing of type tags into LRType objects."""
         tests = {
-            '': T.LRNone(),
+            '_': T.LRNone(),
             'b': T.LRBool(),
             'i': T.LRInt(),
             'w': T.LRWord(),
@@ -68,6 +68,19 @@ class LabradTypesTests(unittest.TestCase):
             else:
                 self.assertEqual(newtag, tag)
 
+    def testTagComments(self):
+        """Test the parsing of type tags with comments and whitespace."""
+        tests = {
+            '': T.LRNone(),
+            ' ': T.LRNone(),
+            ': this is a test': T.LRNone(),
+            '  : this is a test': T.LRNone(),
+            '   i  ': T.LRInt(),
+            '   i  :': T.LRInt(),
+            '   i  : blah': T.LRInt(),
+        }
+        for tag, type_ in tests.items():
+            self.assertEqual(T.parseTypeTag(tag), type_)
 
     def testFlatAndBack(self):
         """Test roundtrip python->LabRAD->python conversion."""

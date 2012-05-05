@@ -1,3 +1,6 @@
+version 0.93.1
+- labrad.types: BUGFIX: fixed problem with parsing empty type tags with comments
+
 version 0.93.0
 - labrad.protocol; BUGFIX: fixed issue in LabradProtocol.removeListener (thanks Michael Ramm)
 - refactored async code to make it easier to remove twisted dependency
