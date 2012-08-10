@@ -35,4 +35,6 @@ class LabradUnitsTests(unittest.TestCase):
         
         self.assertNotEqual(1.0*kg, None)
         
-
+    def testNegativePowers(self):
+        self.assertEqual(str(units.Unit('1/s')), 's^-1')
+        self.assertEqual(str(units.Unit('1/s^1/2')), 's^-1/2')

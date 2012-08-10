@@ -513,11 +513,18 @@ class Unit(object):
         num = ''
         denom = ''
         full_dict = dict(self.names, **self.lex_names)
-        for unit, power in full_dict.items():
-            if power != 1 and power != -1:
-                unit += '^' + str(abs(power))
-            if power < 0: denom += '/' + unit
-            elif power > 0: num += '*' + unit
+        if all(power < 0 for unit, power in full_dict.items()):
+            # if all powers are negative, use negative exponents
+            for unit, power in full_dict.items():
+                unit += '^' + str(power)
+                num += '*' + unit
+        else:
+            # if some powers are positive, use num/denom
+            for unit, power in full_dict.items():
+                if power != 1 and power != -1:
+                    unit += '^' + str(abs(power))
+                if power < 0: denom += '/' + unit
+                elif power > 0: num += '*' + unit
         num = num[1:] if len(num) else '1' # remove leading '*' from numerator
         name = num + denom
         if name == '1':

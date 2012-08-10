@@ -1,5 +1,8 @@
 version 0.93.1
 - labrad.types: BUGFIX: fixed problem with parsing empty type tags with comments
+- labrad.units: changed stringification of units with only negative exponents.
+    instead of 1/s, now gives s^-1; instead of 1/m/kg now gives m^-1*kg^-1.
+    this is a workaround for a bug in the Delphi version of the registry (thanks Peter O'Malley).
 
 version 0.93.0
 - labrad.protocol; BUGFIX: fixed issue in LabradProtocol.removeListener (thanks Michael Ramm)
