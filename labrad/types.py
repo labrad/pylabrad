@@ -597,7 +597,7 @@ class LRValue(LRType):
     def __lrtype__(cls, v):
         if isinstance(v, U.WithUnit):
             return cls(v.unit)
-        return cls(U.Unit(''))
+        return cls(None)
         
     def __flatten__(self, v, endianness):
         v = self.__check_units__(v)

@@ -170,6 +170,15 @@ class LabradTypesTests(unittest.TestCase):
         ]
         for data, hints, tag in tests:
             self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
+
+        # we disallow flattening a float to a value with units,
+        # as this is a major source of bugs
+        try:
+            T.flatten(5.0, 'v[m]')
+        except Exception:
+            pass
+        else:
+            raise Exception('Cannot flatten float to value with units')
     
     def testNumpySupport(self):
         """Test flattening and unflattening of numpy arrays"""
