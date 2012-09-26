@@ -154,6 +154,11 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                 lists = [params.get(a, ['?']) for a in args[:n]]
                 if len(lists):
                     groups += _product(lists)
+                for i, group in reversed(list(enumerate(groups))):
+                    # if there are any LRNones in the group, we remove it
+                    ts = [T.parseTypeTag(t) for t in group]
+                    if T.LRNone() in ts:
+                        groups.pop(i)
 
             accepts_t = []
             accepts_s = []
@@ -329,6 +334,11 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                 lists = [params.get(a, ['?']) for a in args[:n]]
                 if len(lists):
                     groups += _product(lists)
+                for i, group in reversed(list(enumerate(groups))):
+                    # if there are any LRNones in the group, we remove it
+                    ts = [T.parseTypeTag(t) for t in group]
+                    if T.LRNone() in ts:
+                        groups.pop(i)
 
             accepts_t = []
             accepts_s = []

@@ -1,4 +1,5 @@
 version 0.93.2
+- labrad.decorators: BUGFIX: fix handling of LRNone in @setting decorator
 - labrad.units:
     added gauss = 1e-4 T as an additional magnetic field unit (thanks Michael Ramm)
     added bohr_magneton = 9.2740096820e-24 * J/T (thanks Michael Ramm)
