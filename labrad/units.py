@@ -796,6 +796,7 @@ _addUnit('Ohm', 1.0,  V/A,       'Ohm',       'V/A',      prefixable=True)
 _addUnit('S',   1.0,  A/V,       'Siemens',   'A/V',      prefixable=True)
 _addUnit('Wb',  1.0,  V*s,       'Weber',     'V*s',      prefixable=True)
 _addUnit('T',   1.0,  Wb/m**2,   'Tesla',     'Wb/m^2',   prefixable=True)
+_addUnit('gauss',1e-4,T,         'gauss',     '1e-4 T',   prefixable=True)
 _addUnit('H',   1.0,  Wb/A,      'Henry',     'Wb/A',     prefixable=True)
 _addUnit('lm',  1.0,  cd*sr,     'Lumen',     'cd*sr',    prefixable=True)
 _addUnit('lx',  1.0,  lm/m**2,   'Lux',       'lm/m^2',   prefixable=True)
@@ -909,6 +910,7 @@ cali    = 4.1868*J           # international calorie
 kcali   = 1000*cali          # international kilocalorie
 psi     = 6894.75729317*Pa   # pounds per square inch
 degR    = (5./9.)*K          # degrees Rankine
+bohr_magneton = 9.2740096820e-24 * J/T # Bohr magneton
 
 # some common textual units (no conversions here)
 dB = Unit('dB')

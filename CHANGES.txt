@@ -1,3 +1,8 @@
+version 0.93.2
+- labrad.units:
+    added gauss = 1e-4 T as an additional magnetic field unit (thanks Michael Ramm)
+    added bohr_magneton = 9.2740096820e-24 * J/T (thanks Michael Ramm)
+
 version 0.93.1
 - labrad.types: BUGFIX: fixed problem with parsing empty type tags with comments
 - labrad.units: changed stringification of units with only negative exponents.
