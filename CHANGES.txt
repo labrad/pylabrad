@@ -1,6 +1,11 @@
 version 0.93.2
 - labrad.decorators: BUGFIX: fix handling of LRNone in @setting decorator
 - labrad.units:
+    BUGFIX: comparison of WithUnit values with different units was broken due to default
+        implementations of __le__, __lt__ etc. methods being called instead of overloaded
+        __cmp__ method.  Provided explicit implementations of these methods that delegate
+        to __cmp__ to convert to the correct units and perform the comparison.
+        (reported by Michael Ramm)
     added gauss = 1e-4 T as an additional magnetic field unit (thanks Michael Ramm)
     added bohr_magneton = 9.2740096820e-24 * J/T (thanks Michael Ramm)
 

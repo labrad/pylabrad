@@ -215,6 +215,18 @@ class WithUnit(object):
     def __cmp__(self, other):
         diff = self._sum(other, 1, -1)
         return cmp(diff.value, 0)
+    
+    def __lt__(self, other):
+        return cmp(self, other) < 0
+    
+    def __le__(self, other):
+        return cmp(self, other) <= 0
+    
+    def __gt__(self, other):
+        return cmp(self, other) > 0
+    
+    def __ge__(self, other):
+        return cmp(self, other) >= 0
         
     def __mul__(self, other):
         if isinstance(other, Unit):
