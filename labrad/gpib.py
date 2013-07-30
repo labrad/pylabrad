@@ -180,11 +180,12 @@ class ManagedDeviceServer(LabradServer):
     """
     name = 'Generic Device Server'
     deviceManager = 'Device Manager'
-    deviceWrapper = DeviceWrapper
+#    deviceWrapper = DeviceWrapper
+    deviceWrappers = {'Generic Device':DeviceWrapper}
     
     # specify either a device name or a device ident function
     # if both are specified, sign up for both
-    deviceName = 'Generic Device'
+#    deviceName = 'Generic Device'
     #deviceIdentFunc = 'identify_device'
     
     messageID = 21436587
@@ -224,7 +225,7 @@ class ManagedDeviceServer(LabradServer):
             else:
                 guid = self.device_guids[name] = self._next_guid
                 self._next_guid += 1
-            dev = self.deviceWrapper(guid, name)
+            dev = self.deviceWrappers[device](guid, name)
             yield self.client.refresh()
             yield dev.connect(self.client[server], address)
             self.devices[guid, name] = dev
@@ -248,13 +249,16 @@ class ManagedDeviceServer(LabradServer):
 
     @inlineCallbacks
     def connectToDeviceManager(self):
+        """
+        
+        """
         #yield self.client.refresh()
         manager = self.client[self.deviceManager]
-        ident_func = manager.register_ident_function
-        reg_func = manager.register_server
+        #If we have a device identification function register it with the device manager
         if hasattr(self, 'deviceIdentFunc'):
-            yield ident_func(self.deviceIdentFunc)
-        devs = yield reg_func(self.deviceName, self.messageID)
+            yield manager.register_ident_function(self.deviceIdentFunc)
+        #Register ourself as a server who cares about devices
+        devs = yield manager.register_server(self.deviceWrappers.keys(), self.messageID)
         # the devs list is authoritative any devices we have
         # that are _not_ on this list should be removed
         names = [self.makeDeviceName(*dev[:3]) for dev in devs]
@@ -420,9 +424,9 @@ class GPIBManagedServer(ManagedDeviceServer):
     write to, and query the selected GPIB device directly.
     """
     name = 'Generic GPIB Device Server'
-    deviceName = 'Generic GPIB Device'
-    deviceWrapper = GPIBDeviceWrapper
     deviceManager = 'GPIB Device Manager'
+    deviceWrappers = {'Generic GPIB Device':GPIBDeviceWrapper}
+#    deviceName = 'Generic GPIB Device'
         
     # server settings
 
