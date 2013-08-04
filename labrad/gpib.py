@@ -180,16 +180,45 @@ class ManagedDeviceServer(LabradServer):
     """
     name = 'Generic Device Server'
     deviceManager = 'Device Manager'
-#    deviceWrapper = DeviceWrapper
-    deviceWrappers = {'Generic Device':DeviceWrapper}
     
-    # specify either a device name or a device ident function
-    # if both are specified, sign up for both
-#    deviceName = 'Generic Device'
+    #Device names and associated wrappers can be specified in two ways
+    #1 (old way)
+    #Give a device name or list of device names:
+    #deviceName = "nameOfDevice" eg. "Acme XL123" or
+    #deviceName = ["nameOfDevice", "nameOfOtherDevice",...]
+    #and also give a single device wrapper.
+    #deviceWrapper=<a device Wrapper (sub)class>
+    #With this method the same device wrapper is used for all detected
+    #devices, regardless of eg. model. This works if all models use
+    #the same SCPI commands.
+    #2 (new better way)
+    #Give a dict mapping device names to wrappers
+    #deviceWrappers = {"deviceName":wrapperForThisDevice,...}
+    #This allows you to use the same server for eg. devices of the same
+    #general type but from different manufacturers or of different
+    #models.
+    
+    #1. Old way example
+    #deviceName = "Acme Widget"
+    #deviceWrapper = AcmeWidgetWrapper
+    #2. New way example
+    #deviceWrappers={"Acme Widget": AcmeWidgetExample}
+        
+    #Optionally specify a device specific identication function
     #deviceIdentFunc = 'identify_device'
     
     messageID = 21436587
 
+    def __init__(self):
+        #Backward compatibility for servers that don't use a
+        #deviceWrappers dict
+        if !hasattr(self, 'deviceWrappers'):
+            names = self.deviceName
+            if isinstance(names, str):
+                names = [names]
+            self.deviceWrappers = dict((name, self.deviceWrapper) for name in names)
+        LabradServer.__init__(self)
+    
     @inlineCallbacks
     def initServer(self):
         self.devices = MultiDict() # aliases -> device
@@ -425,8 +454,7 @@ class GPIBManagedServer(ManagedDeviceServer):
     """
     name = 'Generic GPIB Device Server'
     deviceManager = 'GPIB Device Manager'
-    deviceWrappers = {'Generic GPIB Device':GPIBDeviceWrapper}
-#    deviceName = 'Generic GPIB Device'
+    deviceWrappers = {}
         
     # server settings
 
