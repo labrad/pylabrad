@@ -369,6 +369,13 @@ class WithUnit(object):
 
 class Value(WithUnit, float):
     _numType = float
+    
+    def do_copy(self):
+        return self
+    
+    def do_deepcopy(self):
+        return self
+    
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
         return self.inUnitsOf(unit).value
@@ -380,6 +387,13 @@ WithUnit._numericTypes[long] = Value
 
 class Complex(WithUnit, complex):
     _numType = complex
+    
+    def do_copy(self):
+        return self
+    
+    def do_deepcopy(self):
+        return self
+    
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
         return self.inUnitsOf(unit).value
@@ -444,7 +458,13 @@ class Unit(object):
         inst = super(Unit, cls).__new__(cls)
         inst._init(*args, **kw)
         return inst
-        
+    
+    def do_copy(self):
+        return self
+    
+    def do_deepcopy(self, memo):
+        return self
+    
     @classmethod
     def _parse(cls, name):
         if name in _unit_table:

@@ -180,15 +180,45 @@ class ManagedDeviceServer(LabradServer):
     """
     name = 'Generic Device Server'
     deviceManager = 'Device Manager'
-    deviceWrapper = DeviceWrapper
     
-    # specify either a device name or a device ident function
-    # if both are specified, sign up for both
-    deviceName = 'Generic Device'
+    #Device names and associated wrappers can be specified in two ways
+    #1 (old way)
+    #Give a device name or list of device names:
+    #deviceName = "nameOfDevice" eg. "Acme XL123" or
+    #deviceName = ["nameOfDevice", "nameOfOtherDevice",...]
+    #and also give a single device wrapper.
+    #deviceWrapper=<a device Wrapper (sub)class>
+    #With this method the same device wrapper is used for all detected
+    #devices, regardless of eg. model. This works if all models use
+    #the same SCPI commands.
+    #2 (new better way)
+    #Give a dict mapping device names to wrappers
+    #deviceWrappers = {"deviceName":wrapperForThisDevice,...}
+    #This allows you to use the same server for eg. devices of the same
+    #general type but from different manufacturers or of different
+    #models.
+    
+    #1. Old way example
+    #deviceName = "Acme Widget"
+    #deviceWrapper = AcmeWidgetWrapper
+    #2. New way example
+    #deviceWrappers={"Acme Widget": AcmeWidgetExample}
+        
+    #Optionally specify a device specific identication function
     #deviceIdentFunc = 'identify_device'
     
     messageID = 21436587
 
+    def __init__(self):
+        #Backward compatibility for servers that don't use a
+        #deviceWrappers dict
+        if !hasattr(self, 'deviceWrappers'):
+            names = self.deviceName
+            if isinstance(names, str):
+                names = [names]
+            self.deviceWrappers = dict((name, self.deviceWrapper) for name in names)
+        LabradServer.__init__(self)
+    
     @inlineCallbacks
     def initServer(self):
         self.devices = MultiDict() # aliases -> device
@@ -224,7 +254,7 @@ class ManagedDeviceServer(LabradServer):
             else:
                 guid = self.device_guids[name] = self._next_guid
                 self._next_guid += 1
-            dev = self.deviceWrapper(guid, name)
+            dev = self.deviceWrappers[device](guid, name)
             yield self.client.refresh()
             yield dev.connect(self.client[server], address)
             self.devices[guid, name] = dev
@@ -248,13 +278,16 @@ class ManagedDeviceServer(LabradServer):
 
     @inlineCallbacks
     def connectToDeviceManager(self):
+        """
+        
+        """
         #yield self.client.refresh()
         manager = self.client[self.deviceManager]
-        ident_func = manager.register_ident_function
-        reg_func = manager.register_server
+        #If we have a device identification function register it with the device manager
         if hasattr(self, 'deviceIdentFunc'):
-            yield ident_func(self.deviceIdentFunc)
-        devs = yield reg_func(self.deviceName, self.messageID)
+            yield manager.register_ident_function(self.deviceIdentFunc)
+        #Register ourself as a server who cares about devices
+        devs = yield manager.register_server(self.deviceWrappers.keys(), self.messageID)
         # the devs list is authoritative any devices we have
         # that are _not_ on this list should be removed
         names = [self.makeDeviceName(*dev[:3]) for dev in devs]
@@ -420,9 +453,8 @@ class GPIBManagedServer(ManagedDeviceServer):
     write to, and query the selected GPIB device directly.
     """
     name = 'Generic GPIB Device Server'
-    deviceName = 'Generic GPIB Device'
-    deviceWrapper = GPIBDeviceWrapper
     deviceManager = 'GPIB Device Manager'
+    deviceWrappers = {}
         
     # server settings
 

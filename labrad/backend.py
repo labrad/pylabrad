@@ -97,7 +97,7 @@ class AsyncoreConnection(BaseConnection):
             sock = socket.create_connection((self.host, self.port), timeout or 5)
             socketMap = {}
             self.cxn = AsyncoreProtocol(sock, map=socketMap)
-            self.loop = threading.Thread(target=asyncore.loop, kwargs={'map': socketMap})
+            self.loop = threading.Thread(target=asyncore.loop, kwargs={'timeout':0.01, 'map': socketMap})
             self.loop.daemon = True
             self.loop.start()
             try:
@@ -271,6 +271,18 @@ class AsyncoreProtocol(asyncore.dispatcher):
             self.flushCommands()
             for d in self.requests.values():
                 d.errback(reason)
+        
+    def readable(self):
+        return True
+    
+    def writable(self):
+        """Only register for writing if we have something to write
+        
+        For some reason each command submitted from the interactive shell
+        seems to fire the writing code twice. This isn't really a problem
+        because an empty self.queue is properly handeled.
+        """
+        return not self.queue.empty()
     
     def handle_write(self):
         if self.flushCommands():
