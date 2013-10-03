@@ -345,8 +345,10 @@ class Failure(object):
             raise self.exctype, self.value
 
 class Future(object):
+    
+    ready = Queue.Queue()
+    
     def __init__(self):
-        self.e = threading.Event()
         self.done = False
         self.result = None
         self.callbacks = []
@@ -360,33 +362,32 @@ class Future(object):
         
     def callback(self, result):
         self.result = result
-        self.e.set()
+        self.ready.put(self)
     
     def errback(self, error=None):
         if not hasattr(error, 'raiseException'):
             error = Failure(error)
         self.result = error
-        self.e.set()
+        self.ready.put(self)
     
     def wait(self):
         if self.done:
             return self.result
         while True:
-            self.e.wait(1)
-            if self.e.is_set():
-                break
-        self.done = True
-        result = self.result
-        if hasattr(result, 'raiseException'):
-            # this can be a twisted Failure or our
-            # own Failure class, as defined above
-            result.raiseException()
-        else:
-            for f, args, kw in self.callbacks:
-                result = f(result, *args, **kw)
-            self.result = result
-            return result
-
+            f = self.ready.get()
+            f.done = True
+            result = f.result
+            if hasattr(result, 'raiseException'):
+                # this can be a Twisted Failure or our
+                # own Failure class, as defined above
+                result.raiseException()
+            else:
+                for func, args, kw in f.callbacks:
+                    result = func(result, *args, **kw)
+                f.result = result
+            if f is self:
+                return result
+    
     def __repr__(self):
         if self.done:
             return '<Future: result=%r>' % (self.result,)
