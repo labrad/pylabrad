@@ -116,6 +116,9 @@ class GPIBDeviceServer(DeviceServer):
     devices, selecting a device for the current context, and
     refreshing the list of devices.  Also, allows us to read from,
     write to, and query the selected GPIB device directly.
+    
+    2013 October 22 - Daniel Sank
+    I'm pretty sure this is obsolte and you should use the GPIBManagedServer
     """
     name = 'Generic GPIB Device Server'
     deviceName = 'Generic GPIB Device'
@@ -177,35 +180,35 @@ class ManagedDeviceServer(LabradServer):
     devices, selecting a device for the current context, and
     refreshing the list of devices.  Also, provides for device-locking
     with timeouts.
+    
+    Device names and associated wrappers can be specified in two ways
+    1 (old way)
+    Give a device name or list of device names:
+    deviceName = "nameOfDevice" eg. "Acme XL123" or
+    deviceName = ["nameOfDevice", "nameOfOtherDevice",...]
+    and also give a single device wrapper.
+    deviceWrapper=<a device Wrapper (sub)class>
+    With this method the same device wrapper is used for all detected
+    devices, regardless of eg. model. This works if all models use
+    the same SCPI commands.
+    2 (new better way)
+    Give a dict mapping device names to wrappers
+    deviceWrappers = {"deviceName":wrapperForThisDevice,...}
+    This allows you to use the same server for eg. devices of the same
+    general type but from different manufacturers or of different
+    models.
+    
+    1. Old way example
+    deviceName = "Acme Widget"
+    deviceWrapper = AcmeWidgetWrapper
+    2. New way example
+    deviceWrappers={"Acme Widget": AcmeWidgetExample}
+    
+    Optionally specify a device specific identication function
+    deviceIdentFunc = 'identify_device'
     """
     name = 'Generic Device Server'
     deviceManager = 'Device Manager'
-    
-    #Device names and associated wrappers can be specified in two ways
-    #1 (old way)
-    #Give a device name or list of device names:
-    #deviceName = "nameOfDevice" eg. "Acme XL123" or
-    #deviceName = ["nameOfDevice", "nameOfOtherDevice",...]
-    #and also give a single device wrapper.
-    #deviceWrapper=<a device Wrapper (sub)class>
-    #With this method the same device wrapper is used for all detected
-    #devices, regardless of eg. model. This works if all models use
-    #the same SCPI commands.
-    #2 (new better way)
-    #Give a dict mapping device names to wrappers
-    #deviceWrappers = {"deviceName":wrapperForThisDevice,...}
-    #This allows you to use the same server for eg. devices of the same
-    #general type but from different manufacturers or of different
-    #models.
-    
-    #1. Old way example
-    #deviceName = "Acme Widget"
-    #deviceWrapper = AcmeWidgetWrapper
-    #2. New way example
-    #deviceWrappers={"Acme Widget": AcmeWidgetExample}
-        
-    #Optionally specify a device specific identication function
-    #deviceIdentFunc = 'identify_device'
     
     messageID = 21436587
 
@@ -441,7 +444,6 @@ class ManagedDeviceServer(LabradServer):
         """Release the lock on the currently-locked device."""
         dev = self.selectedDevice(c)
         dev.unlock(c.ID)
-
 
 class GPIBManagedServer(ManagedDeviceServer):
     """A server for a GPIB device.
