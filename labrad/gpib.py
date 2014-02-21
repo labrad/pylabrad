@@ -215,7 +215,7 @@ class ManagedDeviceServer(LabradServer):
     def __init__(self):
         #Backward compatibility for servers that don't use a
         #deviceWrappers dict
-        if !hasattr(self, 'deviceWrappers'):
+        if not hasattr(self, 'deviceWrappers'):
             names = self.deviceName
             if isinstance(names, str):
                 names = [names]
