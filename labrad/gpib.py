@@ -456,8 +456,7 @@ class GPIBManagedServer(ManagedDeviceServer):
     """
     name = 'Generic GPIB Device Server'
     deviceManager = 'GPIB Device Manager'
-    deviceWrappers = {}
-        
+
     # server settings
 
     @setting(1001, 'GPIB Write', string='s', timeout='v[s]', returns='')
