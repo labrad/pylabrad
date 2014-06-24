@@ -63,7 +63,6 @@ from math import floor, pi
 from labrad import grammar
 from labrad.ratio import Ratio
 
-
 # Dictionary containing numbers
 #
 # These objects are meant to be used like arrays with generalized
@@ -187,8 +186,13 @@ class WithUnit(object):
             else:
                 factor = 1
             value = sign1 * self.value + sign2 * other.value * factor
+        elif self.isDimensionless():
+            value = sign1 * self.value + sign2 * other / self.unit.conversionFactorTo('')
+        elif other==0:
+            value = sign1 * self.value
         else:
-            value = sign1 * self.value + sign2 * other
+            raise TypeError("Incompatible Units %s, ''" % (self.unit,))
+            #value = sign1 * self.value + sign2 * other
         return WithUnit(value, self.unit)
 
     def __add__(self, other):
@@ -217,16 +221,16 @@ class WithUnit(object):
         return cmp(diff.value, 0)
     
     def __lt__(self, other):
-        return cmp(self, other) < 0
+        return self.__cmp__(other) < 0
     
     def __le__(self, other):
-        return cmp(self, other) <= 0
+        return self.__cmp__(other) <= 0
     
     def __gt__(self, other):
-        return cmp(self, other) > 0
+        return self.__cmp__(other) > 0
     
     def __ge__(self, other):
-        return cmp(self, other) >= 0
+        return self.__cmp__(other) >= 0
         
     def __mul__(self, other):
         if isinstance(other, Unit):
