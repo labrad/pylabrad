@@ -27,12 +27,15 @@ class LabradUnitsTests(unittest.TestCase):
     def testArithmetic(self):
         m = units.Unit('m')
         kg = units.Unit('kg')
-        
+        km = units.Unit('km')
+
         self.assertEqual(units.Value(5.0, None)*m, 5.0*m)
         
         # addition
         self.assertEqual(1.0*kg + 0.0, 1.0*kg)
-        
+        with self.assertRaises(TypeError): _ = 1.0*kg + 1.0*m
+        with self.assertRaises(TypeError): _ = 1.0*kg + 2.0
+        self.assertAlmostEqual(1.0*km/m + 5.0, 1005)
         self.assertNotEqual(1.0*kg, None)
         
     def testNegativePowers(self):
@@ -52,9 +55,8 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue(10000*ms > 1*s, '10000*ms < 1*s')
         self.assertTrue(10000*ms >= 1*s, '10000*ms <= 1*s')
         
-        try:
+        with self.assertRaises(TypeError):
             nogood = 1*s > 1*kg
-        except Exception:
-            self.assertTrue(True, 'unit comparison with incompatible units are not allowed')
-        else:
-            raise Exception('should not be able to compare incompatible units')
+
+if __name__ == "__main__":
+    unittest.main()
