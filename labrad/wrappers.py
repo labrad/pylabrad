@@ -26,7 +26,7 @@ from zope.interface import implements
 
 from labrad import constants as C, manager, protocol
 from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
-from labrad.support import mangle, extractKey, MultiDict, PacketResponse, getPassword
+from labrad.support import indent, mangle, extractKey, MultiDict, PacketResponse, getPassword
 
 
 class AsyncSettingWrapper(object):
@@ -191,7 +191,19 @@ class AsyncPacketWrapper(object):
         for i, rec in enumerate(self._packet):
             if key == rec[3]:
                 self._packet.pop(i)
-        
+    
+    def _recordRepr(self, ID, data, types, key):
+        key_str = "" if key is None else " (key=%s)" % (key,)
+        return "%s%s: %s" % (self._server.settings[ID].name, key_str, data)
+
+    def __str__(self):
+        data_str = '\n'.join(self._recordRepr(*rec) for rec in self._packet)
+        return unwrap("""\
+            |Packet for server: '%s'
+            |
+            |Data:
+            |%s""") % (self._server.name, indent(data_str))
+    
     # TODO implement flattened versions of packet object to allow for packet forwarding
     # naively, this can be done just by converting to a tuple of setting/parameter tuples,
     # but we would also like to preserve the type hints provided by the accepted types
@@ -202,6 +214,11 @@ class AsyncPacketWrapper(object):
     
     #def __lrflatten__(self):
     #    pass
+
+def unwrap(s, after='|'):
+    def trim(line):
+        return line.split(after, 1)[-1]
+    return '\n'.join(trim(line) for line in s.split('\n'))
 
 def makePacketWrapperClass(server):
     """Make a new packet wrapper class for a particular server."""
