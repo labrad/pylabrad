@@ -22,7 +22,7 @@ Contains a blocking client connection to labrad.
 from labrad import constants as C
 from labrad.backend import ManagerService, Future
 from labrad.errors import Error
-from labrad.support import mangle, indent, PrettyMultiDict, PacketResponse
+from labrad.support import mangle, indent, PrettyMultiDict, PacketResponse, hexdump
 import traceback
 
 class NotFoundError(Error):
@@ -402,12 +402,32 @@ class PacketWrapper(HasDynamicAttrs):
             if key == rec[3]:
                 self._packet[i] = rec[0], value, rec[2], rec[3]
 
-    def _recordRepr(self, ID, data, types, key):
-        key_str = "" if key is None else " (key=%s)" % (key,)
-        return "%s%s: %s" % (self._server.settings[ID].name, key_str, data)
+    def _dataStr(self, data):
+        if len(data) < 160:
+            return self._dataRepr(data)
+        else:
+            x = self._dataRepr(data[0:32])
+            '\n'.join('    ' + y for y in x.splitlines())
+            return "string of length %d beginning with... \n%s" % (len(data), x)
 
-    def __repr__(self):
-        data_str = '\n'.join(self._recordRepr(*rec) for rec in self._packet)
+    def _dataRepr(self, data):
+        if all((ord(x)>31 and ord(x)<127) or x.isspace() for x in data): # Is string printable ascii
+            return data
+        else:
+            return hexdump(data)
+
+    def _recordRepr(self, ID, data, types, key, short=False):
+        key_str = "" if key is None else " (key=%s)" % (key,)
+        prefix = '%s%s: ' % (self._server.settings[ID].name, key_str)
+        data_str = self._dataStr(str(data)) if short else self._dataRepr(str(data))
+        data_str = data_str.replace('\n', '\n' + ' '*len(prefix))
+        return prefix + data_str
+
+    def __str__(self):
+        return self.__repr__(True)
+
+    def __repr__(self, short=False):
+        data_str = '\n'.join(self._recordRepr(*rec, short=short) for rec in self._packet)
         return unwrap("""\
             |Packet for server: '%s'
             |
