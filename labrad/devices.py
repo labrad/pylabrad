@@ -132,6 +132,15 @@ class DeviceServer(LabradServer):
         """
         return self._refreshLock.run(self._doRefresh)
         
+    def chooseDeviceWrapper(self, *args, **kw):
+        """
+        Override in subclass to support multiple device wrapper classes
+        
+        args and kw come from findDevices (ie same as are passed into the
+        device wrapper's connect method).
+        """
+        return self.deviceWrapper
+    
     @inlineCallbacks
     def _doRefresh(self):
         """Do the actual refreshing."""
@@ -170,8 +179,9 @@ class DeviceServer(LabradServer):
             else:
                 guid = self.device_guids[name] = self._next_guid
                 self._next_guid += 1
-                
-            dev = self.deviceWrapper(guid, name)
+            
+            deviceWrapper = self.chooseDeviceWrapper(name, *args, **kw)            
+            dev = deviceWrapper(guid, name)
             yield dev.connect(*args, **kw)
             self.devices[guid, name] = dev
 
