@@ -28,6 +28,7 @@ and return types have been registered), we can do even better.
 from __future__ import absolute_import
 
 import re
+import sys
 from struct import pack, unpack
 import time
 from types import InstanceType
@@ -40,6 +41,7 @@ from labrad import units as U
 from labrad.units import Value, Complex
 
 try:
+    import numpy as np
     from numpy import ndarray, array, dtype, fromstring
     useNumpy = True
 except ImportError:
@@ -960,13 +962,22 @@ class LRList(LRType):
 
         Lists must be homogeneous and rectangular.
         """
-        if hasattr(L, 'aslist') and not hasattr(L, '_list'):
+        if isinstance(L, LazyList) and not hasattr(L, '_list'):
             # if we get a LazyList that hasn't been unflattened,
             # we can just return the original data unchanged
             # if  it has been unflattened, though, then it may
             # have been changed since lists are mutable, so we
             # can't take this shortcut
-            return L._data
+            #
+            # Note: the array returned by the asarray property
+            # is mutable but does not write-back to the list.
+            # That means if you mutate the array, then flatten
+            # the lazy list, the changes will not be reflected.
+            if L._endianness==endianness:
+                return L._data
+            else:
+                # Make sure it is unflattened so endian conversion happens
+                L.aslist
         if useNumpy and isinstance(L, ndarray):
             return self.__flatten_array__(L, endianness)
         if self.elem == LRAny():
@@ -1203,14 +1214,20 @@ class LazyList(list):
         s = Buffer(self._data)
         n, elem = self._lrtype.depth, self._lrtype.elem
         dims = unpack(self._endianness + ('i'*n), s.get(4*n))
-        size = reduce(lambda x, y: x*y, dims)
+        size = np.prod(dims)
         
-        make = lambda t, width: fromstring(s.get(size*width), dtype=dtype(t))
-        if elem == LRBool(): a = make(self._endianness + 'u1', 1)
-        elif elem == LRInt(): a = make(self._endianness + 'i4', 4)
-        elif elem == LRWord(): a = make(self._endianness + 'u4', 4)
-        elif elem <= LRValue(): a = make(self._endianness + 'f8', 8)
-        elif elem <= LRComplex(): a = make(self._endianness + 'c16', 16)
+        def make(t, width):
+            sys_byte_order = '<' if sys.byteorder == 'little' else '>'
+            x = fromstring(s.get(size*width), dtype=dtype(t))
+            if self._endianness != sys_byte_order:
+                x.byteswap(True) # inplace
+            return x
+
+        if elem == LRBool(): a = make('u1', 1)
+        elif elem == LRInt(): a = make('i4', 4)
+        elif elem == LRWord(): a = make('u4', 4)
+        elif elem <= LRValue(): a = make('f8', 8)
+        elif elem <= LRComplex(): a = make('c16', 16)
         else:
             a = array([unflatten(s, elem, self._endianness) for _ in xrange(size)])
         a.shape = dims + a.shape[1:] # handle clusters as elements
