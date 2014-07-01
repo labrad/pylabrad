@@ -46,9 +46,9 @@ class LabradProtocol(protocol.Protocol):
         self.listeners = {}
         self._messageLock = defer.DeferredLock()
         self.clearCache()
-    
+        self.endianness = '>'
         # create a generator to assemble the packets
-        self.packetStream = packetStream(self.packetReceived)
+        self.packetStream = packetStream(self.packetReceived, self.endianness)
         self.packetStream.next() # start the packet stream
         
         self.onDisconnect = util.DeferredSignal()
@@ -81,7 +81,7 @@ class LabradProtocol(protocol.Protocol):
     # sending
     def sendPacket(self, target, context, request, records):
         """Send a raw packet to the specified target."""
-        raw = flattenPacket(target, context, request, records)
+        raw = flattenPacket(target, context, request, records, endianness=self.endianness)
         self.transport.write(raw)
     
     @inlineCallbacks        

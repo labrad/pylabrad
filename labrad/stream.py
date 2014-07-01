@@ -4,7 +4,7 @@ HEADER_TYPE = T.parseTypeTag('(ww)iww')
 PACKET_TYPE = T.parseTypeTag('(ww)iws')
 RECORD_TYPE = T.parseTypeTag('wss')
 
-def packetStream(packetHandler):
+def packetStream(packetHandler, endianness='>'):
     """A generator that assembles packets.
 
     Accepts a function packetHandler that will be called with four arguments
@@ -16,7 +16,7 @@ def packetStream(packetHandler):
         while len(buf) < 20:
             buf += yield 0
         hdr, buf = buf[:20], buf[20:]
-        context, request, source, length = T.unflatten(hdr, HEADER_TYPE)
+        context, request, source, length = T.unflatten(hdr, HEADER_TYPE, endianness=endianness)
 
         # get packet data
         while len(buf) < length:
@@ -24,7 +24,7 @@ def packetStream(packetHandler):
         s, buf = buf[:length], buf[length:]
 
         # unflatten the data
-        records = unflattenRecords(s)
+        records = unflattenRecords(s, endianness=endianness)
         
         packetHandler(source, context, request, records)
 
