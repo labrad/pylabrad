@@ -26,7 +26,7 @@ from zope.interface import implements
 
 from labrad import constants as C, manager, protocol
 from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
-from labrad.support import mangle, extractKey, MultiDict, PacketResponse, getPassword
+from labrad.support import indent, mangle, extractKey, MultiDict, PacketResponse, getPassword, hexdump
 
 
 class AsyncSettingWrapper(object):
@@ -191,7 +191,39 @@ class AsyncPacketWrapper(object):
         for i, rec in enumerate(self._packet):
             if key == rec[3]:
                 self._packet.pop(i)
-        
+    
+    def _dataStr(self, data):
+        if len(data) < 160:
+            return self._dataRepr(data)
+        else:
+            x = self._dataRepr(data[0:32])
+            '\n'.join('    ' + y for y in x.splitlines())
+            return "string of length %d beginning with... \n%s" % (len(data), x)
+
+    def _dataRepr(self, data):
+        if all((ord(x)>31 and ord(x)<127) or x.isspace() for x in data): # Is string printable ascii
+            return data
+        else:
+            return hexdump(data)
+
+    def _recordRepr(self, ID, data, types, key, short=False):
+        key_str = "" if key is None else " (key=%s)" % (key,)
+        prefix = '%s%s: ' % (self._server.settings[ID].name, key_str)
+        data_str = self._dataStr(str(data)) if short else self._dataRepr(str(data))
+        data_str = data_str.replace('\n', '\n' + ' '*len(prefix))
+        return prefix + data_str
+
+    def __str__(self):
+        return self.__repr__(True)
+
+    def __repr__(self, short=False):
+        data_str = '\n'.join(self._recordRepr(*rec, short=short) for rec in self._packet)
+        return unwrap("""\
+            |Packet for server: '%s'
+            |
+            |Data:
+            |%s""") % (self._server.name, indent(data_str))
+    
     # TODO implement flattened versions of packet object to allow for packet forwarding
     # naively, this can be done just by converting to a tuple of setting/parameter tuples,
     # but we would also like to preserve the type hints provided by the accepted types
@@ -202,6 +234,11 @@ class AsyncPacketWrapper(object):
     
     #def __lrflatten__(self):
     #    pass
+
+def unwrap(s, after='|'):
+    def trim(line):
+        return line.split(after, 1)[-1]
+    return '\n'.join(trim(line) for line in s.split('\n'))
 
 def makePacketWrapperClass(server):
     """Make a new packet wrapper class for a particular server."""

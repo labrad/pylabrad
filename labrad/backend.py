@@ -392,6 +392,8 @@ class Future(object):
             if hasattr(result, 'raiseException'):
                 # this can be a Twisted Failure or our
                 # own Failure class, as defined above
+                # If any Future in the queue fails,
+                # we immediately bail.
                 result.raiseException()
             else:
                 for func, args, kw in f.callbacks:

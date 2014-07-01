@@ -20,9 +20,10 @@ Contains a blocking client connection to labrad.
 """
 
 from labrad import constants as C
-from labrad.backend import ManagerService
+from labrad.backend import ManagerService, Future
 from labrad.errors import Error
-from labrad.support import mangle, indent, extractKey, PrettyMultiDict, PacketResponse
+from labrad.support import mangle, indent, PrettyMultiDict, PacketResponse, hexdump
+import traceback
 
 class NotFoundError(Error):
     code = 10
@@ -50,9 +51,9 @@ class SettingWrapper(object):
         self._refreshed = False
 
     def __call__(self, *args, **kw):
-        wait = extractKey(kw, 'wait', True)
-        wrap = extractKey(kw, 'wrap', True)
-        tag = extractKey(kw, 'tag', None) or self.accepts
+        wait = kw.pop('wait', True)
+        wrap = kw.pop('wrap', True)
+        tag = kw.pop('tag', None) or self.accepts
         if not len(args):
             args = None
         elif len(args) == 1:
@@ -257,7 +258,11 @@ class ServerWrapper(HasDynamicAttrs):
         return self._cxn.context()
 
     def packet(self, **kw):
-        return PacketWrapper(self, **kw)
+        sync = kw.pop('sync', False)
+        if sync:
+            return SyncPacketWrapper(self, **kw)
+        else:
+            return PacketWrapper(self, **kw)
 
     def __call__(self, context=None):
         """Create a new server wrapper based on this one but with a new default context."""
@@ -274,7 +279,7 @@ class ServerWrapper(HasDynamicAttrs):
         """Send a message to this server."""
         if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
-        tag = extractKey(kw, 'tag', [])
+        tag = kw.pop('tag', [])
         if len(args) == 0:
             args = None
         elif len(args) == 1:
@@ -292,22 +297,27 @@ class ServerWrapper(HasDynamicAttrs):
             |%s""") % (self.name, self.ID, self.__doc__,
                        indent(repr(self.settings)))
 
-
-class PacketWrapper(HasDynamicAttrs):
-    """An object to encapsulate a labrad packet to a server."""
-
+class SyncPacketWrapper(HasDynamicAttrs):
+    '''
+    This acts like a packet, but requests are made synchronously.
+    '''
     def __init__(self, server, **kw):
         HasDynamicAttrs.__init__(self)
         self._server = server
         self._packet = []
+        self._context = kw.pop('context', None)
         self._kw = kw
-
-    def send(self, wait=True, **kw):
-        """Send this packet to the server."""
-        records = [rec[:3] for rec in self._packet]
-        future = self._server._send(records, **dict(self._kw, **kw))
-        future.addCallback(PacketResponse, self._server, self._packet)
-        return future.wait() if wait else future
+        self._response = []
+        self._packet = [] # This is used to store data needed to create a packet response.
+    def send(self, wait=True):
+        resp = PacketResponse(self._response, self._server, self._packet)
+        if not wait:
+            f = Future();
+            f.done = True
+            f.result = resp
+            return f
+        else:
+            return resp
 
     @property
     def settings(self):
@@ -324,13 +334,65 @@ class PacketWrapper(HasDynamicAttrs):
     def _wrapAttr(self, _parent, name, pyName, ID):
         s = self._server.settings[name]
         def wrapped(*args, **kw):
-            key = extractKey(kw, 'key', None)
-            tag = extractKey(kw, 'tag', None) or s.accepts
+            key = kw.pop('key', pyName)
+            tag = kw.pop('tag', None) or s.accepts # data type
+            result = s(*args, **dict(kw, context=self._context)) # If you set a context, it will be overridden
+            self._packet.append((0,0,tag,key)) # Don't store the ID and data.
+            self._response.append((ID,result))
+        return wrapped
+
+
+class PacketWrapper(HasDynamicAttrs):
+    """An object to encapsulate a labrad packet to a server."""
+
+    def __init__(self, server, **kw):
+        HasDynamicAttrs.__init__(self)
+        self._server = server
+        self._packet = []
+        self._debug = kw.pop('debug', False)
+        self._debug_info = []
+        self._kw = kw
+
+    def send(self, wait=True, **kw):
+        """Send this packet to the server."""
+        records = [rec[:3] for rec in self._packet]
+        future = self._server._send(records, **dict(self._kw, **kw))
+        future.addCallback(PacketResponse, self._server, self._packet)
+        if self._debug and wait:
+            return self.debug_wait(future)
+        return future.wait() if wait else future
+
+    def debug_wait(self, future):
+        try:
+            return future.wait()
+        except Exception as e:
+            if hasattr(e, 'err_idx'):
+                e.msg = e.msg + '\n' + "".join(traceback.format_list(self._debug_info[e.err_idx][0]))
+                raise
+    @property
+    def settings(self):
+        self._refresh()
+        return self._attrs
+
+    _staticAttrs = ['settings', 'send']
+
+    def _getAttrs(self):
+        """Grab the list of the server's attributes."""
+        self._server._refresh() # ensure refresh
+        return self._server._slist
+
+    def _wrapAttr(self, _parent, name, pyName, ID):
+        s = self._server.settings[name]
+        def wrapped(*args, **kw):
+            key = kw.pop('key', None)
+            tag = kw.pop('tag', None) or s.accepts
             if not len(args):
                 args = None
             elif len(args) == 1:
                 args = args[0]
             self._packet.append((s.ID, args, tag, key))
+            if self._debug:
+                self._debug_info.append((traceback.extract_stack(),))
             return self
         return wrapped
 
@@ -340,12 +402,32 @@ class PacketWrapper(HasDynamicAttrs):
             if key == rec[3]:
                 self._packet[i] = rec[0], value, rec[2], rec[3]
 
-    def _recordRepr(self, ID, data, types, key):
-        key_str = "" if key is None else " (key=%s)" % (key,)
-        return "%s%s: %s" % (self._server.settings[ID].name, key_str, data)
+    def _dataStr(self, data):
+        if len(data) < 160:
+            return self._dataRepr(data)
+        else:
+            x = self._dataRepr(data[0:32])
+            '\n'.join('    ' + y for y in x.splitlines())
+            return "string of length %d beginning with... \n%s" % (len(data), x)
 
-    def __repr__(self):
-        data_str = '\n'.join(self._recordRepr(*rec) for rec in self._packet)
+    def _dataRepr(self, data):
+        if all((ord(x)>31 and ord(x)<127) or x.isspace() for x in data): # Is string printable ascii
+            return data
+        else:
+            return hexdump(data)
+
+    def _recordRepr(self, ID, data, types, key, short=False):
+        key_str = "" if key is None else " (key=%s)" % (key,)
+        prefix = '%s%s: ' % (self._server.settings[ID].name, key_str)
+        data_str = self._dataStr(str(data)) if short else self._dataRepr(str(data))
+        data_str = data_str.replace('\n', '\n' + ' '*len(prefix))
+        return prefix + data_str
+
+    def __str__(self):
+        return self.__repr__(True)
+
+    def __repr__(self, short=False):
+        data_str = '\n'.join(self._recordRepr(*rec, short=short) for rec in self._packet)
         return unwrap("""\
             |Packet for server: '%s'
             |

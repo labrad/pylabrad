@@ -43,6 +43,26 @@ def extractKey(d, key, default):
     del d[key]
     return val
 
+def chunks(s, size):
+    '''
+    Break a sequence into subsequences of at most size.
+    '''
+    for i in range(0, len(s), size):
+        yield s[i:i+size]
+
+def hexdump(s):
+    '''
+    Hex dump representation of string.  Each line containes 16 bytes represented
+    first as hex codes with printable characters rendered on the right.
+    '''
+    result = []
+    for substr in chunks(s, 16):
+        hex_repr = " ".join('%02X'% (ord(x),) for x in substr)
+        string_repr = "".join( x if ord(x)>32 and ord(x) <127 else '.' for x in substr)
+        result.append('%s    %s' % (hex_repr.ljust(47), string_repr))
+    return '\n'.join(result)
+
+
 class SafeIterDict(dict):
     """A dict subclass that allows insertion and deletion while iterating.
     
