@@ -94,10 +94,12 @@ class AsyncoreConnection(BaseConnection):
         self.serverCache = {}
         self.settingCache = {}
         try:
-            sock = socket.create_connection((self.host, self.port), timeout or 5)
+            sock = socket.create_connection((self.host, self.port),
+                                            timeout or 5)
             socketMap = {}
             self.cxn = AsyncoreProtocol(sock, map=socketMap)
-            self.loop = threading.Thread(target=asyncore.loop, kwargs={'timeout':0.01, 'map': socketMap})
+            self.loop = threading.Thread(target=asyncore.loop,
+                kwargs={'timeout':0.01, 'map': socketMap})
             self.loop.daemon = True
             self.loop.start()
             try:
