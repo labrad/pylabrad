@@ -64,7 +64,7 @@ class Singleton(object):
         return inst
 
 # a registry of parsing functions, keyed by type tag
-_parsers = {}
+_parsers = {} # type tag -> parse function
 
 
 class RegisterParser(type):
@@ -82,6 +82,8 @@ class RegisterParser(type):
 
 
 class Buffer(object):
+    """Consume strings without memory reallocation to improve performance."""
+    
     def __init__(self, s):
         if isinstance(s, Buffer):
             self.s = s.s
@@ -91,30 +93,48 @@ class Buffer(object):
             self.ofs = 0
 
     def get(self, i=1):
+        """Get i characters from the buffer and increment pointer."""
         temp = self.s[self.ofs:self.ofs+i]
         self.ofs += i
         return temp
         
     def skip(self, i=1):
+        """Increment pointer."""
         self.ofs += i
     
     def __len__(self):
+        """Length of buffer which remains to be consumed."""
         return len(self.s) - self.ofs
 
     def __str__(self):
+        """Returns unconsumed part of buffer."""
         return self.s[self.ofs:]
         
     def __getitem__(self, key):
+        """Get part of unconsumed buffer indexed by key.
+        
+        If the current pointer is N and we call __getitem__(m), we get the
+        character with absolute index N+m.
+        
+        This method reallocates the unconsumed part of the buffer to self.s
+        and resets the offset pointer. That means we're doing string allocation,
+        so don't use this for performance code.
+        """
         self.s = self.s[self.ofs:]
         self.ofs = 0
         return self.s[key]
         
     def strip(self, chars):
+        """Strip characters from the string and reallocate.
+        
+        Do not use this in performance code.
+        """
         self.s = self.s[self.ofs:].strip(chars)
         self.ofs = 0
         return self
 
     def index(self, char):
+        """Find index of char in uncomsumed part of buffer."""
         return self.s.index(char, self.ofs)
         
 
@@ -128,8 +148,10 @@ def parseTypeTag(s):
             return s
         s = stripComments(s)
         ## this is a workaround for a bug in the manager
+        ## What bug? This needs to be explained.
         if s == '' or s[:1] == '_':
             return LRNone()
+        # Comments were already stripped, so why does the next line exist? DTS
         s = Buffer(stripComments(s))
         types = []
         while len(s):
@@ -147,8 +169,13 @@ def parseTypeTag(s):
 WHITESPACE = ' ,\t'
         
 def parseSingleType(s):
-    """Parse a single type at the beginning of a type string."""
+    """Parse a single type at the beginning of a type string.
+    
+    s must be an instance of Buffer.
+    """
     s.strip(WHITESPACE)
+    # Consume one character to determine parsing function and then act that
+    # parsing function of the remaining Buffer.
     t = _parsers[s.get()](s)
     s.strip(WHITESPACE)
     return t
@@ -185,7 +212,7 @@ def parseUnits(s):
 
 # a registry of types and type functions that can determine
 # the LabRAD type of python data
-_types = {}
+_types = {} # python class -> LabRAD type
 
 def registerType(cls, t):
     """Register the LabRAD type for a python class.
@@ -242,6 +269,7 @@ def getType(obj):
     raise TypeError("No LabRAD type for: %r." % obj)
 
 def isType(obj, tag):
+    """Returns True if type of obj is equal to or more specific than tag."""
     return getType(obj) <= parseTypeTag(tag)
 
 
@@ -249,7 +277,11 @@ def isType(obj, tag):
 
 def unflatten(s, t, endianness='>'):
     """Unflatten labrad data into python data, given a prototype t.
-
+    
+    s - string or Buffer: data to be unflattened.
+    t - string or LRType subclass: the prototype. If string this is a LabRAD
+        type tag.
+    
     The prototype can be a labrad type tag or a prototype object
     created the parseTypeTag function.  At present, the default
     unflatteners are called at each stage, according to t.
