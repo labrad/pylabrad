@@ -577,6 +577,17 @@ class LRTime(LRType, Singleton):
 
 registerType(dt, LRTime())
 
+class LRFloat(LRType, Singleton):
+    tag = 'f'
+    width = 8
+    
+    def __unflatten__(self, s, endianness):
+        return unpack(endianness + 'd', s.get(8)[0])
+    
+    def __flatten__(self, f, endianness):
+        return pack(endianness + 'd', f)
+
+registerType(float, LRFloat)
 
 class LRValue(LRType):
     """Represents the type of a real number that carries units."""
