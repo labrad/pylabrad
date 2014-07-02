@@ -296,7 +296,7 @@ def unflatten(s, t, endianness='>'):
 # a registry of flattener functions that can convert python data
 # into LabRAD data, keyed on the python class that they can accept
 
-def flatten(obj, types=[], endianness='>'):
+def flatten(obj, types=None, endianness='>'):
     """Flatten python data into labrad data.
 
     Flatten returns a tuple of (flattened string, type object).  The
@@ -307,11 +307,13 @@ def flatten(obj, types=[], endianness='>'):
     accepted types are provided, flatten will produce data of the first
     compatible type, and will fail if none of the types are compatible.
 
-    If not types are provided, we first check to see if the object has
+    If no types are provided, we first check to see if the object has
     an __lrflatten__ method, in which case it will be called.  Then we
     check the registry of flattening functions, to see whether one exists
     for the object type, or a superclass.
     """
+    if types is None:
+        types = []
     if hasattr(obj, '__lrflatten__'):
         return obj.__lrflatten__(endianness)
 
