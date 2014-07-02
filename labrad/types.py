@@ -245,7 +245,17 @@ def typeFunc(cls):
     return register
 
 def getType(obj):
-    """Get LabRAD type of python data."""
+    """
+    Get LabRAD type of python data.
+    
+    We try the following ways of finding of finding a suitible type, in order:
+    
+    obj.__lrtype__()
+    _types[type(obj)]
+    _typeFuncs[type(obj)](obj)
+    _typeFuncs[superclasses of obj](obj)
+    """
+    
     if hasattr(obj, '__lrtype__'):
         return obj.__lrtype__()
 
@@ -298,7 +308,7 @@ def unflatten(s, t, endianness='>'):
 
 def flatten(obj, types=None, endianness='>'):
     """Flatten python data into labrad data.
-
+    
     Flatten returns a tuple of (flattened string, type object).  The
     type object can be converted into a type tag by calling str(typeobj).
 
@@ -306,7 +316,12 @@ def flatten(obj, types=None, endianness='>'):
     type tags (str) or type objects as created by parseTypeTag.  If
     accepted types are provided, flatten will produce data of the first
     compatible type, and will fail if none of the types are compatible.
-
+    
+    If not types are provided, we first check to see if the object has
+    an __lrflatten__ method, in which case it is used. Then, we check
+    the registry of flattening functions to see whether one exists for the
+    object's type, or one of its superclasses.
+    
     If no types are provided, we first check to see if the object has
     an __lrflatten__ method, in which case it will be called.  Then we
     check the registry of flattening functions, to see whether one exists
