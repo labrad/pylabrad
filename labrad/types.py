@@ -595,6 +595,7 @@ class LRTime(LRType, Singleton):
 
 registerType(dt, LRTime())
 
+'''
 class LRFloat(LRType, Singleton):
     tag = 'f'
     width = 8
@@ -606,6 +607,7 @@ class LRFloat(LRType, Singleton):
         return pack(endianness + 'd', f)
 
 registerType(float, LRFloat)
+'''
 
 class LRValue(LRType):
     """Represents the type of a real number that carries units."""
