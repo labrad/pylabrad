@@ -647,6 +647,8 @@ class LRValue(LRType):
             return True
         if self.unit is None:
             return False
+        if not U.Unit(self.unit).isCompatible(U.Unit(other.unit)):
+            return False
         return True
 
     def isFullySpecified(self):
