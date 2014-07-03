@@ -312,11 +312,13 @@ def flatten(obj, types=None, endianness='>'):
     
     Flatten returns a tuple of (flattened string, type object).  The
     type object can be converted into a type tag by calling str(typeobj).
-
-    A type or list of accepted types can be provided in the form of
-    type tags (str) or type objects as created by parseTypeTag.  If
-    accepted types are provided, flatten will produce data of the first
-    compatible type, and will fail if none of the types are compatible.
+    
+    We first try obj.__lrflatten__(endianness). If that fails we go to the list
+    of suggested types in order until one of them works. If none of them work,
+    we raise FlatteningError.
+    
+    Suggested types can be provided in the form of type tags (strings) or type
+    objects as created by parseTypeTag.
     
     If not types are provided, we first check to see if the object has
     an __lrflatten__ method, in which case it is used. Then, we check
