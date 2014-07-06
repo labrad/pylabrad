@@ -139,7 +139,11 @@ class WithUnit(object):
         #    return 1.0 * value # make sure return value is at least a float
         cls = cls._findClass(type(value), unit)
         
-        inst = super(WithUnit, cls).__new__(cls, value)
+        unit = Unit(unit)
+        if unit and unit.isDimensionless():
+            return cls._numType(value) * unit.conversionFactorTo('')
+        inst = super(WithUnit, cls).__new__(cls)
+        inst.__value = inst._numType(value)
         inst.unit = Unit(unit)
         return inst
         
@@ -160,7 +164,7 @@ class WithUnit(object):
         
     @property
     def value(self):
-        return self.__class__._numType(self)
+        return self.__value
 
     @property
     def units(self):
@@ -210,6 +214,8 @@ class WithUnit(object):
         if not isinstance(other, WithUnit):
             if self.unit is None:
                 return self.value == other
+            if self.value == 0:
+                return other==0
             return False
         return self.__cmp__(other) == 0
 
@@ -217,8 +223,15 @@ class WithUnit(object):
         return not self.__eq__(other)
 
     def __cmp__(self, other):
+        '''
+        This just returns the difference between self and other.
+        We don't call cmp() on it to convert to +/-1 or 0 because
+        that doesn't work on complex numbers, even if we only want
+        to test for equality.
+        '''
         diff = self._sum(other, 1, -1)
-        return cmp(diff.value, 0)
+        return diff.value 
+        # return cmp(diff.value, 0)
     
     def __lt__(self, other):
         return self.__cmp__(other) < 0
@@ -301,6 +314,17 @@ class WithUnit(object):
     def __nonzero__(self):
         return self.value != 0
 
+    def __hash__(self):
+        '''
+        Not sure if using Value as a dictionary key makes sense, but
+        here it is anyway.  We convert to base units so that 1*km and
+        1000*m hash to the same value.  They also hash to the same
+        value as 1000*V, but that is OK.  Note that this is still kind
+        of messed up: 1001*m != 1.001*km because the latter is not an
+        exact number.  C'est la floating point.
+        '''
+        return hash(self.inBaseUnits().value)
+
     def inUnitsOf(self, unit):
         """
         Express the quantity in different units. If one unit is
@@ -371,7 +395,7 @@ class WithUnit(object):
     def sqrt(self):
         return pow(self, Ratio(1,2))
 
-class Value(WithUnit, float):
+class Value(WithUnit):
     _numType = float
     
     def do_copy(self):
@@ -389,7 +413,7 @@ WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
 WithUnit._numericTypes[long] = Value
 
-class Complex(WithUnit, complex):
+class Complex(WithUnit):
     _numType = complex
     
     def do_copy(self):

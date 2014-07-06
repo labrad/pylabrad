@@ -58,5 +58,13 @@ class LabradUnitsTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             nogood = 1*s > 1*kg
 
+    def testComplex(self):
+        V = units.Unit('V')
+
+        self.assertTrue(1j*V != 1.0*V)
+        self.assertTrue(1j*V == 1.0j*V)
+        self.assertTrue(1.0*V == (1+0j)*V)
+        with self.assertRaises(TypeError): _ = 1.0j*V < 2j*V
+
 if __name__ == "__main__":
     unittest.main()
