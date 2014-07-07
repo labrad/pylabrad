@@ -401,14 +401,15 @@ class WithUnit(object):
     def __deepcopy__(self, memo):
         return self
 
+    def __getitem__(self, unit):
+        """Return value of physical quantity expressed in new units."""
+        return self.inUnitsOf(unit).value
+
     __array_priority__ = 15
         
 class Value(WithUnit):
     _numType = float
-    
-    def __getitem__(self, unit):
-        """Return value of physical quantity expressed in new units."""
-        return self.inUnitsOf(unit).value
+
     def __iter__(self):
         raise TypeError("'Value' object is not iterable")
 
@@ -418,9 +419,7 @@ WithUnit._numericTypes[long] = Value
 
 class Complex(WithUnit):
     _numType = complex
-    def __getitem__(self, unit):
-        """Return value of physical quantity expressed in new units."""
-        return self.inUnitsOf(unit).value
+
     def __iter__(self):
         raise TypeError("'Complex' object is not iterable")
 WithUnit._numericTypes[complex] = Complex
@@ -431,7 +430,7 @@ class ValueArray(WithUnit):
     def __getitem__(self, unit):
         if isinstance(unit, (str, Unit)):
             """Return value of physical quantity expressed in new units."""
-            return self.inUnitsOf(unit).value
+            return super(ValueArray, self).__getitem__(unit)
         else:
             idx = unit
             return WithUnit(self.value[idx], self.unit)
@@ -440,11 +439,14 @@ class ValueArray(WithUnit):
         self.value[key] = value.inUnitsOf(self.unit).value
             
     def __copy__(self):
+        # Numpy arrays are not immutable so we have to 
+        # make a real copy
         return WithUnit(self.value.copy(), self.unit)
     def __deepcopy__(self, memo):
         return self.__copy__()
 
 WithUnit._numericTypes[np.ndarray] = ValueArray
+WithUnit._numericTypes[list] = ValueArray
 
 # add support for numeric types returned by most numpy/scipy functions
 try:
