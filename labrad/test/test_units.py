@@ -21,6 +21,7 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.abspath('../..'))
 from labrad import units
 ValueArray = units.ValueArray
+Value = units.Value
 
 class LabradUnitsTests(unittest.TestCase):
     def testParsing(self):
@@ -29,7 +30,13 @@ class LabradUnitsTests(unittest.TestCase):
         # division
         # powers
         pass
-        
+    
+    def testNullUnits(self):
+            expected = Value(2.0, '')
+            aliases = [Value(2.0, None)]
+            for alias in aliases:
+                self.assertEqual(alias, expected)
+    
     def testArithmetic(self):
         m = units.Unit('m')
         kg = units.Unit('kg')
@@ -47,30 +54,27 @@ class LabradUnitsTests(unittest.TestCase):
     def test_valueArray(self):
         equal_tests = [
             # Slicing
-            (np.all(ValueArray([1,2,3], 'm')[0:2] == ValueArray([1,2], 'm')),
-                True),
+            (ValueArray([1,2,3], 'm')[0:2], ValueArray([1,2], 'm')),
             # Cast to unit
-            (np.all(ValueArray([1.2, 4, 5], 'm')['m'] == np.array([1.2, 4, 5])),
-                True),
+            (ValueArray([1.2, 4, 5], 'm')['m'], np.array([1.2, 4, 5])),
             # Addition and subtraction of compatible units
-            (np.all(ValueArray([3,4], 'm') + ValueArray([100, 200], 'cm')== \
-                ValueArray([4, 6], 'm')), True),
-            (np.all(ValueArray([2, 3, 4], 'm') - \
-                    ValueArray([100, 200, 300], 'cm') ==  \
-                    ValueArray([1, 1, 1], 'm')), True),
+            (ValueArray([3,4], 'm') + ValueArray([100, 200], 'cm'),
+             ValueArray([4, 6], 'm')),
+            (ValueArray([2, 3, 4], 'm') - ValueArray([100, 200, 300], 'cm'),
+             ValueArray([1, 1, 1], 'm')),
             # Division with units remaining
-            (np.all(ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 's') == \
-                ValueArray([3, 2, 1], 'm/s')), True),
+            (ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 's'),
+             ValueArray([3, 2, 1], 'm/s')),
             # Division with no units remaining
-            (np.all(ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 'm') == \
-                ValueArray([3, 2, 1], '')), True),
+            (ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 'm'),
+             ValueArray([3, 2, 1], '')),
             # Powers
-            (np.all(ValueArray([2, 3], 'm')**2 == ValueArray([4, 9], 'm^2')), \
-                True)
+            (ValueArray([2, 3], 'm')**2, ValueArray([4, 9], 'm^2'))
         ]
         not_equal_tests = []
         for a,b in equal_tests:
-            self.assertEqual(a, b)
+            self.assertTrue(np.all(a==b))
+            
         for a,b in not_equal_tests:
             self.assertNotEqual(a, b)
     
@@ -97,6 +101,7 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue(0*s == 0)
         self.assertTrue(4*s > 0)
         with self.assertRaises(TypeError): _ = 4*s > 1
+    
     def testComplex(self):
         V = units.Unit('V')
 
