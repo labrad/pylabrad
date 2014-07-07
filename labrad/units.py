@@ -62,7 +62,7 @@ from math import floor, pi
 
 from labrad import grammar
 from labrad.ratio import Ratio
-
+import numpy as np
 # Dictionary containing numbers
 #
 # These objects are meant to be used like arrays with generalized
@@ -143,7 +143,7 @@ class WithUnit(object):
         if unit and unit.isDimensionless():
             return cls._numType(value) * unit.conversionFactorTo('')
         inst = super(WithUnit, cls).__new__(cls)
-        inst.__value = inst._numType(value)
+        inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
         return inst
         
@@ -394,40 +394,56 @@ class WithUnit(object):
         
     def sqrt(self):
         return pow(self, Ratio(1,2))
+    
+    def __copy__(self):
+        return self
+    
+    def __deepcopy__(self, memo):
+        return self
 
+    __array_priority__ = 15
+        
 class Value(WithUnit):
     _numType = float
-    
-    def do_copy(self):
-        return self
-    
-    def do_deepcopy(self):
-        return self
     
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
         return self.inUnitsOf(unit).value
     def __iter__(self):
         raise TypeError("'Value' object is not iterable")
+
 WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
 WithUnit._numericTypes[long] = Value
 
 class Complex(WithUnit):
     _numType = complex
-    
-    def do_copy(self):
-        return self
-    
-    def do_deepcopy(self):
-        return self
-    
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
         return self.inUnitsOf(unit).value
     def __iter__(self):
         raise TypeError("'Complex' object is not iterable")
 WithUnit._numericTypes[complex] = Complex
+
+
+class ValueArray(WithUnit):
+    _numType = np.array # Regular ndarray constructor doesn't work
+    def __getitem__(self, unit):
+        if isinstance(unit, (str, Unit)):
+            """Return value of physical quantity expressed in new units."""
+            return self.inUnitsOf(unit).value
+        else:
+            idx = unit
+            return WithUnit(self.value[idx], self.unit)
+
+    def __setitem__(self, key, value):
+        self.value[key] = self.value.inUnitsOf(self.unit).value
+    def __copy__(self):
+        return WithUnit(self.value.copy(), self.unit)
+    def __deepcopy__(self, memo):
+        return self.__copy__()
+
+WithUnit._numericTypes[np.ndarray] = ValueArray
 
 # add support for numeric types returned by most numpy/scipy functions
 try:
@@ -452,6 +468,8 @@ class Unit(object):
     and the exponentials of each of the SI base units that enter into
     it. Units can be multiplied, divided, and raised to rational powers.
     """
+
+    __array_priority__ = 15
     def __new__(cls, *args, **kw):
         """Construct a new unit instance.
         
@@ -487,10 +505,10 @@ class Unit(object):
         inst._init(*args, **kw)
         return inst
     
-    def do_copy(self):
+    def __copy__(self):
         return self
     
-    def do_deepcopy(self, memo):
+    def __deepcopy__(self, memo):
         return self
     
     @classmethod
