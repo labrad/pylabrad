@@ -15,6 +15,10 @@
 from datetime import datetime
 import unittest
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath('../..'))
+
 from labrad import types as T
 from labrad import units as U
 
@@ -188,3 +192,6 @@ class LabradTypesTests(unittest.TestCase):
         a = np.array([1,2,3,4,5])
         b = T.unflatten(*T.flatten(a)).asarray
         self.assertTrue(np.all(a == b))
+
+if __name__ == "__main__":
+    unittest.main()
