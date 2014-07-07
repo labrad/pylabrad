@@ -140,8 +140,8 @@ class WithUnit(object):
         cls = cls._findClass(type(value), unit)
         
         unit = Unit(unit)
-        if unit and unit.isDimensionless():
-            return cls._numType(value) * unit.conversionFactorTo('')
+        #if unit and unit.isDimensionless():
+        #    return cls._numType(value) * unit.conversionFactorTo('')
         inst = super(WithUnit, cls).__new__(cls)
         inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
@@ -212,12 +212,18 @@ class WithUnit(object):
 
     def __eq__(self, other):
         if not isinstance(other, WithUnit):
+            if self.isDimensionless():
+                return self[''] == other
             if self.unit is None:
                 return self.value == other
             if self.value == 0:
                 return other==0
             return False
-        return self.__cmp__(other) == 0
+        else:
+            if self.isCompatible(other.unit):
+                return self.__cmp__(other) == 0
+            else:
+                return False
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -272,7 +278,9 @@ class WithUnit(object):
             return WithUnit(self.value / other.value,
                             self.unit / other.unit)
         return WithUnit(self.value / other, self.unit)
-        
+
+    __truediv__ = __div__
+
     def __rdiv__(self, other):
         if isinstance(other, Unit):
             return WithUnit(self.value, other / self.unit)
@@ -287,6 +295,7 @@ class WithUnit(object):
                             other.unit / self.unit)
         return WithUnit(other / self.value, pow(self.unit, -1))
 
+    __rtruediv__ = __rdiv__
     def __pow__(self, other):
         if isinstance(other, (WithUnit, Unit)) and not other.isDimensionless():
             raise TypeError('Exponents must be dimensionless')
@@ -410,6 +419,8 @@ class WithUnit(object):
 class Value(WithUnit):
     _numType = float
 
+    def __float__(self):
+        return self['']
     def __iter__(self):
         raise TypeError("'Value' object is not iterable")
 
@@ -420,6 +431,8 @@ WithUnit._numericTypes[long] = Value
 class Complex(WithUnit):
     _numType = complex
 
+    def __complex__(self):
+        return self['']
     def __iter__(self):
         raise TypeError("'Complex' object is not iterable")
 WithUnit._numericTypes[complex] = Complex
