@@ -20,6 +20,7 @@ import os
 sys.path.insert(0, os.path.abspath('../..'))
 from labrad import units
 ValueArray = units.ValueArray
+Value = units.Value
 
 class LabradUnitsTests(unittest.TestCase):
     def testParsing(self):
@@ -28,7 +29,13 @@ class LabradUnitsTests(unittest.TestCase):
         # division
         # powers
         pass
-        
+    
+    def testNullUnits(self):
+            expected = Value(2.0, '')
+            aliases = [Value(2.0, None)]
+            for alias in aliases:
+                self.assertEqual(alias, expected)
+    
     def testArithmetic(self):
         m = units.Unit('m')
         kg = units.Unit('kg')
@@ -93,6 +100,7 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue(0*s == 0)
         self.assertTrue(4*s > 0)
         with self.assertRaises(TypeError): _ = 4*s > 1
+    
     def testComplex(self):
         V = units.Unit('V')
 
