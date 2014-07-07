@@ -437,7 +437,8 @@ class ValueArray(WithUnit):
             return WithUnit(self.value[idx], self.unit)
 
     def __setitem__(self, key, value):
-        self.value[key] = self.value.inUnitsOf(self.unit).value
+        self.value[key] = value.inUnitsOf(self.unit).value
+            
     def __copy__(self):
         return WithUnit(self.value.copy(), self.unit)
     def __deepcopy__(self, memo):
