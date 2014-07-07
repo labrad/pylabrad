@@ -17,7 +17,8 @@ import numpy as np
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath('../..'))
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.abspath('../..'))
 from labrad import units
 ValueArray = units.ValueArray
 
