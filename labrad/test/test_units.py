@@ -54,10 +54,13 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue(10*ms <= 1*s, '10*ms <= 1*s')
         self.assertTrue(10000*ms > 1*s, '10000*ms < 1*s')
         self.assertTrue(10000*ms >= 1*s, '10000*ms <= 1*s')
-        
         with self.assertRaises(TypeError):
             nogood = 1*s > 1*kg
 
+        self.assertFalse(1*s == 1*kg)
+        self.assertTrue(0*s == 0)
+        self.assertTrue(4*s > 0)
+        with self.assertRaises(TypeError): _ = 4*s > 1
     def testComplex(self):
         V = units.Unit('V')
 
