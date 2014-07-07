@@ -13,8 +13,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import unittest
+import numpy as np
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath('../..'))
 from labrad import units
+ValueArray = units.ValueArray
 
 class LabradUnitsTests(unittest.TestCase):
     def testParsing(self):
@@ -28,7 +33,7 @@ class LabradUnitsTests(unittest.TestCase):
         m = units.Unit('m')
         kg = units.Unit('kg')
         km = units.Unit('km')
-
+        
         self.assertEqual(units.Value(5.0, None)*m, 5.0*m)
         
         # addition
@@ -37,7 +42,37 @@ class LabradUnitsTests(unittest.TestCase):
         with self.assertRaises(TypeError): _ = 1.0*kg + 2.0
         self.assertAlmostEqual(1.0*km/m + 5.0, 1005)
         self.assertNotEqual(1.0*kg, None)
-        
+    
+    def test_valueArray(self):
+        equal_tests = [
+            # Slicing
+            (np.all(ValueArray([1,2,3], 'm')[0:2] == ValueArray([1,2], 'm')),
+                True),
+            # Cast to unit
+            (np.all(ValueArray([1.2, 4, 5], 'm')['m'] == np.array([1.2, 4, 5])),
+                True),
+            # Addition and subtraction of compatible units
+            (np.all(ValueArray([3,4], 'm') + ValueArray([100, 200], 'cm')== \
+                ValueArray([4, 6], 'm')), True),
+            (np.all(ValueArray([2, 3, 4], 'm') - \
+                    ValueArray([100, 200, 300], 'cm') ==  \
+                    ValueArray([1, 1, 1], 'm')), True),
+            # Division with units remaining
+            (np.all(ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 's') == \
+                ValueArray([3, 2, 1], 'm/s')), True),
+            # Division with no units remaining
+            (np.all(ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 'm') == \
+                ValueArray([3, 2, 1], '')), True),
+            # Powers
+            (np.all(ValueArray([2, 3], 'm')**2 == ValueArray([4, 9], 'm^2')), \
+                True)
+        ]
+        not_equal_tests = []
+        for a,b in equal_tests:
+            self.assertEqual(a, b)
+        for a,b in not_equal_tests:
+            self.assertNotEqual(a, b)
+    
     def testNegativePowers(self):
         self.assertEqual(str(units.Unit('1/s')), 's^-1')
         self.assertEqual(str(units.Unit('1/s^1/2')), 's^-1/2')
