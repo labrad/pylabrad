@@ -52,31 +52,23 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertNotEqual(1.0*kg, None)
     
     def test_valueArray(self):
-        equal_tests = [
-            # Slicing
-            (ValueArray([1,2,3], 'm')[0:2], ValueArray([1,2], 'm')),
-            # Cast to unit
-            (ValueArray([1.2, 4, 5], 'm')['m'], np.array([1.2, 4, 5])),
-            # Addition and subtraction of compatible units
-            (ValueArray([3,4], 'm') + ValueArray([100, 200], 'cm'),
-             ValueArray([4, 6], 'm')),
-            (ValueArray([2, 3, 4], 'm') - ValueArray([100, 200, 300], 'cm'),
-             ValueArray([1, 1, 1], 'm')),
-            # Division with units remaining
-            (ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 's'),
-             ValueArray([3, 2, 1], 'm/s')),
-            # Division with no units remaining
-            (ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 'm'),
-             ValueArray([3, 2, 1], '')),
-            # Powers
-            (ValueArray([2, 3], 'm')**2, ValueArray([4, 9], 'm^2'))
-        ]
-        not_equal_tests = []
-        for a,b in equal_tests:
-            self.assertTrue(np.all(a==b))
-            
-        for a,b in not_equal_tests:
-            self.assertNotEqual(a, b)
+        # Slicing
+        self.assertTrue((ValueArray([1,2,3], 'm')[0:2] == ValueArray([1,2], 'm')).all())
+        # Cast to unit
+        self.assertTrue((ValueArray([1.2, 4, 5], 'm')['m'] == np.array([1.2, 4, 5])).all())
+        # Addition and subtraction of compatible units
+        self.assertTrue((ValueArray([3,4], 'm') + ValueArray([100, 200], 'cm') == 
+                         ValueArray([4, 6], 'm')).all())
+        self.assertTrue((ValueArray([2, 3, 4], 'm') - ValueArray([100, 200, 300], 'cm') ==
+                         ValueArray([1, 1, 1], 'm')).all())
+        # Division with units remaining
+        self.assertTrue((ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 's') ==
+                         ValueArray([3, 2, 1], 'm/s')).all())
+        # Division with no units remaining
+        self.assertTrue((ValueArray([3, 4, 5], 'm') / ValueArray([1, 2, 5], 'm') ==
+                         ValueArray([3, 2, 1], '')).all())
+        # Powers
+        self.assertTrue((ValueArray([2, 3], 'm')**2 == ValueArray([4, 9], 'm^2')).all())
     
     def testNegativePowers(self):
         self.assertEqual(str(units.Unit('1/s')), 's^-1')
