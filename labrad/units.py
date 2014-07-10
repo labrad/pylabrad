@@ -52,8 +52,6 @@ The version included with LabRAD has been slightly changed:
       
 """
 
-import struct
-import labrad.types as labradTypes
 from math import floor, pi
 #try:
 #    from numpy import array, ndarray
