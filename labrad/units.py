@@ -52,6 +52,8 @@ The version included with LabRAD has been slightly changed:
       
 """
 
+import struct
+import labrad.types as labradTypes
 from math import floor, pi
 #try:
 #    from numpy import array, ndarray
@@ -509,8 +511,10 @@ class ValueArray(WithUnit):
         # Numpy arrays are not immutable so we have to 
         # make a real copy
         return WithUnit(self._value.copy(), self.unit)
+    
     def __deepcopy__(self, memo):
         return self.__copy__()
+
 
 WithUnit._numericTypes[np.ndarray] = ValueArray
 WithUnit._numericTypes[list] = ValueArray
