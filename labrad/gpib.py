@@ -210,6 +210,12 @@ class ManagedDeviceServer(LabradServer):
     name = 'Generic Device Server'
     deviceManager = 'Device Manager'
     
+    # Default device name and wrapper for backwards compatibility with servers
+    # written before we supported multiple different device types, and which
+    # do not explicitly set deviceWrapper and/or deviceName.
+    deviceName = 'Generic Device'
+    deviceWrapper = DeviceWrapper
+    
     messageID = 21436587
 
     def __init__(self):
@@ -456,7 +462,10 @@ class GPIBManagedServer(ManagedDeviceServer):
     """
     name = 'Generic GPIB Device Server'
     deviceManager = 'GPIB Device Manager'
-
+    
+    deviceName = 'Generic GPIB Device'
+    deviceWrapper = GPIBDeviceWrapper
+    
     # server settings
 
     @setting(1001, 'GPIB Write', string='s', timeout='v[s]', returns='')
