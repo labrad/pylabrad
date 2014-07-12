@@ -31,18 +31,12 @@ class LabradUnitsTests(unittest.TestCase):
         # powers
         pass
     
-    def testNullUnits(self):
-            expected = Value(2.0, '')
-            aliases = [Value(2.0, None)]
-            for alias in aliases:
-                self.assertEqual(alias, expected)
-    
     def testArithmetic(self):
         m = units.Unit('m')
         kg = units.Unit('kg')
         km = units.Unit('km')
         
-        self.assertEqual(units.Value(5.0, None)*m, 5.0*m)
+        #self.assertEqual(units.Value(5.0, None)*m, 5.0*m)
         
         # addition
         self.assertEqual(1.0*kg + 0.0, 1.0*kg)

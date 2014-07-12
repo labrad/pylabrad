@@ -139,7 +139,7 @@ class WithUnit(object):
         unit = Unit(unit)
         cls = cls._findClass(type(value), unit)
         if unit and unit.isDimensionless():
-            return cls(value * unit.conversionFactorTo(''))
+            return cls(value) * unit.conversionFactorTo('')
         inst = super(WithUnit, cls).__new__(cls)
         inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
@@ -912,7 +912,7 @@ WithUnit._numericTypes[DimensionlessComplex] = Complex
 class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
     _numType = staticmethod(np.asarray) # The is a 'copy constructor' used in ._value()
     def __new__(cls, value):
-        return np.array(value*1.0).view(cls)
+        return np.array(value).view(cls)*1.0
 WithUnit._dimensionlessTypes[np.ndarray] = DimensionlessArray
 WithUnit._dimensionlessTypes[list] = DimensionlessArray
 WithUnit._numericTypes[DimensionlessArray] = ValueArray
