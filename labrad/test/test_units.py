@@ -96,5 +96,18 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue(1.0*V == (1+0j)*V)
         with self.assertRaises(TypeError): _ = 1.0j*V < 2j*V
 
+    def testDimensionless(self):
+        ns = units.Unit('ns')
+        GHz = units.Unit('GHz')
+
+        self.assertTrue(isinstance((5*ns)*(5*GHz), float))
+        self.assertTrue(hasattr((5*ns)*(5*GHz), 'inUnitsOf'))
+        self.assertTrue( ((5*ns)*(5*GHz)).isDimensionless() )
+        self.assertTrue( (5*ns)*(5*GHz) < 50 )
+        self.assertTrue(isinstance(units.WithUnit(5.0, ''), units.DimensionlessFloat))
+        
+        self.assertTrue((5*ns*5j*GHz) == 25j)
+        self.assertTrue((5*ns*5j*GHz).isDimensionless())
+
 if __name__ == "__main__":
     unittest.main()

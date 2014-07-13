@@ -139,7 +139,7 @@ class WithUnit(object):
         unit = Unit(unit)
         cls = cls._findClass(type(value), unit)
         if unit and unit.isDimensionless():
-            return cls(value) * unit.conversionFactorTo('')
+            return cls(cls(value) * unit.conversionFactorTo(''))
         inst = super(WithUnit, cls).__new__(cls)
         inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
