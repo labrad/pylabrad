@@ -690,21 +690,6 @@ class LRValue(LRType):
 
 registerTypeFunc((float, Value), LRValue.__lrtype__)
 
-class LRValueArray(LRType):
-    """
-    Types class for ValueArray
-    
-    This only exists because we can't import types from units :(
-    """
-    def __init__(self, unit, depth):
-        self.unit = unit
-        self.depth = depth
-    
-    def __str__(self):
-        pass
-    
-#registerTypeFunc((ValueArray,), ValueArray.
-
 
 class LRComplex(LRValue):
     """Represents the type of a complex number that carries units."""
