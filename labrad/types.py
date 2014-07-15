@@ -1019,8 +1019,14 @@ class LRList(LRType):
 
     def __unflatten__(self, s, endianness):
         data = s.get(self.__width__(Buffer(s), endianness))
-        return LazyList(data, self, endianness)
-    
+        elem = self.elem
+        arrayTypes = [LRValue(), LRComplex(), LRInt(), LRWord(), LRBool()]
+        for t in arrayTypes:
+            if elem <= t:
+                return self.__unflattenAsArray__(data, endianness)
+        else:
+            return LazyList(data, self, endianness)
+        
         """Unflatten to nested python list."""
         # get list dimensions
         n = self.depth
@@ -1034,7 +1040,38 @@ class LRList(LRType):
             else:
                 return [unflattenNDlist(s, dims[1:]) for _ in xrange(dims[0])]
         return unflattenNDlist(s, dims)
+    
+    def __unflattenAsArray__(self, data, endianness):
+        """
+        Unflatten to numpy array.
         
+        This code is mostly copied from LazyList on 14 July 2014.
+        A useful pursuit would be to refactor the common bits.
+        """
+        n, elem = self.depth, self.elem
+        s = Buffer(data)
+        dims = unpack(endianness + ('i'*n), s.get(4*n))
+        size = np.prod(dims)
+        
+        def make(t, width):
+            sys_byte_order = '<' if sys.byteorder == 'little' else '>'
+            x = fromstring(s.get(size*width), dtype=dtype(t))
+            if endianness != sys_byte_order:
+                x.byteswap(True) # inplace
+            return x
+
+        if elem == LRBool(): a = make('u1', 1)
+        elif elem == LRInt(): a = make('i4', 4)
+        elif elem == LRWord(): a = make('u4', 4)
+        elif elem <= LRValue(): a = make('f8', 8)
+        elif elem <= LRComplex(): a = make('c16', 16)
+        else:
+            raise TypeError("Cannot make numpy array with %s"%(elem,))
+        a.shape = dims + a.shape[1:] # handle clusters as elements
+        if elem <= LRValue() and elem.unit is not None:
+            a = U.ValueArray(a, elem.unit)
+        return a
+    
     def __flatten__(self, L, endianness):
         """Flatten (nested) python list to LabRAD list.
 
