@@ -467,6 +467,8 @@ class ValueArray(WithUnit):
     def __deepcopy__(self, memo):
         return self.__copy__()
 
+    def allclose(self, other, *args, **kw):
+        return np.allclose(self._value, other[self.unit], *args, **kw)
 
 WithUnit._numericTypes[np.ndarray] = ValueArray
 WithUnit._numericTypes[list] = ValueArray
@@ -913,6 +915,9 @@ class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
     _numType = staticmethod(np.asarray) # The is a 'copy constructor' used in ._value()
     def __new__(cls, value):
         return np.array(value).view(cls)*1.0
+    def allclose(self, other, *args, **kw):
+        return np.allclose(self, other, *args, **kw)
+        
 WithUnit._dimensionlessTypes[np.ndarray] = DimensionlessArray
 WithUnit._dimensionlessTypes[list] = DimensionlessArray
 WithUnit._numericTypes[DimensionlessArray] = ValueArray
