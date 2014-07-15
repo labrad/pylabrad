@@ -61,8 +61,11 @@ value.isDimensionless() -> returns bool True if value's units reduce to '1'
 value.inUnitsOf() -> Convert units.  (5*m).inUnitsOf('mm') -> 5000*mm
 value.inBaseUnits() -> Convert to SI units.
 value['<unit>'] -> Return a floating point representation of value expressed
-		   in the specified units.  (5*MHz)['Hz'] -> 5000000.0
+		   in the specified units.  (5*MHz)['Hz'] -> 5000000.0.
+		   This coexists with indexing of ValueArrays.
 value.sqrt()	   Calculate the sqrt of value including the units.
+value.unit	   The Unit object represeting this Value's unit.
+value.units	   (note plural spelling): string representation of unit
 
 V. Dimensionless values
 
