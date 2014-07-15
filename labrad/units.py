@@ -456,6 +456,9 @@ class ValueArray(WithUnit):
             idx = unit
             return WithUnit(self._value[idx], self.unit)
 
+    def __len__(self):
+        return len(self._value)
+
     def __setitem__(self, key, value):
         self._value[key] = value.inUnitsOf(self.unit)._value
             
