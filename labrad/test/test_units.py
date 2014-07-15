@@ -31,18 +31,12 @@ class LabradUnitsTests(unittest.TestCase):
         # powers
         pass
     
-    def testNullUnits(self):
-            expected = Value(2.0, '')
-            aliases = [Value(2.0, None)]
-            for alias in aliases:
-                self.assertEqual(alias, expected)
-    
     def testArithmetic(self):
         m = units.Unit('m')
         kg = units.Unit('kg')
         km = units.Unit('km')
         
-        self.assertEqual(units.Value(5.0, None)*m, 5.0*m)
+        #self.assertEqual(units.Value(5.0, None)*m, 5.0*m)
         
         # addition
         self.assertEqual(1.0*kg + 0.0, 1.0*kg)
@@ -101,6 +95,19 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue(1j*V == 1.0j*V)
         self.assertTrue(1.0*V == (1+0j)*V)
         with self.assertRaises(TypeError): _ = 1.0j*V < 2j*V
+
+    def testDimensionless(self):
+        ns = units.Unit('ns')
+        GHz = units.Unit('GHz')
+
+        self.assertTrue(isinstance((5*ns)*(5*GHz), float))
+        self.assertTrue(hasattr((5*ns)*(5*GHz), 'inUnitsOf'))
+        self.assertTrue( ((5*ns)*(5*GHz)).isDimensionless() )
+        self.assertTrue( (5*ns)*(5*GHz) < 50 )
+        self.assertTrue(isinstance(units.WithUnit(5.0, ''), units.DimensionlessFloat))
+        
+        self.assertTrue((5*ns*5j*GHz) == 25j)
+        self.assertTrue((5*ns*5j*GHz).isDimensionless())
 
 if __name__ == "__main__":
     unittest.main()

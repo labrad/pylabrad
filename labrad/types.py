@@ -38,7 +38,7 @@ from itertools import chain, imap
 from operator import itemgetter
 import functools
 
-from labrad import units as U
+import labrad.units as U
 from labrad.units import Value, Complex
 
 try:
@@ -316,6 +316,9 @@ def flatten(obj, types=None, endianness='>'):
     We first try obj.__lrflatten__(endianness). If that fails we go to the list
     of suggested types in order until one of them works. If none of them work,
     we raise FlatteningError.
+    
+    XXX This is worthless without a specification of __lrflatten__'s
+    return signature.
     
     Suggested types can be provided in the form of type tags (strings) or type
     objects as created by parseTypeTag.
@@ -687,6 +690,21 @@ class LRValue(LRType):
 
 registerTypeFunc((float, Value), LRValue.__lrtype__)
 
+class LRValueArray(LRType):
+    """
+    Types class for ValueArray
+    
+    This only exists because we can't import types from units :(
+    """
+    def __init__(self, unit, depth):
+        self.unit = unit
+        self.depth = depth
+    
+    def __str__(self):
+        pass
+    
+#registerTypeFunc((ValueArray,), ValueArray.
+
 
 class LRComplex(LRValue):
     """Represents the type of a complex number that carries units."""
@@ -947,6 +965,9 @@ class LRList(LRType):
 
     @classmethod
     def __lrtype__(cls, L):
+        """
+        Return a type object for L.
+        """
         depth, temp = 1, L
         while len(temp) and isinstance(temp[0], list):
             depth, temp = depth+1, temp[0]
@@ -983,7 +1004,12 @@ class LRList(LRType):
         else:
             raise Exception("Can't flatten array of %s" % L.dtype)
         return cls(t, depth=len(L.shape))
-        
+    
+    @classmethod
+    def __lrtype_ValueArray__(cls, L):
+        t = LRValue(L.unit)
+        return cls(t, depth=len(L._value.shape))
+    
     def __le__(self, other):
         """Test whether this type is more specific than another.
 
@@ -1047,6 +1073,8 @@ class LRList(LRType):
                 L.aslist
         if useNumpy and isinstance(L, ndarray):
             return self.__flatten_array__(L, endianness)
+        if useNumpy and isinstance(L, U.ValueArray):
+            return self.__flatten_ValueArray__(L, endianness)
         if self.elem == LRAny():
             self.elem = self.__lrtype__(L).elem
         lengths = [None] * self.depth
@@ -1086,7 +1114,13 @@ class LRList(LRType):
             elems = imap(itemgetter(0), (flatten(i, endianness=endianness) for i in a.flat))
             return dims + ''.join(elems)
         return dims + a.tostring()
-        
+    
+    def __flatten_ValueArray__(self, va, endianness):
+        # Convert to appropriate unit and flatten as array
+        numericalData = va[self.elem.unit]
+        return self.__flatten_array__(numericalData, endianness)
+
+
 _known_dtypes = {
     LRBool: 'u1',
     LRInt: 'i4',
@@ -1098,6 +1132,7 @@ _known_dtypes = {
 registerTypeFunc(list, LRList.__lrtype__)
 if useNumpy:
     registerTypeFunc(ndarray, LRList.__lrtype_array__)
+    registerTypeFunc(U.ValueArray, LRList.__lrtype_ValueArray__)
 
 
 def nestedList(obj, n):

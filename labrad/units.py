@@ -130,73 +130,24 @@ class NumberDict(dict):
             new[key] = self[key] / other
         return new
 
-"""
-class WithDimensionlessUnit(object):
-    This is a funny class.  It is designed to be subclassed
-    along float, complex, or ndarray.  It provides a simplified
-    but compatible API as the WithUnit class, but only works
-    for dimensionless quantities.  The reason for this is what
-    to do with expressions like:
-
-    4. ns * 5. GHz
-    
-    Option 1: Return Value(20, '').  This is consistent, but annoying
-    because it won't work directly in contexts that expect a float.
-    i.e., sin(5*GHz * 2 * np.pi * 4*ns) raises an exception.  It is
-    possible to define a __float__() method, but that doesn't catch all
-    cases.
-
-    Option 2: return float(20.0).  This is convenient, but makes
-    writing generic code harder because the expected methods and
-    properties (._value, .inUnitsOf) don't exist.
-
-    Option 3: 
-    WithDimensionlessUnit(20.0).  This creates a subclass of float
-    that has the necessary methods and properties, but in all other
-    ways behaves like a float.
-
-    unit = Unit('')
-    _base_type = None
-
-    def __getitem__(self, idx):
-        if isinstance(idx, (str, unit)):
-            return self._value * self.unit.conversionFactorTo(unit)
-        else:
-            super(WithDimensionlessUnit, self).__getitem__(idx)
-    def inUnitsOf(self, unit):
-        if self.unit.conversionFactorTo(unit) != 1.0:
-            raise TypeError("Can't convert dimensionless to %s" % (unit,))
-        else:
-            return self
-
-    def inBaseUnits(self):
-        return self._value
-
-    @property
-    def value(self):
-        return self._base_type(self)
-    def isCompatible(self, unit):
-        return self.unit.isCompatible(unit)
-   """     
-
 class WithUnit(object):
     """Mixin class for adding units to numeric types."""
 
     def __new__(cls, value, unit=None):
-        #if unit is None:
-        #    return 1.0 * value # make sure return value is at least a float
-        cls = cls._findClass(type(value), unit)
-        
+        if unit is None:
+            raise RuntimeError("Cannot construct WithUnit with unit=None.  Use correct units, or use a float")
         unit = Unit(unit)
+        cls = cls._findClass(type(value), unit)
         if unit and unit.isDimensionless():
-            return cls._numType(value) * unit.conversionFactorTo('')
+            return cls(cls(value) * unit.conversionFactorTo(''))
         inst = super(WithUnit, cls).__new__(cls)
         inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
         return inst
         
     _numericTypes = {}
-        
+    _dimensionlessTypes = {}
+    
     @classmethod
     def _findClass(cls, numType, unit):
         """Find a class for a particular numeric type and unit.
@@ -205,7 +156,10 @@ class WithUnit(object):
         """
         # find class with units for this numeric type
         try:
-            cls = cls._numericTypes[numType]
+            if unit.isDimensionless():
+                cls = cls._dimensionlessTypes[numType]
+            else:
+                cls = cls._numericTypes[numType]
         except KeyError:
             raise TypeError('Cannot use units with instances of type %s' % (numType,))
         return cls
@@ -870,6 +824,98 @@ def convert(*args):
 
 _unit_table = {'': Unit(NumberDict(), 1., [0]*9, 0)}
 
+
+
+class WithDimensionlessUnit(object):
+    """
+    This is a funny class.  It is designed to be subclassed
+    along float, complex, or ndarray.  It provides a simplified
+    but compatible API as the WithUnit class, but only works
+    for dimensionless quantities.  The reason for this is what
+    to do with expressions like:
+
+    4. ns * 5. GHz
+    
+    Option 1: Return Value(20, '').  This is consistent, but annoying
+    because it won't work directly in contexts that expect a float.
+    i.e., sin(5*GHz * 2 * np.pi * 4*ns) raises an exception.  It is
+    possible to define a __float__() method, but that doesn't catch all
+    cases.
+
+    Option 2: return float(20.0).  This is convenient, but makes
+    writing generic code harder because the expected methods and
+    properties (._value, .inUnitsOf) don't exist.
+
+    Option 3: 
+    WithDimensionlessUnit(20.0).  This creates a subclass of float
+    that has the necessary methods and properties, but in all other
+    ways behaves like a float.
+
+    This implements option 3
+    """
+    __unit = Unit('') # All instances are dimensionless
+    def __new__(cls, value):
+        obj = super(WithDimensionlessUnit, cls).__new__(cls, value)
+        return obj
+
+    @property
+    def unit(self):
+        return self.__unit
+    @property
+    def _value(self):
+        return self._numType(self)
+    @property
+    def units(self):
+        return ''
+
+    def __getitem__(self, idx):
+        # getitem with a string tries to do unit conversion.  This is not normally
+        # particularly useful with dimensionless numbers, but WithUnits(3, '')['mm/m']
+        # will give you 3000.0.  If the index isn't a string, pass to the base class
+        # implementation
+        if isinstance(idx, (str, Unit)):
+            return self._value * self.unit.conversionFactorTo(idx)
+        else:
+            return super(WithDimensionlessUnit, self).__getitem__(idx)
+    def inUnitsOf(self, unit):
+        if self.unit.conversionFactorTo(unit) != 1.0:
+            raise TypeError("Can't convert dimensionless to %s (scale factor must be 1)" % (unit,))
+        else:
+            return self
+
+    def inBaseUnits(self):
+        return self
+
+    def isDimensionless(self):
+        return True
+
+    def isCompatible(self, unit):
+        return self.unit.isCompatible(unit)
+
+    def sqrt(self):
+        return self.__class__(sqrt(self._value))
+
+class DimensionlessFloat(WithDimensionlessUnit, float):
+   _numType = float
+WithUnit._dimensionlessTypes[float] = DimensionlessFloat
+WithUnit._dimensionlessTypes[int] = DimensionlessFloat
+WithUnit._dimensionlessTypes[long] = DimensionlessFloat
+WithUnit._dimensionlessTypes[numpy.float64] = DimensionlessFloat
+WithUnit._numericTypes[DimensionlessFloat] = Value
+
+class DimensionlessComplex(WithDimensionlessUnit, complex):
+    _numType = complex
+WithUnit._dimensionlessTypes[complex] = DimensionlessComplex
+WithUnit._dimensionlessTypes[numpy.complex128] = DimensionlessComplex
+WithUnit._numericTypes[DimensionlessComplex] = Complex
+
+class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
+    _numType = staticmethod(np.asarray) # The is a 'copy constructor' used in ._value()
+    def __new__(cls, value):
+        return np.array(value).view(cls)*1.0
+WithUnit._dimensionlessTypes[np.ndarray] = DimensionlessArray
+WithUnit._dimensionlessTypes[list] = DimensionlessArray
+WithUnit._numericTypes[DimensionlessArray] = ValueArray
 
 # SI unit definitions
 def _addUnit(name, factor, unit, comment='', label='', prefixable=False):

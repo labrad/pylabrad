@@ -105,6 +105,11 @@ class LabradTypesTests(unittest.TestCase):
             T.Complex(9+0j, ''),
             T.Complex(10+0j, 'GHz'),
 
+            # ValueArray
+            # This doesn't work yet because I haven't implemented unflattening
+            # *v['unit'] to ValueArray([...], unit).
+            # U.ValueArray([1,2,3], 'm'),
+
             # clusters
             (1, True, 'a'),
             ((1, 2), ('a', False)),
@@ -123,6 +128,11 @@ class LabradTypesTests(unittest.TestCase):
             #print data_in, T.flatten(data_in)
             data_out = T.unflatten(*T.flatten(data_in))
             self.assertEqual(data_in, data_out)
+
+        # Special case for ValueArray (because unflattening code is missing)
+        data_in = U.ValueArray([1,2,3], 'm')
+        data_out = T.unflatten(*T.flatten(data_in))
+        self.assertEqual(data_out, [U.Value(1, 'm'), U.Value(2, 'm'), U.Value(3, 'm')])
 
     def testTypeHints(self):
         """Test conversion to specified allowed types."""
@@ -171,6 +181,7 @@ class LabradTypesTests(unittest.TestCase):
         """
         tests = [
             (T.Value(5.0, 'ft'), ['v[m]'], 'v[ft]'),
+            (U.ValueArray([1,2,3], 'm'), ['*v[m]'], '*v[m]')
         ]
         for data, hints, tag in tests:
             self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
