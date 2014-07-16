@@ -622,6 +622,8 @@ class LRValue(LRType):
     width = 8
 
     def __init__(self, unit=None):
+        if isinstance(unit, U.Unit):
+            unit = str(unit)
         self.unit = unit
 
     def __str__(self):
