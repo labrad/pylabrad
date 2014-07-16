@@ -430,6 +430,9 @@ class LRType(object):
     def __lrtype__(cls, obj):
         return cls()
 
+    def __cmp__(self, other):
+        raise RuntimeError("Unreachable __cmp__ in LRValue")
+
     def __eq__(self, other):
         """Test whether this type is equal to another.
 
