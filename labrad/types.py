@@ -64,6 +64,7 @@ class Singleton(object):
             cls._inst = inst
         return inst
 
+
 # a registry of parsing functions, keyed by type tag
 _parsers = {} # type tag -> parse function
 
@@ -137,7 +138,6 @@ class Buffer(object):
     def index(self, char):
         """Find index of char in uncomsumed part of buffer."""
         return self.s.index(char, self.ofs)
-        
 
 
 # typetag parsing
@@ -168,7 +168,7 @@ def parseTypeTag(s):
         raise
 
 WHITESPACE = ' ,\t'
-        
+
 def parseSingleType(s):
     """Parse a single type at the beginning of a type string.
     
@@ -182,7 +182,7 @@ def parseSingleType(s):
     return t
 
 COMMENTS = re.compile('\{[^\{\}]*\}')
-    
+
 def stripComments(s):
     """Remove comments from a type tag.
 
@@ -995,7 +995,7 @@ class LRList(LRType):
     
     @classmethod
     def __lrtype_ValueArray__(cls, L):
-        t = LRValue(L.unit)
+        t = LRValue(str(L.unit))
         return cls(t, depth=len(L._value.shape))
     
     def __le__(self, other):
@@ -1097,6 +1097,9 @@ class LRList(LRType):
                 # Make sure it is unflattened so endian conversion happens
                 L.aslist
         if useNumpy and isinstance(L, ndarray):
+            if self.elem <= LRValue() and self.elem.unit is not None:
+                msg = "Can't flatten ndarray to %s"%(self,)
+                raise TypeError(msg)
             return self.__flatten_array__(L, endianness)
         if useNumpy and isinstance(L, U.ValueArray):
             return self.__flatten_ValueArray__(L, endianness)
