@@ -137,6 +137,8 @@ class WithUnit(object):
         if unit is None:
             raise RuntimeError("Cannot construct WithUnit with unit=None.  Use correct units, or use a float")
         unit = Unit(unit)
+        if isinstance(value, WithUnit): # This is called from Unit * Value and friends
+            return value*unit
         cls = cls._findClass(type(value), unit)
         if unit and unit.isDimensionless():
             return cls(cls(value) * unit.conversionFactorTo(''))
