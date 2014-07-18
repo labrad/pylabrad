@@ -672,9 +672,19 @@ class LRValue(LRType):
 
     @classmethod
     def __lrtype__(cls, v):
+        """
+        Get a LRValue instance for a python object.
+        
+        We handle the follwing types:
+            float -> LRValue('')
+            labrad.units.Value(unit) -> LRValue(str(unit))
+        """
         if isinstance(v, U.WithUnit):
             return cls(v.unit)
-        return cls(None)
+        elif isinstance(v, (float, U.DimensionlessFloat)):
+            return cls('')
+        else:
+            raise TypeError("No %s type for %s"%(cls, v))
 
     def __flatten__(self, v, endianness):
         v = self.__check_units__(v)
@@ -713,6 +723,14 @@ class LRComplex(LRValue):
         c = self.__check_units__(c)
         c = complex(c)
         return pack(endianness + 'dd', c.real, c.imag)
+
+    def __lrtype__(cls, c):
+        if isinstance(c, U.WithUnit):
+            return cls(c.unit)
+        elif isinstance(c, (complex, U.DimensionlessComplex)):
+            return cls('')
+        else:
+            raise TypeError("No %s type for %s"%(cls, c))
 
 registerTypeFunc((complex, Complex), LRComplex.__lrtype__)
 
@@ -989,7 +1007,7 @@ class LRList(LRType):
         elif L.dtype in ['>i4', '<i4']: t = LRInt()
         elif L.dtype in ['>u4', '<u4']: t = LRWord()
         elif L.dtype in ['>u8', '<u8']: t = LRWord()
-        elif L.dtype in ['>f8', '<f8']: t = LRValue()
+        elif L.dtype in ['>f8', '<f8']: t = LRValue('')
         elif L.dtype in ['>c16', '<c16']: t = LRComplex()
         else:
             raise Exception("Can't flatten array of %s" % L.dtype)
