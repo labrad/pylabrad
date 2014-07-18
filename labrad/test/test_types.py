@@ -20,10 +20,11 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath('../..'))
 
-from labrad import types as T
-from labrad import units as U
-Value = U.Value
-ValueArray = U.ValueArray
+import labrad.types as T
+import labrad.units as U
+
+from labrad.units import Value, ValueArray, Complex
+
 
 class LabradTypesTests(unittest.TestCase):
 
@@ -50,6 +51,9 @@ class LabradTypesTests(unittest.TestCase):
             '*_': T.LRList(),
             '*2b': T.LRList(T.LRBool(), depth=2),
             '*2_': T.LRList(depth=2),
+            '*2v[Hz]': T.LRList(T.LRValue('Hz'), depth=2),
+            '*3v': T.LRList(T.LRValue(), depth=3),
+            '*v[]': T.LRList(T.LRValue(''), depth=1),
 
             # unit types
             'v': T.LRValue(),
@@ -103,11 +107,11 @@ class LabradTypesTests(unittest.TestCase):
 
             # values
             5.0,
-            T.Value(6, ''),
-            T.Value(7, 'ms'),
+            Value(6, ''),
+            Value(7, 'ms'),
             8+0j,
-            T.Complex(9+0j, ''),
-            T.Complex(10+0j, 'GHz'),
+            Complex(9+0j, ''),
+            Complex(10+0j, 'GHz'),
 
             # ValueArray and ndarray
             # These types should be invariant under flattening followed by
@@ -211,7 +215,7 @@ class LabradTypesTests(unittest.TestCase):
         tests = [
             # specialization without hints
             ([([],), ([5.0],)], '*(*v)'),
-            ([([],), ([T.Value(5, 'm')],)], '*(*v[m])'),
+            ([([],), ([Value(5, 'm')],)], '*(*v[m])'),
         ]
         for data, tag in tests:
             self.assertEqual(T.flatten(data)[1], T.parseTypeTag(tag))
@@ -224,7 +228,7 @@ class LabradTypesTests(unittest.TestCase):
         Basically, for purposes of flattening, a unit is a unit.
         """
         tests = [
-            (T.Value(5.0, 'ft'), ['v[m]'], 'v[ft]'),
+            (Value(5.0, 'ft'), ['v[m]'], 'v[ft]'),
             (U.ValueArray([1,2,3], 'm'), ['*v[m]'], '*v[m]')
         ]
         for data, hints, tag in tests:
