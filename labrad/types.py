@@ -724,6 +724,7 @@ class LRComplex(LRValue):
         c = complex(c)
         return pack(endianness + 'dd', c.real, c.imag)
 
+    @classmethod
     def __lrtype__(cls, c):
         if isinstance(c, U.WithUnit):
             return cls(c.unit)
