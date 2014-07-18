@@ -68,6 +68,60 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertEqual(str(units.Unit('1/s')), 's^-1')
         self.assertEqual(str(units.Unit('1/s^1/2')), 's^-1/2')
     
+    def testTypeConversions(self):
+        m = units.Unit('m')
+        V = units.Unit('V')
+        GHz = units.Unit('GHz')
+        x1 = 1.0*m
+        x2 = 5j*V
+        a = np.arange(10)*1.0
+        va = units.ValueArray(np.arange(10)*1.0, 'GHz')
+
+        # Unit times number
+        self.assertIsInstance(1.0*m, units.Value)
+        self.assertIsInstance(1*m, units.Value)
+        self.assertIsInstance(m*1.0, units.Value)
+        self.assertIsInstance(m*1, units.Value)
+
+        # Value times value or number
+        self.assertIsInstance(x1*x1, units.Value)
+        self.assertIsInstance(x1*5, units.Value)
+        self.assertIsInstance(0*x1, units.Value)
+
+        # Unit times complex
+        self.assertIsInstance((1+1j)*V, units.Complex)
+        self.assertIsInstance(V*(1+1j), units.Complex)
+
+        # Value times Complex/complex
+        self.assertIsInstance(x1*1j, units.Complex)
+        self.assertIsInstance(1j*x1, units.Complex)
+        self.assertIsInstance(x2*x1, units.Complex)
+        self.assertIsInstance(x1*x2, units.Complex)
+
+        # Unit/Value/ValueArray times array
+        self.assertIsInstance(x1*a, units.ValueArray)
+        self.assertIsInstance(x2*a, units.ValueArray)
+        self.assertIsInstance(GHz*a, units.ValueArray)
+        self.assertIsInstance(va*a, units.ValueArray)
+
+        # Unit/Value/ValueArray times ValueArray
+        self.assertIsInstance(x1*va, units.ValueArray)
+        self.assertIsInstance(x2*va, units.ValueArray)
+        self.assertIsInstance(GHz*va, units.ValueArray)
+        self.assertIsInstance(va*va, units.ValueArray)
+
+        # array times ?
+        self.assertIsInstance(a*x1, units.ValueArray)
+        self.assertIsInstance(a*x2, units.ValueArray)
+        self.assertIsInstance(a*GHz, units.ValueArray)
+        self.assertIsInstance(a*va, units.ValueArray)
+
+        # ValueArray times ?
+        self.assertIsInstance(va*x1, units.ValueArray)
+        self.assertIsInstance(va*x2, units.ValueArray)
+        self.assertIsInstance(va*GHz, units.ValueArray)
+        self.assertIsInstance(va*a, units.ValueArray)
+
     def testComparison(self):
         s = units.Unit('s')
         ms = units.Unit('ms')

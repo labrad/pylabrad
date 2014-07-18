@@ -137,6 +137,8 @@ class WithUnit(object):
         if unit is None:
             raise RuntimeError("Cannot construct WithUnit with unit=None.  Use correct units, or use a float")
         unit = Unit(unit)
+        if isinstance(value, WithUnit): # This is called from Unit * Value and friends
+            return value*unit
         cls = cls._findClass(type(value), unit)
         if unit and unit.isDimensionless():
             return cls(cls(value) * unit.conversionFactorTo(''))
@@ -456,6 +458,9 @@ class ValueArray(WithUnit):
             idx = unit
             return WithUnit(self._value[idx], self.unit)
 
+    def __len__(self):
+        return len(self._value)
+
     def __setitem__(self, key, value):
         self._value[key] = value.inUnitsOf(self.unit)._value
             
@@ -467,6 +472,8 @@ class ValueArray(WithUnit):
     def __deepcopy__(self, memo):
         return self.__copy__()
 
+    def allclose(self, other, *args, **kw):
+        return np.allclose(self._value, other[self.unit], *args, **kw)
 
 WithUnit._numericTypes[np.ndarray] = ValueArray
 WithUnit._numericTypes[list] = ValueArray
@@ -913,6 +920,9 @@ class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
     _numType = staticmethod(np.asarray) # The is a 'copy constructor' used in ._value()
     def __new__(cls, value):
         return np.array(value).view(cls)*1.0
+    def allclose(self, other, *args, **kw):
+        return np.allclose(self, other, *args, **kw)
+        
 WithUnit._dimensionlessTypes[np.ndarray] = DimensionlessArray
 WithUnit._dimensionlessTypes[list] = DimensionlessArray
 WithUnit._numericTypes[DimensionlessArray] = ValueArray
