@@ -617,7 +617,7 @@ registerType(float, LRFloat)
 
 class LRValue(LRType):
     """Represents the type of a real number that carries units."""
-    
+
     tag = 'v'
     width = 8
 
@@ -641,7 +641,7 @@ class LRValue(LRType):
 
     def __eq__(self, other):
         return type(self) == type(other) and self.unit == other.unit
-    
+
     def __le__(self, other):
         # this method is a bit funky.  The <= relationship determines
         # which types are allowed to be coerced in flattening.  If the
@@ -669,17 +669,17 @@ class LRValue(LRType):
         if self.unit is not None:
             v = Value(v, self.unit)
         return v
-        
+
     @classmethod
     def __lrtype__(cls, v):
         if isinstance(v, U.WithUnit):
             return cls(v.unit)
         return cls(None)
-        
+
     def __flatten__(self, v, endianness):
         v = self.__check_units__(v)
         return pack(endianness + 'd', float(v))
-        
+
     def __check_units__(self, v):
         # TODO: implement full labrad unit conversion semantics in pylabrad
         # If we're trying to flatten to unitless value, then v must be float
