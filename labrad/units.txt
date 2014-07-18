@@ -89,11 +89,18 @@ true and so forth.  This allows code that works with units to not need
 a special case for dimensionless quantities, while allowing
 dimensionless quantities to work transparently with numerical code.
 
-However, if any math at all is done on dimensionless quantities they
-simply revert to the underlying float/complex type.  This includes
-apparently harmless things like multiplying by 1, or even
-multiplication by another "dimensionless quantity."  This could be
-improved, but it is unclear at what cost.
+Dimensionless quantities will propogate their type on simple
+arithmetic with other dimensionless quantities or bare
+float/complex/np.ndarray objects.  That is, +,-,*,/,//,-x, abs(x)
+where one or both operands is a dimensionless quantity should always
+return a dimensionless quantity (or something with units if
+appropriate).  However, other math operations such as all of the
+function in the math module will cause scalars to revert to a plain
+float/complex.  DimensionlessArrays are handled by numpy -- some
+operations will pass through the subtype while others will not.  See
+the numpy documentation for a particular function to see if it
+preserves subclasses.  You can always extract the underlying data type
+by using the [''] operator.
 
 VI. LabRAD protocol interaction
 
