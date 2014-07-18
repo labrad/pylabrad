@@ -1181,6 +1181,7 @@ registerTypeFunc(list, LRList.__lrtype__)
 if useNumpy:
     registerTypeFunc(ndarray, LRList.__lrtype_array__)
     registerTypeFunc(U.ValueArray, LRList.__lrtype_ValueArray__)
+    registerTypeFunc(U.DimensionlessArray, LRList.__lrtype_array__)
 
 
 def nestedList(obj, n):
