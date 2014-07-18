@@ -150,16 +150,17 @@ class LabradTypesTests(unittest.TestCase):
         Test flattening/unflattening of array-like types.
         """
         # Things which should unflatten as numpy arrays
+        # List of input, expected_output
         tests = [
-            ([1, 2, 3], np.array([1, 2, 3], dtype='int32'), np.int32,
+            ([1, 2, 3], np.array([1, 2, 3], dtype='int32'),
                 np.testing.assert_array_equal),
             ([1.1, 2.2, 3.3], np.array([1.1, 2.2, 3.3], dtype='float64'),
-                np.float64, np.testing.assert_array_almost_equal)
+                np.testing.assert_array_almost_equal)
         ]
-        for input, expected, dtype, func in tests:
+        for input, expected, comparison_func in tests:
             unflat = T.unflatten(*T.flatten(input))
-            self.assertEqual(unflat.dtype, dtype)
-            func(unflat, expected)
+            self.assertEqual(unflat.dtype, expected.dtype)
+            comparison_func(unflat, expected)
         
         # Things which should unflatten as ValueArrays
         tests = [
