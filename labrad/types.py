@@ -702,7 +702,7 @@ class LRValue(LRType):
         # If we're trying to flatten to unitless value, then v must be float
         # or Value with units either None or ''
         if not isinstance(v, U.WithUnit):
-            # v is a float or complex; only accept if out unit is None or ''
+            # v is a float or complex; only accept if our unit is None or ''
             if self.unit not in [None, '']:
                 raise FlatteningError(v, self)
         else:
