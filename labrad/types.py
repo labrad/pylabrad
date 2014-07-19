@@ -660,13 +660,17 @@ class LRValue(LRType):
             return True
         if type(self) != type(other):
             return False
+        # If other is 'v', then any variant of 'v' is allowed. For example, if
+        # we are 'v[]' or 'v[Hz]', we are allowed to pass to a setting
+        # advertising 'v'.
         if other.unit is None:
             return True
         if self.unit is None:
-            return False
-        if not U.Unit(self.unit).isCompatible(U.Unit(other.unit)):
-            return False
-        return True
+            msg = "Unreachable: no python object should get %s as type"%(self,)
+            raise TypeError(msg)
+        # We have a unit, and the other guy has a unit, so make sure our units
+        # are compatible.
+        return U.Unit(self.unit).isCompatible(U.Unit(other.unit))
 
     def isFullySpecified(self):
         return self.unit is not None
