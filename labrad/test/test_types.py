@@ -95,7 +95,16 @@ class LabradTypesTests(unittest.TestCase):
             self.assertEqual(T.parseTypeTag(tag), type_)
 
     def testDefaultFlatAndBack(self):
-        """Test roundtrip python->LabRAD->python conversion."""
+        """
+        Test roundtrip python->LabRAD->python conversion.
+        
+        No type requirements are given in these tests. In other words, we allow
+        pylabrad to choose a default type for flattening.
+        
+        In this test, we expect A == unflatten(*flatten(A)). In other words,
+        we expect the default type chosen for each object to unflatten as
+        an object equal to the one originally flattened. 
+        """
         tests = [
             # simple types
             None,
@@ -127,10 +136,10 @@ class LabradTypesTests(unittest.TestCase):
             ((1, 2), ('a', False)),
 
             # lists
-            #[],
+            [],
             #[1, 2, 3, 4],
             #[1L, 2L, 3L, 4L],
-            #[[]],
+            [[]],
             [['a', 'bb', 'ccc'], ['dddd', 'eeeee', 'ffffff']],
 
             # more complex stuff
@@ -149,7 +158,12 @@ class LabradTypesTests(unittest.TestCase):
         """
         Test flattening/unflattening of objects which change type.
         
-        No type requirements are given in these tests.
+        No type requirements are given in these tests. In other words, we allow
+        pylabrad to choose a default type for flattening.
+        
+        In this test, we do not expect A == unflatten(*flatten(A)). This is
+        mostly because list of numbers, both with an without units, should
+        unflatten to ndarray or ValueArray, rather than actual python lists.
         """
         def compareValueArrays(a, b):
             """I check near equality of two ValueArrays"""
@@ -162,12 +176,16 @@ class LabradTypesTests(unittest.TestCase):
                 np.testing.assert_array_almost_equal),
             (np.array([3, 4], dtype='int32'), np.array([3, 4], dtype='int32'),
                 np.testing.assert_array_equal),
+            (np.array([1.2, 3.4]), np.array([1.2, 3.4]),
+                np.testing.assert_array_almost_equal),
             ([Value(1.0, 'm'), Value(3.0, 'm')], ValueArray([1.0, 3.0], 'm'),
                 compareValueArrays),
             ([Value(1.0, 'm'), Value(10, 'cm')], ValueArray([1.0, 0.1], 'm'),
                 compareValueArrays),
             (ValueArray([1,2], 'Hz'), ValueArray([1,2], 'Hz'),
-                compareValueArrays)
+                compareValueArrays),
+            (ValueArray([1.0, 2], ''), np.array([1.0, 2]),
+                np.testing.assert_array_almost_equal)
         ]
         for input, expected, comparison_func in tests:
             unflat = T.unflatten(*T.flatten(input))
@@ -175,18 +193,36 @@ class LabradTypesTests(unittest.TestCase):
                 self.assertEqual(unflat.dtype, expected.dtype)
             comparison_func(unflat, expected)
 
+    def testFlatAndBackWithTypeRequirements(self):
+        tests = [
+            ([1, 2, 3], ['*i'], np.array([1, 2, 3]),
+                np.testing.assert_array_equal),
+            ([1, 2], ['*v[]'], np.array([1, 2]),
+                np.testing.assert_array_almost_equal),
+            ([1.1, 2.], ['*v[]'], np.array([1.1, 2.], dtype='float64'),
+                np.testing.assert_array_almost_equal)
+        ]
+        for input, types, expected, comparison_func in tests:
+            flat = T.flatten(input, types)
+            unflat = T.unflatten(*flat)
+            comparison_func(expected, unflat)
+
     def testFailedFlattening(self):
         """
         Trying to flatten data to an incompatible type should raise an error.
         """
         cases = [
-            (1, 's'),
+            # Simple cases
+            (1, ['s', 'v[Hz]']),
+            ('X', ['i', 'v', 'w']),
+            (5.0, ['s', 'b', 't', 'w', 'i', 'v[Hz]']),
             # Value
             (5.0, 'v[Hz]'),
             (Value(4, 'm'), 'v[]'),
+            (Value(3, 's'), ['v[Hz]', 'i', 'w']),
             # ndarray
             (np.array([1,2,3]), '*v[Hz]'),
-            (np.array([1.0, 2.4], dtype='float64'), '*i'),
+            (np.array([1.0, 2.4]), ['*i', '*w']),
             # ValueArray
             (U.ValueArray([1,2,3], 'm'), '*v[s]'),
             (U.ValueArray([1,2], 'm'), '*v[]')
@@ -213,15 +249,8 @@ class LabradTypesTests(unittest.TestCase):
             ((1, 2, 'a'), ['ww?'], 'wws'),
             ((1, 1L), ['??'], 'iw'),
         ]
-        failingTests = [
-            # no compatible types
-            (5.0, ['s', 'b', 't', 'w', 'i', 'v[Hz]']),
-            (U.Value(4.0, 'm'), ['v[s]', 'i'])
-        ]
         for data, hints, tag in passingTests:
             self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
-        for data, hints in failingTests:
-            self.assertRaises(T.FlatteningError, T.flatten, data, hints)
 
     def testTypeSpecialization(self):
         """Test specialization of the type during flattening."""
@@ -256,14 +285,6 @@ class LabradTypesTests(unittest.TestCase):
         else:
             raise Exception('Cannot flatten float to value with units')
 
-    def testNumpySupport(self):
-        """Test flattening and unflattening of numpy arrays"""
-        import numpy as np
-        
-        # TODO: flesh this out with more array types
-        a = np.array([1,2,3,4,5])
-        b = T.unflatten(*T.flatten(a))
-        self.assertTrue(np.all(a == b))
 
 if __name__ == "__main__":
     unittest.main()
