@@ -94,7 +94,7 @@ class LabradTypesTests(unittest.TestCase):
         for tag, type_ in tests.items():
             self.assertEqual(T.parseTypeTag(tag), type_)
 
-    def testFlatAndBack(self):
+    def testDefaultFlatAndBack(self):
         """Test roundtrip python->LabRAD->python conversion."""
         tests = [
             # simple types
@@ -145,39 +145,51 @@ class LabradTypesTests(unittest.TestCase):
             else:
                 self.assertEqual(data_in, data_out)
 
-    def testArrayFlatAndBack(self):
+    def testDefaultFlatAndBackNonIdentical(self):
         """
-        Test flattening/unflattening of array-like types.
+        Test flattening/unflattening of objects which change type.
+        
+        No type requirements are given in these tests.
         """
-        # Things which should unflatten as numpy arrays
-        # List of input, expected_output
+        def compareValueArrays(a, b):
+            """I check near equality of two ValueArrays"""
+            self.assertTrue(a.allclose(b))
+        
         tests = [
             ([1, 2, 3], np.array([1, 2, 3], dtype='int32'),
                 np.testing.assert_array_equal),
             ([1.1, 2.2, 3.3], np.array([1.1, 2.2, 3.3], dtype='float64'),
-                np.testing.assert_array_almost_equal)
+                np.testing.assert_array_almost_equal),
+            (np.array([3, 4], dtype='int32'), np.array([3, 4], dtype='int32'),
+                np.testing.assert_array_equal),
+            ([Value(1.0, 'm'), Value(3.0, 'm')], ValueArray([1.0, 3.0], 'm'),
+                compareValueArrays),
+            ([Value(1.0, 'm'), Value(10, 'cm')], ValueArray([1.0, 0.1], 'm'),
+                compareValueArrays),
+            (ValueArray([1,2], 'Hz'), ValueArray([1,2], 'Hz'),
+                compareValueArrays)
         ]
         for input, expected, comparison_func in tests:
             unflat = T.unflatten(*T.flatten(input))
-            self.assertEqual(unflat.dtype, expected.dtype)
+            if isinstance(unflat, np.ndarray):
+                self.assertEqual(unflat.dtype, expected.dtype)
             comparison_func(unflat, expected)
-        
-        # Things which should unflatten as ValueArrays
-        tests = [
-            ([Value(1.0, 'm'), Value(3.0, 'm')], ValueArray([1.0, 3.0], 'm')),
-            ([Value(1.0, 'm'), Value(10, 'cm')], ValueArray([1.0, 0.1], 'm'))
-        ]
-        for input, expected in tests:
-            unflat = T.unflatten(*T.flatten(input))
-            self.assertTrue(unflat.allclose(expected))
 
     def testFailedFlattening(self):
         """
         Trying to flatten data to an incompatible type should raise an error.
         """
         cases = [
+            (1, 's'),
+            # Value
+            (5.0, 'v[Hz]'),
+            (Value(4, 'm'), 'v[]'),
+            # ndarray
+            (np.array([1,2,3]), '*v[Hz]'),
+            (np.array([1.0, 2.4], dtype='float64'), '*i'),
+            # ValueArray
             (U.ValueArray([1,2,3], 'm'), '*v[s]'),
-            (np.array([1,2,3]), '*v[Hz]') 
+            (U.ValueArray([1,2], 'm'), '*v[]')
         ]
         for data, targetTag in cases:
             self.assertRaises(T.FlatteningError, T.flatten, data, targetTag)
