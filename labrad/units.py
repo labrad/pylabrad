@@ -134,12 +134,23 @@ class WithUnit(object):
     """Mixin class for adding units to numeric types."""
 
     def __new__(cls, value, unit=None):
+        # Convert inputs to make sense: 
+        # check for illegal None unit, unit string -> Unit, list -> array, check 
+        # to see if value is 
         if unit is None:
             raise RuntimeError("Cannot construct WithUnit with unit=None.  Use correct units, or use a float")
+        if isinstance(value, list):
+            value = np.asarray(value)
         unit = Unit(unit)
+        if hasattr(value, 'unit'): # This is called from Unit * Value and friends
+            return WithUnit(value._value, value.unit * unit)
+
+        # Ok, with all that business taken care of, look up the right type
+        # (Value, Complex, ValueArray, or the Dimensionless versions of each
+        # and construct a final object
         cls = cls._findClass(type(value), unit)
         if unit and unit.isDimensionless():
-            return cls(cls(value) * unit.conversionFactorTo(''))
+            return cls(value * unit.conversionFactorTo(''))
         inst = super(WithUnit, cls).__new__(cls)
         inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
@@ -830,7 +841,6 @@ def convert(*args):
 _unit_table = {'': Unit(NumberDict(), 1., [0]*9, 0)}
 
 
-
 class WithDimensionlessUnit(object):
     """
     This is a funny class.  It is designed to be subclassed
@@ -900,6 +910,49 @@ class WithDimensionlessUnit(object):
     def sqrt(self):
         return self.__class__(sqrt(self._value))
 
+    # These are a whole bunch of operations to make sure that math
+    # between WithDimensionlessUnits and float/complex return
+    # the right type.  Without this, DimensionlessValues degrade
+    # to float as soon as you do math on them.  Not sure if this is
+    # actually a problem.
+    def __mul__(self, other):
+        result = self._value * other
+        return WithUnit(result, '')
+    __rmul__ = __mul__
+    def __add__(self, other):
+        result = self._value + other
+        return WithUnit(result, '')
+    __radd__ = __add__
+    def __div__(self, other):
+        result = self._value / other
+        return WithUnit(result, '')
+    __truediv__ = __div__
+
+    def __rdiv__(self, other):
+        result = other / self._value
+        return WithUnit(result, '')
+    __rtruediv__ = __rdiv__
+
+    def __floordiv__(self, other):
+        result = self._value // other
+        return WithUnit(result, '')
+    def __rfloordiv__(self, other):
+        result = other // self._value
+        return WithUnit(result, '')
+    def __sub__(self, other):
+        result = self._value - other
+        return WithUnit(result, '')
+    def __rsub__(self, other):
+        result = other - self._value
+        return WithUnit(result, '')
+    def __neg__(self):
+        result = -self._value
+        return WithUnit(result, '')
+    def __abs__(self):
+        result = abs(self._value)
+        return WithUnit(result, '')
+    __array_priority__ = 15
+
 class DimensionlessFloat(WithDimensionlessUnit, float):
    _numType = float
 WithUnit._dimensionlessTypes[float] = DimensionlessFloat
@@ -917,7 +970,7 @@ WithUnit._numericTypes[DimensionlessComplex] = Complex
 class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
     _numType = staticmethod(np.asarray) # The is a 'copy constructor' used in ._value()
     def __new__(cls, value):
-        return np.array(value).view(cls)*1.0
+        return (np.array(value)*1.0).view(cls)
     def allclose(self, other, *args, **kw):
         return np.allclose(self, other, *args, **kw)
         
