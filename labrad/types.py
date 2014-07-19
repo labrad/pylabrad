@@ -443,7 +443,14 @@ class LRType(object):
     def __le__(self, other):
         """Test whether this type is equal to on more specific than another.
 
-        By default, just check for equality.
+        By default, just check for equality, or that the other type is LRAny.
+        
+        This operator has a very specific meaning which is easy to
+        misunderstand. For two types, X and Y, X<=Y if and only if a setting
+        advertising 'Y' will happily accept a LaBRAD record with data of type
+        'X'. The simplest example of this is a setting accepting '?'. Such a
+        setting will happily accept 'i', 'b', or anything else. Therefore, we
+        have eg. LRInt()<=LRAny. A more complex example is 'v[Hz]' <= 'v'.
         """
         return type(self) == type(other) or type(other) == LRAny
 
