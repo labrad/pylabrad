@@ -155,10 +155,13 @@ class WithUnit(object):
         inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
         return inst
-        
+
+    def __reduce__(self):
+        return (WithUnit, (self._value, self.unit.name))
+
     _numericTypes = {}
     _dimensionlessTypes = {}
-    
+
     @classmethod
     def _findClass(cls, numType, unit):
         """Find a class for a particular numeric type and unit.
@@ -547,6 +550,9 @@ class Unit(object):
         inst._init(*args, **kw)
         return inst
     
+    def __reduce__(self):
+        return (Unit, (self.name,))
+
     def __copy__(self):
         return self
     
@@ -872,6 +878,9 @@ class WithDimensionlessUnit(object):
     def __new__(cls, value):
         obj = super(WithDimensionlessUnit, cls).__new__(cls, value)
         return obj
+
+    def __reduce__(self):
+        return (type(self), (self._value,))
 
     @property
     def unit(self):
