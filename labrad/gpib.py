@@ -69,12 +69,11 @@ class GPIBDeviceWrapper(DeviceWrapper):
         p = self._packet()
         if timeout is not None:
             p.timeout(timeout)
-        p.write(query)
-        p.read(bytes)
+        p.query(query)
         if timeout is not None:
             p.timeout(self._timeout)
         resp = yield p.send()
-        returnValue(resp.read)
+        returnValue(resp.query)
 
     @inlineCallbacks
     def write(self, s, timeout=None):
