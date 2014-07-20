@@ -17,6 +17,7 @@ import numpy as np
 
 import sys
 import os
+import cPickle
 if __name__ == "__main__":
     sys.path.insert(0, os.path.abspath('../..'))
 from labrad import units
@@ -162,6 +163,19 @@ class LabradUnitsTests(unittest.TestCase):
         
         self.assertTrue((5*ns*5j*GHz) == 25j)
         self.assertTrue((5*ns*5j*GHz).isDimensionless())
+
+    def testPickling(self):
+        ns = units.Unit('ns')
+        GHz = units.Unit('GHz')
+        blank = units.Unit('')
+
+        def round_trip(obj):
+            return cPickle.loads(cPickle.dumps(obj))
+        self.assertEqual(round_trip(5*GHz), 5*GHz) # Value
+        self.assertEqual(round_trip(GHz), GHz)     # Unit
+        self.assertTrue((round_trip(np.arange(5)*ns)==np.arange(5)*ns).all()) # array
+        self.assertEqual(round_trip(5*GHz*ns), 5)  # Dimensionless
+        self.assertIsInstance(round_trip(3*blank), type(3*blank)) # Don't loose dimensionless type
 
 if __name__ == "__main__":
     unittest.main()
