@@ -238,13 +238,6 @@ def registerTypeFunc(cls, typeFunc):
     for cls in classes:
         _typeFuncs[cls] = typeFunc
 
-def typeFunc(cls):
-    """Decorator for registering type functions."""
-    def register(func):
-        registerTypeFunc(cls, func)
-        return func
-    return register
-
 def getType(obj):
     """
     Get LabRAD type of python data.
