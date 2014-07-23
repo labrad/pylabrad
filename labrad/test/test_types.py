@@ -238,7 +238,7 @@ class LabradTypesTests(unittest.TestCase):
 
             # convert to first compatible type
             (1, ['s', 'w'], 'w'),
-            (1, ['s', 'v'], 'v'),
+            (1, ['s', 'v'], 'v[]'),
             (1*U.m, ['s', 'v[m]'], 'v[m]'),
             # 'v' not allowed on wire
             (3.0, 'v', 'v[]'),
