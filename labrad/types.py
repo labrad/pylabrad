@@ -293,9 +293,6 @@ def unflatten(s, t, endianness='>'):
     return t.__unflatten__(s, endianness)
 
 
-# a registry of flattener functions that can convert python data
-# into LabRAD data, keyed on the python class that they can accept
-
 def flatten(obj, types=None, endianness='>'):
     """Flatten python data into labrad data.
     
