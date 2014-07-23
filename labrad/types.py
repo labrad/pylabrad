@@ -1142,8 +1142,11 @@ class LRList(LRType):
         else:
             raise TypeError("Cannot make numpy array with %s"%(elem,))
         a.shape = dims + a.shape[1:] # handle clusters as elements
-        if elem <= LRValue() and elem.unit != '':
-            a = U.ValueArray(a, elem.unit)
+        if elem <= LRValue():
+            if elem.unit != '':
+                a = U.ValueArray(a, elem.unit)
+            else:
+                a = U.DimensionlessArray(a)
         return a
     
     def __flatten__(self, L, endianness):
