@@ -1142,7 +1142,7 @@ class LRList(LRType):
         else:
             raise TypeError("Cannot make numpy array with %s"%(elem,))
         a.shape = dims + a.shape[1:] # handle clusters as elements
-        if elem <= LRValue() and elem.unit is not None:
+        if elem <= LRValue() and elem.unit != '':
             a = U.ValueArray(a, elem.unit)
         return a
     
