@@ -128,7 +128,7 @@ class LabradTypesTests(unittest.TestCase):
             # unflatten as ndarray with dtype=int32, we do not put lists
             # in this test.
             U.ValueArray([1, 2, 3], 'm'),
-            np.array([1, 3, 4]),
+            np.array([1, 3, 4], dtype='int32'),
             np.array([1.1, 2.2, 3.3]),
 
             # clusters
@@ -221,7 +221,7 @@ class LabradTypesTests(unittest.TestCase):
             (Value(4, 'm'), 'v[]'),
             (Value(3, 's'), ['v[Hz]', 'i', 'w']),
             # ndarray
-            (np.array([1,2,3]), '*v[Hz]'),
+            (np.array([1,2,3], dtype='int32'), '*v[Hz]'),
             (np.array([1.0, 2.4]), ['*i', '*w']),
             # ValueArray
             (U.ValueArray([1,2,3], 'm'), '*v[s]'),
