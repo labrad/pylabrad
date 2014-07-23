@@ -272,10 +272,6 @@ def getType(obj):
                 return _typeFuncs[cls](obj)
     raise TypeError("No LabRAD type for: %r." % obj)
 
-def isType(obj, tag):
-    """Returns True if type of obj is equal to or more specific than tag."""
-    return getType(obj) <= parseTypeTag(tag)
-
 
 # flattening and unflattening
 
