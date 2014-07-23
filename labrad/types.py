@@ -292,9 +292,11 @@ def unflatten(s, t, endianness='>'):
         s = Buffer(s)
     return t.__unflatten__(s, endianness)
 
-
 def flatten(obj, types=None, endianness='>'):
     """Flatten python data into labrad data.
+    
+    Returns a tuple containing the flattened string and the type object
+    representing the LabRAD data type to which obj was flattened.
     
     Flatten returns a tuple of (flattened string, type object).  The
     type object can be converted into a type tag by calling str(typeobj).
@@ -319,29 +321,41 @@ def flatten(obj, types=None, endianness='>'):
     check the registry of flattening functions, to see whether one exists
     for the object type, or a superclass.
     """
+    if hasattr(obj, '__lrflatten__'):
+        s, t = obj.__lrflatten__(endianness)
+    else:
+        s, t = _flatten_to(obj, types, endianness)
+    return s, t
+
+def _flatten_to(obj, types, endianness):
+    """
+    Flatten obj in the case that it has no __lrflatten__ method.
+    """
     if types is None:
         types = []
-    if hasattr(obj, '__lrflatten__'):
-        return obj.__lrflatten__(endianness)
-
     if not isinstance(types, list):
         types = [types]
     types = [parseTypeTag(t) for t in types]
-    
     t = getType(obj)
-
     if not len(types):
         # if there are no type suggestions, just try to
         # flatten to the default type
         s = t.__flatten__(obj, endianness)
     else:
         # check the list of allowed types for one compatible
-        # with the computed type
+        # with obj's type
         foundCompatibleType = False
         for tt in types:
+            # If obj has a type which is more specific than one of the
+            # allowed types, use obj's type. This covers cases where
+            # an allowed type is 'v' and obj's type is 'v[Hz]'.
             if t <= tt:
                 foundCompatibleType = True
                 break
+            # If one of the required types is more specific than obj's
+            # type, use that. This covers cases where we're trying to
+            # flatten something like ([],[1,2]) and an allowed type is
+            # eg. (*v*i).
             elif tt <= t:
                 t = tt
                 foundCompatibleType = True
@@ -349,8 +363,11 @@ def flatten(obj, types=None, endianness='>'):
         if foundCompatibleType:
             s = t.__flatten__(obj, endianness)
         else:
-            # since we haven't found anything compatible,
-            # just try to flatten to any of the suggested types
+            # Since we haven't found anything compatible, just try to
+            # flatten to any of the suggested types. This covers cases
+            # such as an allowed type 'v[]' and obj=4. In this case, the
+            # class representing 'v[]', namely LRValue(''), will handle
+            # coercion of obj to the appropriate type.
             s = None
             for t in types:
                 try:
@@ -363,13 +380,25 @@ def flatten(obj, types=None, endianness='>'):
                 raise FlatteningError(obj, types)
     return s, t
 
+
+# Evaluation functions
+
 def evalLRData(s):
-    """Evaluate LR data in a namespace with all LRTypes."""
+    """
+    Evaluate LR data in a namespace with all LRTypes.
+    
+    What is this for? -DTS
+    """
     return eval(s)
 
 def reprLRData(s):
-    """Make a repr of LR data in a namespace with all LRTypes."""
+    """
+    Make a repr of LR data in a namespace with all LRTypes.
+    
+    What is this for? -DTS
+    """
     return repr(s)
+
 
 # LabRAD type classes
 
@@ -403,12 +432,13 @@ class LRType(object):
 
     @classmethod
     def __parse__(cls, s):
-        """Parse type tag into appropriate python type objects.
+        """
+        Parse type tag into appropriate python type objects.
 
-        The parse function takes the remaining string (after the
-        tag for this type has been removed).  The function may need
-        to consume some more of the string to determine the type.  It
-        should return a tuple of (type object, rest of string).
+        The parse function takes the remaining string (after the tag for
+        this type has been removed).  The function may need to consume
+        some more of the string to determine the type.  It should return
+        a tuple of (type object, rest of string).
         """
         return cls()
 
