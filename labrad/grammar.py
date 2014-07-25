@@ -20,12 +20,12 @@ Grammars for parsing various LabRAD stuff with pyparsing.
 """
 
 from labrad.pyparsing import (Word, Literal, Group,
-                              Forward, Optional, alphas, nums, stringEnd)
+                              Forward, Optional, alphas, nums, alphanums, stringEnd)
 
 toInt = lambda s, l, t: [int(t[0])]
 
 number = Word(nums).setParseAction(toInt)
-name = Word(alphas + '%"\'\xE6\xF8') # degree and mu
+name = Word(alphas + '%"\'\xE6\xF8', alphanums + '%"\'\xE6\xF8') # degree and mu
 
 power = Literal('^').suppress()
 times = Literal('*').suppress()
