@@ -61,8 +61,10 @@ from math import floor, pi
 #    useNumpy = False
 
 from labrad import grammar
-from labrad.ratio import Ratio
 import numpy as np
+import fractions
+from fractions import Fraction
+
 # Dictionary containing numbers
 #
 # These objects are meant to be used like arrays with generalized
@@ -421,7 +423,7 @@ class WithUnit(object):
         return self.unit.isDimensionless()
         
     def sqrt(self):
-        return pow(self, Ratio(1,2))
+        return pow(self, Fraction(1,2))
     
     def __copy__(self):
         return self
@@ -576,7 +578,7 @@ class Unit(object):
                     term = elem['name']
                     if term not in _unit_table:
                         _unit_table[term] = cls._stringUnit(term)
-                    unit = unit * _unit_table[term]**(sign*Ratio(num, denom))
+                    unit = unit * _unit_table[term]**(sign*Fraction(num, denom))
         except Exception:
             # TODO handle errors more intelligently here.
             # (might need to change unit grammar)
@@ -619,16 +621,16 @@ class Unit(object):
         """
         if isinstance(names, str):
             self.names = NumberDict()
-            self.names[names] = Ratio(1)
+            self.names[names] = Fraction(1)
         else:
             self.names = names
         self.factor = factor
         self.offset = offset
-        self.powers = [Ratio(p) for p in powers]
+        self.powers = [Fraction(p) for p in powers]
         if isinstance(lex_names, str):
             self.lex_names = NumberDict()
             if lex_names:
-                self.lex_names[lex_names] = Ratio(1)
+                self.lex_names[lex_names] = Fraction(1)
         else:
             self.lex_names = lex_names
             
@@ -743,12 +745,12 @@ class Unit(object):
             inv_exp = 1./other
             rounded = int(floor(inv_exp+0.5))
             if abs(inv_exp - rounded) < 1.e-10:
-                return self.__pow__(Ratio(1, rounded))
+                return self.__pow__(Fraction(1, rounded))
         if isinstance(other, tuple):
-            other = Ratio(*other)
-        if isinstance(other, Ratio):
+            other = Fraction(*other)
+        if isinstance(other, Fraction):
             return Unit(other * self.names,
-                        pow(self.factor, float(other)),
+                        pow(self.factor, other),
                         [p * other for p in self.powers],
                         self.offset,
                         other * self.lex_names)
@@ -844,7 +846,7 @@ def convert(*args):
     raise Exception('Must call convert with 2 or 3 args')
 
 
-_unit_table = {'': Unit(NumberDict(), 1., [0]*9, 0)}
+_unit_table = {'': Unit(NumberDict(), Fraction(1), [0]*9, 0)}
 
 
 class WithDimensionlessUnit(object):
@@ -1005,6 +1007,30 @@ _help = []
 
 # SI prefixes
 _prefixes = [
+    ('Y',  Fraction(10**24)),
+    ('Z',  Fraction(10**23)),
+    ('E',  Fraction(10**18)),
+    ('P',  Fraction(10**15)),
+    ('T',  Fraction(10**12)),
+    ('G',  Fraction(10**9)),
+    ('M',  Fraction(10**6)),
+    ('k',  Fraction(10**3)),
+    ('h',  Fraction(10**2)),
+    ('da', Fraction(10**1)),
+    ('d',  Fraction(1, 10**1)),
+    ('c',  Fraction(1, 10**2)),
+    ('m',  Fraction(1, 10**3)),
+    ('u',  Fraction(1, 10**6)),
+    ('n',  Fraction(1, 10**9)),
+    ('p',  Fraction(1, 10**12)),
+    ('f',  Fraction(1, 10**15)),
+    ('a',  Fraction(1, 10**18)),
+    ('z',  Fraction(1, 10**21)),
+    ('y',  Fraction(1, 10**24))
+    ]
+# SI prefixes
+"""
+_prefixes = [
     ('Y',  1.e24),
     ('Z',  1.e21),
     ('E',  1.e18),
@@ -1026,7 +1052,7 @@ _prefixes = [
     ('z',  1.e-21),
     ('y',  1.e-24),
     ]
-
+"""
 _help.append('SI prefixes:' +
     ', '.join(prefix + ' (%.0E)' % value for prefix, value in _prefixes))
 
@@ -1034,15 +1060,15 @@ _help.append('SI prefixes:' +
 # SI base units
 _help.append('SI base units:')
 
-_addUnit('m',   1.,    [1,0,0,0,0,0,0,0,0], 'meter',     prefixable=True)
-_addUnit('g',   0.001, [0,1,0,0,0,0,0,0,0], 'gram',      prefixable=True)
-_addUnit('s',   1.,    [0,0,1,0,0,0,0,0,0], 'second',    prefixable=True)
-_addUnit('A',   1.,    [0,0,0,1,0,0,0,0,0], 'Ampere',    prefixable=True)
-_addUnit('K',   1.,    [0,0,0,0,1,0,0,0,0], 'Kelvin',    prefixable=True)
-_addUnit('mol', 1.,    [0,0,0,0,0,1,0,0,0], 'mole',      prefixable=True)
-_addUnit('cd',  1.,    [0,0,0,0,0,0,1,0,0], 'candela',   prefixable=True)
-_addUnit('rad', 1.,    [0,0,0,0,0,0,0,1,0], 'radian',    prefixable=True)
-_addUnit('sr',  1.,    [0,0,0,0,0,0,0,0,1], 'steradian', prefixable=True)
+_addUnit('m',   Fraction(1),      [1,0,0,0,0,0,0,0,0], 'meter',     prefixable=True)
+_addUnit('g',   Fraction(1,1000), [0,1,0,0,0,0,0,0,0], 'gram',      prefixable=True)
+_addUnit('s',   Fraction(1),      [0,0,1,0,0,0,0,0,0], 'second',    prefixable=True)
+_addUnit('A',   Fraction(1),      [0,0,0,1,0,0,0,0,0], 'Ampere',    prefixable=True)
+_addUnit('K',   Fraction(1),      [0,0,0,0,1,0,0,0,0], 'Kelvin',    prefixable=True)
+_addUnit('mol', Fraction(1),      [0,0,0,0,0,1,0,0,0], 'mole',      prefixable=True)
+_addUnit('cd',  Fraction(1),      [0,0,0,0,0,0,1,0,0], 'candela',   prefixable=True)
+_addUnit('rad', Fraction(1),      [0,0,0,0,0,0,0,1,0], 'radian',    prefixable=True)
+_addUnit('sr',  Fraction(1),      [0,0,0,0,0,0,0,0,1], 'steradian', prefixable=True)
 
 _base_names = ['m', 'kg', 's', 'A', 'K', 'mol', 'cd', 'rad', 'sr']
 
@@ -1050,38 +1076,38 @@ _base_names = ['m', 'kg', 's', 'A', 'K', 'mol', 'cd', 'rad', 'sr']
 # SI derived units; these automatically get prefixes
 _help.append('SI derived units:')
 
-_addUnit('Hz',  1.0,  s**-1,     'Hertz',     '1/s',      prefixable=True)
-_addUnit('N',   1.0,  m*kg/s**2, 'Newton',    'm*kg/s^2', prefixable=True)
-_addUnit('Pa',  1.0,  N/m**2,    'Pascal',    'N/m^2',    prefixable=True)
-_addUnit('J',   1.0,  N*m,       'Joule',     'N*m',      prefixable=True)
-_addUnit('W',   1.0,  J/s,       'Watt',      'J/s',      prefixable=True)
-_addUnit('C',   1.0,  s*A,       'Coulomb',   's*A',      prefixable=True)
-_addUnit('V',   1.0,  W/A,       'Volt',      'W/A',      prefixable=True)
-_addUnit('F',   1.0,  C/V,       'Farad',     'C/V',      prefixable=True)
-_addUnit('Ohm', 1.0,  V/A,       'Ohm',       'V/A',      prefixable=True)
-_addUnit('S',   1.0,  A/V,       'Siemens',   'A/V',      prefixable=True)
-_addUnit('Wb',  1.0,  V*s,       'Weber',     'V*s',      prefixable=True)
-_addUnit('T',   1.0,  Wb/m**2,   'Tesla',     'Wb/m^2',   prefixable=True)
-_addUnit('gauss',1e-4,T,         'gauss',     '1e-4 T',   prefixable=True)
-_addUnit('H',   1.0,  Wb/A,      'Henry',     'Wb/A',     prefixable=True)
-_addUnit('lm',  1.0,  cd*sr,     'Lumen',     'cd*sr',    prefixable=True)
-_addUnit('lx',  1.0,  lm/m**2,   'Lux',       'lm/m^2',   prefixable=True)
-_addUnit('Bq',  1.0,  s**-1,     'Becquerel', '1/s',      prefixable=True)
+_addUnit('Hz',  Fraction(1),  s**-1,     'Hertz',     '1/s',      prefixable=True)
+_addUnit('N',   Fraction(1),  m*kg/s**2, 'Newton',    'm*kg/s^2', prefixable=True)
+_addUnit('Pa',  Fraction(1),  N/m**2,    'Pascal',    'N/m^2',    prefixable=True)
+_addUnit('J',   Fraction(1),  N*m,       'Joule',     'N*m',      prefixable=True)
+_addUnit('W',   Fraction(1),  J/s,       'Watt',      'J/s',      prefixable=True)
+_addUnit('C',   Fraction(1),  s*A,       'Coulomb',   's*A',      prefixable=True)
+_addUnit('V',   Fraction(1),  W/A,       'Volt',      'W/A',      prefixable=True)
+_addUnit('F',   Fraction(1),  C/V,       'Farad',     'C/V',      prefixable=True)
+_addUnit('Ohm', Fraction(1),  V/A,       'Ohm',       'V/A',      prefixable=True)
+_addUnit('S',   Fraction(1),  A/V,       'Siemens',   'A/V',      prefixable=True)
+_addUnit('Wb',  Fraction(1),  V*s,       'Weber',     'V*s',      prefixable=True)
+_addUnit('T',   Fraction(1),  Wb/m**2,   'Tesla',     'Wb/m^2',   prefixable=True)
+_addUnit('gauss',Fraction(1,10000),T,   'gauss',     '1e-4 T',   prefixable=True)
+_addUnit('H',   Fraction(1),  Wb/A,      'Henry',     'Wb/A',     prefixable=True)
+_addUnit('lm',  Fraction(1),  cd*sr,     'Lumen',     'cd*sr',    prefixable=True)
+_addUnit('lx',  Fraction(1),  lm/m**2,   'Lux',       'lm/m^2',   prefixable=True)
+_addUnit('Bq',  Fraction(1),  s**-1,     'Becquerel', '1/s',      prefixable=True)
 
 
 # Time units
 _help.append('Time units:')
 
-_addUnit('min', 60,     s,   'minute', '60*s')
-_addUnit('h',   60,     min, 'hour',   '60*min')
-_addUnit('d',   24,     h,   'day',    '24*h')
+_addUnit('min', 60.,     s,   'minute', '60*s')
+_addUnit('h',   60.,     min, 'hour',   '60*min')
+_addUnit('d',   24.,     h,   'day',    '24*h')
 _addUnit('y',   365.25, d,   'year',   '365.25*d')
 
 # Length units
 _help.append('Length units:')
 
 _addUnit('inch', 2.54, cm,   'inch', '2.54*cm')
-_addUnit('ft',   12,   inch, 'foot', '12*inch')
+_addUnit('ft',   12.,   inch, 'foot', '12*inch')
 _addUnit('mi',   5280, ft,   'mile', '5280*ft')
 
 # Area units
@@ -1092,10 +1118,10 @@ _addUnit('acre', 1./640., mi**2, 'acre', '1/640*mi^2')
 # Volume units
 _help.append('Volume units:')
 
-_addUnit('l',  1.0, dm**3, 'liter', 'dm^3')
-_addUnit('dl', 0.1, l, 'deci liter', '0.1 l')
-_addUnit('cl', 0.01, l, 'centi liter', '0.01 l')
-_addUnit('ml', 0.001, l, 'milli liter', '0.001 l')
+_addUnit('l',  Fraction(1),  dm**3, 'liter', 'dm^3')
+_addUnit('dl', Fraction(1,10),   l, 'deci liter', '0.1 l')
+_addUnit('cl', Fraction(1,100),  l, 'centi liter', '0.01 l')
+_addUnit('ml', Fraction(1,1000), l, 'milli liter', '0.001 l')
 
 # Force units
 _help.append('Force units:')
@@ -1105,9 +1131,9 @@ _addUnit('dyn', 1.e-5, N, 'dyne (cgs unit)', '10^-5 N')
 # Energy units
 _help.append('Energy units:')
 
-_addUnit('erg', 1.e-7, J, 'erg (cgs unit)', '10^-7 J')
+_addUnit('erg', Fraction(1, 10**7), J, 'erg (cgs unit)', '10^-7 J')
 _addUnit('cal', 4.184, J, 'calorie', '4.184 J')
-_addUnit('kcal', 1000, cal, 'kilocalorie', '1000 cal')
+_addUnit('kcal', 1000., cal, 'kilocalorie', '1000 cal')
 _addUnit('Btu', 1055.05585262, J, 'British thermal unit', '1055.05585262 J')
 _addUnit('eV', 1.6022e-19, C*V, 'electron volt', '1.6022*10^19 C*V',
          prefixable=True)
@@ -1120,7 +1146,7 @@ _addUnit('hp', 745.7, W, 'horsepower', '745.7 W')
 # Pressure units
 _help.append('Pressure units:')
 
-_addUnit('bar', 1.e5, Pa, 'bar (cgs unit)', '10^5 Pa')
+_addUnit('bar', Fraction(10**5), Pa, 'bar (cgs unit)', '10^5 Pa')
 _addUnit('atm', 101325., Pa, 'standard atmosphere', '101325 Pa')
 _addUnit('torr', 1./760., atm, 'torr = mm of mercury', '1/760 atm')
 
