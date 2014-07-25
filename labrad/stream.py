@@ -61,7 +61,8 @@ def flattenPacket(target, context, request, records, endianness='>'):
                     raise
         data = ''.join(genexp())
         #data = ''.join(flattenRecord(*rec, **kw) for rec in records)
-    return PACKET_TYPE.__flatten__((context, request, target, data), endianness)
+    return PACKET_TYPE.__flatten__((context, request, target, data),
+        endianness)[0]
 
 def flattenRecords(records, endianness='>'):
     kw = {'endianness': endianness}
@@ -74,5 +75,5 @@ def flattenRecord(ID, data, types=[], endianness='>'):
     except T.FlatteningError as e:
         e.msg = e.msg + "\nSetting ID %s." % (ID,)
         raise
-    return RECORD_TYPE.__flatten__((ID, str(t), str(s)), endianness)
+    return RECORD_TYPE.__flatten__((ID, str(t), str(s)), endianness)[0]
 
