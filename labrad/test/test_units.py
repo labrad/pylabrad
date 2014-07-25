@@ -64,7 +64,9 @@ class LabradUnitsTests(unittest.TestCase):
                          ValueArray([3, 2, 1], '')).all())
         # Powers
         self.assertTrue((ValueArray([2, 3], 'm')**2 == ValueArray([4, 9], 'm^2')).all())
-    
+
+        self.assertTrue((ValueArray([2,3], 'GHz') * Value(3,'ns')).dtype == np.float64)
+
     def testNegativePowers(self):
         self.assertEqual(str(units.Unit('1/s')), 's^-1')
         self.assertEqual(str(units.Unit('1/s^1/2')), 's^-1/2')
@@ -177,6 +179,8 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertEqual(round_trip(5*GHz*ns), 5)  # Dimensionless
         self.assertIsInstance(round_trip(3*blank), type(3*blank)) # Don't loose dimensionless type
     def testUnitCreation(self):
-        units.Unit('phi0', 1.0, units.hplanck/(2*units.e))
+        self.assertIsInstance(units.Unit('test0', 1.0, units.hplanck/(2*units.e)), units.Unit)
+        self.assertTrue((units.Unit('phi0')**2).isCompatible(units.Unit('phi0^2')))
+
 if __name__ == "__main__":
     unittest.main()

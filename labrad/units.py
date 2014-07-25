@@ -783,7 +783,7 @@ class Unit(object):
         if self.offset != other.offset and self.factor != other.factor:
             raise TypeError(('Unit conversion (%s to %s) cannot be expressed ' +
                              'as a simple multiplicative factor') % (self, other))
-        return self.factor / other.factor
+        return float(self.factor / other.factor)
 
     def conversionTupleTo(self, other): # added 1998/09/29 GPW
         """
@@ -815,8 +815,8 @@ class Unit(object):
         #   = ( (x+d1) - (d1*s2/s1) ) * s1/s2
         #   = (x + d1 - d2*s2/s1) * s1/s2
         # thus, D = d1 - d2*s2/s1 and S = s1/s2
-        factor = self.factor / other.factor
-        offset = self.offset - (other.offset * other.factor / self.factor)
+        factor = float(self.factor / other.factor)
+        offset = float(self.offset - (other.offset * other.factor / self.factor))
         return factor, offset
 
     def isDimensionless(self):
