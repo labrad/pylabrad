@@ -176,6 +176,7 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue((round_trip(np.arange(5)*ns)==np.arange(5)*ns).all()) # array
         self.assertEqual(round_trip(5*GHz*ns), 5)  # Dimensionless
         self.assertIsInstance(round_trip(3*blank), type(3*blank)) # Don't loose dimensionless type
-
+    def testUnitCreation(self):
+        units.Unit('phi0', 1.0, units.hplanck/(2*units.e))
 if __name__ == "__main__":
     unittest.main()

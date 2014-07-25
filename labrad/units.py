@@ -541,7 +541,7 @@ class Unit(object):
             # previously-defined unit, times a factor
             name, factor, unit = args[:3]
             if isinstance(unit, WithUnit):
-                unit, factor = unit.unit, factor * unit.value
+                unit, factor = unit.unit, factor * unit._value
             elif isinstance(unit, str):
                 unit = cls._parse(unit)
             inst = Unit(name, factor * unit.factor,
@@ -1163,6 +1163,8 @@ _addUnit('degF', 1.0, Unit({}, 5./9., K.powers, 459.67), 'degrees Fahrenheit')
 
 
 # Constants
+
+
 c       = 299792458.*m/s                   # speed of light
 ly      = 1.*c*y                           # light year
 mu0     = 4.e-7*pi*N/A**2                  # permeability of vacuum
@@ -1203,6 +1205,8 @@ kcali   = 1000*cali          # international kilocalorie
 psi     = 6894.75729317*Pa   # pounds per square inch
 degR    = (5./9.)*K          # degrees Rankine
 bohr_magneton = 9.2740096820e-24 * J/T # Bohr magneton
+
+_addUnit('phi0', 1.0, hplanck/(2*e), prefixable=True)
 
 # some common textual units (no conversions here)
 dB = Unit('dB')
