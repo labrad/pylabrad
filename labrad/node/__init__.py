@@ -72,9 +72,9 @@ class ServerProcess(ProcessProtocol):
         # TODO allow for spaces in args by doing a proper split here
         self.args = self.cmdline.split()
         self.args = [interpEnvironmentVars(a, self.env) for a in self.args]
-        if not os.path.isabs(self.args[0]):
+        #if not os.path.isabs(self.args[0]):
             # must use absolute path for the executable
-            self.args[0] = os.path.join(self.path, self.args[0])
+        #    self.args[0] = os.path.join(self.path, self.args[0])
         self.executable = self.args[0]
         self.starting = False
         self.started = False
