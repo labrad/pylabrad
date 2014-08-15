@@ -1,6 +1,8 @@
 pylabrad
 
-
+Did you know about the LabRAD Node? It's super cool!
+Start it easily with the labradnode.py script in the
+scripts folder.
 
 Incorporated in pylabrad:
 
