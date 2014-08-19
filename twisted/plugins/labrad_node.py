@@ -17,8 +17,9 @@
 labrad_node.py
 
 This file makes the node server found in labrad.node.__init__ into a Twisted
-service, so that it can be started with `twistd`. It must be importable as
-`twisted.plugins`--so having the pylabrad root in your pythonpath will work.
+service, so that it can be started with `twistd`. This file must be in the
+twisted/plugins folder of your site-packages; this happens automatically when
+pylabrad is installed.
 '''
 
 from zope.interface import implements
