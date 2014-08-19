@@ -13,6 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+'''
+labrad_node.py
+
+This file makes the node server found in labrad.node.__init__ into a Twisted
+service, so that it can be started with `twistd`. This file must be in the
+twisted/plugins folder of your site-packages; this happens automatically when
+pylabrad is installed.
+'''
+
 from zope.interface import implements
 
 from twisted.python import usage

@@ -24,6 +24,19 @@ with each other.  Information such as the manager host, port
 and password are passed to the child process in environment
 variables or via command line arguments.  The startup process
 for each child server is controlled by an associated .ini file.
+
+The node name is read either from the LABRADNODE environment variable,
+or failing that the system's hostname.
+
+Registry keys for the node:
+Path: >> Nodes >> [node name]
+Key -- Value
+  directories -- [where to look for servers]
+  extensions -- [what files to look at--['.ini', '.py', '.exe'] is good]
+  javapath -- [full path to the java executable on this system,
+               including 'java.exe' at the end]
+  packages -- currently unused.
+
 """
 
 from __future__ import with_statement
