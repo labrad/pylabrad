@@ -51,7 +51,7 @@ name string "GPIB Mock Device Server" appears _twice_. If this is not the case,
 then while the node will still start the server, it will not register that the
 server has been started and you will have to drop the server connection manually
 to restart it.
-Bonus: Note that node will also open up compiled executable files to look for
+Bonus: The node will also open up compiled executable files to look for
 this information. This is how it works for the Direct Ethernet server, for
 example.
 
