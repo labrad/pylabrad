@@ -59,7 +59,7 @@ from twisted.application.internet import TCPClient
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.protocol import ProcessProtocol
-from twisted.internet.error import ProcessDone, ProcessTerminated
+from twisted.internet.error import ProcessDone, ProcessTerminated, UserError
 from twisted.python import log, failure
 from twisted.python.components import registerAdapter
 from twisted.plugin import getPlugins
@@ -398,17 +398,38 @@ class Node(MultiService):
     def startConnection(self):
         """Attempt to start the node and connect to LabRAD."""
         print 'Connecting to %s:%d...' % (self.host, self.port)
-        node = NodeServer(self.name, self.host, self.port)
-        node.onStartup().addErrback(self._error)
-        node.onShutdown().addCallbacks(self._disconnected, self._error)
-        self.cxn = TCPClient(self.host, self.port, node)
+        self.node = NodeServer(self.name, self.host, self.port)
+        self.node.onStartup().addErrback(self._error)
+        self.node.onShutdown().addCallbacks(self._disconnected, self._error)
+        
+        self.shutdownDeferred = defer.Deferred()
+        self.node.onShutdown().addCallbacks(self._nodeShutdown)
+        
+        self.cxn = TCPClient(self.host, self.port, self.node)
         self.addService(self.cxn)
+        
+    def _nodeShutdown(self, *a):
+        print "Stopping!"
+        self.shutdownDeferred.callback(None)
+        
+    def stopService(self):
+        if hasattr(self, 'cxn'):
+            d = defer.maybeDeferred(self.cxn.stopService)
+            self.removeService(self.cxn)
+            del self.cxn
+            return defer.gatherResults([MultiService.stopService(self), d])
+        else:
+            return MultiService.stopService(self)
 
     def _disconnected(self, data):
         print 'Node disconnected from manager.'
         return self._reconnect()
 
     def _error(self, failure):
+        r = failure.trap(UserError)
+        if r == UserError:
+            print "UserError found!"
+            return None
         print failure.getErrorMessage()
         return self._reconnect()
 
