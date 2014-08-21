@@ -36,6 +36,19 @@ Key -- Value
   javapath -- [full path to the java executable on this system,
                including 'java.exe' at the end]
   packages -- currently unused.
+  
+Changes required on the server:
+See "launchable-server.ini" for a description of how to have a server appear in
+the node. See labrad-servers/Qubit Server/ for an example of a java server.
+For python servers, the same information can be included in the docstring of the
+python server itself. See servers/gpibMockDeviceServer.py in this repository
+for an example.
+***N.B.*** The name given in the server's [info] section MUST MATCH the name 
+given as a class variable in the server class itself. That is, note that the
+name string "GPIB Mock Device Server" appears _twice_. If this is not the case,
+then while the node will still start the server, it will not register that the
+server has been started and you will have to drop the server connection manually
+to restart it.
 
 """
 
