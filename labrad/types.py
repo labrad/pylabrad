@@ -1093,10 +1093,10 @@ class LRList(LRType):
 
     def __unflatten__(self, s, endianness):
         data = s.get(self.__width__(Buffer(s), endianness))
-        elem = self.elem
+        elem = self.elem        
         arrayTypes = [LRValue(), LRComplex(), LRInt(), LRWord(), LRBool()]
         for t in arrayTypes:
-            if elem <= t:
+            if elem is not None and elem <= t:
                 return self.__unflattenAsArray__(data, endianness)
         else:
             return LazyList(data, self, endianness)
