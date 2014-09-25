@@ -249,7 +249,6 @@ def getType(obj):
     _typeFuncs[type(obj)](obj)
     _typeFuncs[superclasses of obj](obj)
     """
-    
     if hasattr(obj, '__lrtype__'):
         return obj.__lrtype__()
 
@@ -1016,7 +1015,7 @@ class LRList(LRType):
         n = n or 1 # if there were no digits, make a 1D list
         s = s.strip(WHITESPACE)
         if s[:1] == '_':
-            t = None # empty list
+            t = LRNone() # empty list
             s.get() # drop underscore
         else:
             t = parseSingleType(s)
