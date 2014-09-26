@@ -437,7 +437,6 @@ class WithUnit(object):
         if hasattr(x, '_value'):  # x can come back as a float if unit is dimensionless
             return x._value
         return x
-
     __array_priority__ = 15
         
 class Value(WithUnit):
@@ -903,6 +902,7 @@ class WithDimensionlessUnit(object):
             return self._value * self.unit.conversionFactorTo(idx)
         else:
             return super(WithDimensionlessUnit, self).__getitem__(idx)
+
     def inUnitsOf(self, unit):
         if self.unit.conversionFactorTo(unit) != 1.0:
             raise TypeError("Can't convert dimensionless to %s (scale factor must be 1)" % (unit,))
@@ -966,6 +966,9 @@ class WithDimensionlessUnit(object):
 
 class DimensionlessFloat(WithDimensionlessUnit, float):
    _numType = float
+   def __iter__(self):
+       raise TypeError('DimensionlessFloat not iterable')
+
 WithUnit._dimensionlessTypes[float] = DimensionlessFloat
 WithUnit._dimensionlessTypes[int] = DimensionlessFloat
 WithUnit._dimensionlessTypes[long] = DimensionlessFloat
@@ -974,6 +977,9 @@ WithUnit._numericTypes[DimensionlessFloat] = Value
 
 class DimensionlessComplex(WithDimensionlessUnit, complex):
     _numType = complex
+    def __iter__(self):
+        raise TypeError('DimensionlessComplex not iterable')
+
 WithUnit._dimensionlessTypes[complex] = DimensionlessComplex
 WithUnit._dimensionlessTypes[numpy.complex128] = DimensionlessComplex
 WithUnit._numericTypes[DimensionlessComplex] = Complex
@@ -984,7 +990,19 @@ class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
         return (np.array(value)*1.0).view(cls)
     def allclose(self, other, *args, **kw):
         return np.allclose(self, other, *args, **kw)
-        
+    def __array_wrap__(self, obj):
+        '''
+        This function is called at the end of uops and similar functions.
+        ndarray has some weird logic where reductions like sum() that result
+        in zero-rank arrays automatically convert to numpy scalars 
+        if-and-only-if the type is a ndarray base class.  If we want the same
+        we have to do it here
+        '''
+        if obj.shape == ():
+            return WithUnit(obj[()], '')
+        else:
+            return np.ndarray.__array_wrap__(self,obj)    
+
 WithUnit._dimensionlessTypes[np.ndarray] = DimensionlessArray
 WithUnit._dimensionlessTypes[list] = DimensionlessArray
 WithUnit._numericTypes[DimensionlessArray] = ValueArray
