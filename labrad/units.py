@@ -879,7 +879,7 @@ _addUnit('erg', 1.e-7, J, 'erg (cgs unit)', '10^-7 J')
 _addUnit('cal', 4.184, J, 'calorie', '4.184 J')
 _addUnit('kcal', 1000, cal, 'kilocalorie', '1000 cal')
 _addUnit('Btu', 1055.05585262, J, 'British thermal unit', '1055.05585262 J')
-_addUnit('eV', 1.6022e-19, C*V, 'electron volt', '1.6022*10^19 C*V',
+_addUnit('eV', 1.602176565e-19, C*V, 'electron volt', '1.602176565*10^19 C*V',
          prefixable=True)
 
 # Power units
@@ -912,7 +912,7 @@ ly      = 1.*c*y                           # light year
 mu0     = 4.e-7*pi*N/A**2                  # permeability of vacuum
 eps0    = 1/mu0/c**2                       # permittivity of vacuum
 G       = 6.67259e-11*m**3/kg/s**2         # gravitational constant
-hplanck = 6.6260755e-34*J*s                # Planck constant
+hplanck = 6.62606957e-34*J*s               # Planck constant
 hbar    = hplanck/(2*pi)                   # Planck constant / 2pi
 e       = 1.60217733e-19*C                 # elementary charge
 me      = 9.1093897e-31*kg                 # electron mass
