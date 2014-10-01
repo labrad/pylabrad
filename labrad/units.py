@@ -462,7 +462,23 @@ WithUnit._numericTypes[complex] = Complex
 
 
 class ValueArray(WithUnit):
+
     _numType = np.array # Regular ndarray constructor doesn't work
+
+    def __new__(cls, data, unit=None):
+        '''
+        unit=None can only be used if data is an iterable of items that already have units
+        '''
+        if unit is not None:
+            return super(ValueArray, cls).__new__(cls, data, unit)
+
+        it = iter(data)
+        first = it.next()
+        unit = first.unit
+        first = first[unit] # convert to float
+        rest = [ x[unit] for x in it]
+        return WithUnit([first] + rest, unit)
+        
     def __getitem__(self, unit):
         if isinstance(unit, (str, Unit)):
             """Return value of physical quantity expressed in new units."""
