@@ -450,6 +450,8 @@ class Value(WithUnit):
 WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
 WithUnit._numericTypes[long] = Value
+WithUnit._numericTypes[np.int32] = Value
+WithUnit._numericTypes[np.int64] = Value
 
 class Complex(WithUnit):
     _numType = complex
@@ -989,6 +991,8 @@ WithUnit._dimensionlessTypes[float] = DimensionlessFloat
 WithUnit._dimensionlessTypes[int] = DimensionlessFloat
 WithUnit._dimensionlessTypes[long] = DimensionlessFloat
 WithUnit._dimensionlessTypes[numpy.float64] = DimensionlessFloat
+WithUnit._dimensionlessTypes[numpy.int64] = DimensionlessFloat
+WithUnit._dimensionlessTypes[numpy.float32] = DimensionlessFloat
 WithUnit._numericTypes[DimensionlessFloat] = Value
 
 class DimensionlessComplex(WithDimensionlessUnit, complex):
