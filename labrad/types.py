@@ -992,7 +992,7 @@ class LRList(LRType):
         return (type(other) == LRAny or
                 (type(self) == type(other) and
                  self.depth == other.depth and
-                 (other.elem is None or self.elem <= other.elem)))
+                 (other.elem is None or type(other.elem) == LRNone or self.elem <= other.elem)))
 
     def __eq__(self, other):
         """Test whether this type is equal to another.
@@ -1004,7 +1004,7 @@ class LRList(LRType):
                 self.elem == other.elem)
 
     def isFullySpecified(self):
-        return self.elem.isFullySpecified()
+        return type(self.elem) != LRNone and self.elem.isFullySpecified()
 
     def __unflatten__(self, s, endianness):
         data = s.get(self.__width__(Buffer(s), endianness))
