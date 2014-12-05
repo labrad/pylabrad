@@ -168,7 +168,10 @@ class ServerProcess(ProcessProtocol):
             self.starting = False
             if timeoutCall.active():
                 timeoutCall.cancel()
-            dispatcher.disconnect(self.serverConnected, 'serverConnected')
+            try:
+                dispatcher.disconnect(self.serverConnected, 'serverConnected')
+            except Exception, e:
+                print 'Error while disconnecting signal:', e
         
     @inlineCallbacks
     def _stop(self):
@@ -581,7 +584,14 @@ class NodeServer(LabradServer):
         
     def initMessages(self, connect=True):
         """Set up message dispatching."""
-        f = getattr(dispatcher, 'connect' if connect else 'disconnect')
+        attr = 'connect' if connect else 'disconnect'
+        method = getattr(dispatcher, attr)
+        def f(receiver, signal):
+            try:
+                method(receiver, signal)
+            except Exception, e:
+                msg = 'Error while setting up message dispatching. receiver={0}, method={1}, signal={2}.'
+                print msg.format(receiver, attr, signal), e
         # set up messages to be relayed out over LabRAD
         messages = ['server_starting', 'server_started',
                     'server_stopping', 'server_stopped',
