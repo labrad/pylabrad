@@ -4,14 +4,12 @@ __author__ = "Patrick K. O'Brien <pobrien@orbtech.com>"
 __cvsid__ = "$Id: dispatcher.py 39667 2006-06-11 00:13:05Z RD $"
 __revision__ = "$Revision: 39667 $"[11:-2]
 
-import exceptions
 import types
 import weakref
 
 
-class DispatcherError(exceptions.Exception):
-    def __init__(self, args=None):
-        self.args = args
+class DispatcherError(Exception):
+    pass
 
 
 class Parameter:
@@ -45,7 +43,7 @@ def connect(receiver, signal=Any, sender=Any, weak=True):
     * If weak is true, weak references will be used.
     """
     if signal is None:
-        raise DispatcherError, 'signal cannot be None'
+        raise DispatcherError('signal cannot be None')
     if weak:
         receiver = safeRef(receiver)
     senderkey = id(sender)
@@ -82,21 +80,20 @@ def disconnect(receiver, signal=Any, sender=Any, weak=True):
     Disconnecting is not required. The use of disconnect is the same as for
     connect, only in reverse. Think of it as undoing a previous connection."""
     if signal is None:
-        raise DispatcherError, 'signal cannot be None'
+        raise DispatcherError('signal cannot be None')
     if weak:
         receiver = safeRef(receiver)
     senderkey = id(sender)
     try:
         receivers = connections[senderkey][signal]
     except KeyError:
-        raise DispatcherError, \
-              'No receivers for signal %r from sender %s' % (signal, sender)
+        msg = 'No receivers for signal %r from sender %s' % (signal, sender)
+        raise DispatcherError(msg)
     try:
         receivers.remove(receiver)
     except ValueError:
-        raise DispatcherError, \
-              'No connection to receiver %s for signal %r from sender %s' % \
-              (receiver, signal, sender)
+        msg = 'No connection to receiver %s for signal %r from sender %s' % (receiver, signal, sender)
+        raise DispatcherError(msg)
     _cleanupConnections(senderkey, signal)
 
 def send(signal, sender=Anonymous, **kwds):
@@ -171,7 +168,7 @@ def _call(receiver, **kwds):
         fc = receiver.func_code
         acceptable = fc.co_varnames[0:fc.co_argcount]
     else:
-        raise DispatcherError, 'Unknown receiver %s of type %s' % (receiver, type(receiver))
+        raise DispatcherError('Unknown receiver %s of type %s' % (receiver, type(receiver)))
     if not (fc.co_flags & 8):
         # fc does not have a **kwds type parameter, therefore 
         # remove unacceptable arguments.
