@@ -269,7 +269,7 @@ def getType(obj):
         for cls in _typeFuncs:
             if issubclass(t, cls):
                 return _typeFuncs[cls](obj)
-    raise TypeError("No LabRAD type for: %r." % obj)
+    raise TypeError("No LabRAD type for: %r (type %s)" % (obj, type(obj)))
 
 
 # flattening and unflattening
@@ -567,6 +567,8 @@ class LRInt(LRType, Singleton):
         return pack(endianness + 'i', n), self
 
 registerType(int, LRInt())
+registerType(np.int32, LRInt())
+registerType(np.int64, LRInt())
 
 
 class LRWord(LRType, Singleton):
@@ -582,6 +584,8 @@ class LRWord(LRType, Singleton):
         return pack(endianness + 'I', n), self
 
 registerType(long, LRWord())
+registerType(np.uint32, LRWord())
+registerType(np.uint64, LRWord())
 
 
 class LRStr(LRType, Singleton):
