@@ -1,0 +1,113 @@
+pylabrad Units (new version) documentation
+
+I.  Introduction
+
+pylabrad supports units: numerical quantities associated with a
+physical unit such as meters or GHz.  The labrad protocol has direct
+support for units.  Server settings may declare that numeric inputs be
+in specific units.  For instance, a signal generate frequency setting
+might accept a frequency in MHz.  Passing an ordinary floating point
+number is not allowed: you must pass a value with units.  Likewise, a
+setting to get the frequency returns a value in MHz.  You cannot just
+treat it like a float.  It is recommended that you use units for any
+variable which holds physical quantities, even those that are not
+communicated over the labrad protocol.
+
+II. Classes
+
+The following classes implement units in pylabrad.
+
+Value	      Real number with units    
+Complex	      Complex number with units (useful for voltage phasors)
+ValueArray    numpy array with units (real or complex based on dtype)
+
+These three types are derived from the base class WithUnit.  
+
+Unit	      A bare unit (i.e., 'meter' rather than '5 meters').
+
+III. Creating physical quantities:
+
+A value with units can be constructed in two ways.  The first is by 
+direct construction:
+
+WithUnits(5, 'GHz') or WithUnits(5, units.GHz)
+
+This automatically figures out that 5 is a real scalar and constructs
+a value.  In fact, Value, Complex, and ValueArray use the same
+constructor.  So:
+
+Value(4j, 'V) will create a Complex
+
+The second and more convenient is by multiplying a floating point by
+a Unit instance:
+
+2.5 * units.Hz
+
+Most functions that take a unit as a parameter can also take a string:
+
+Value(5, 'MHz') == Value(5, labrad.units.MHz) == Value(5, Unit('MHz')) == 5*MHz
+
+IV. Manipulating quantities with units
+
+All of the standard arithmetic operations work on quantities with
+units just like you expect.  Multiplication and division also multiply
+units, while addition and subtraction require compatible units.  == and
+!= always compare unequal for incompatible units, while <, <=, >, >= raise
+an exception if the units are incompatible (5*MHz < 3*V raises TypeError)
+
+In addition, the following methods are defined:
+
+value.isDimensionless() -> returns bool True if value's units reduce to '1'
+value.inUnitsOf() -> Convert units.  (5*m).inUnitsOf('mm') -> 5000*mm
+value.inBaseUnits() -> Convert to SI units.
+value['<unit>'] -> Return a floating point representation of value expressed
+		   in the specified units.  (5*MHz)['Hz'] -> 5000000.0.
+		   This coexists with indexing of ValueArrays.
+value.sqrt()	   Calculate the sqrt of value including the units.
+value.unit	   The Unit object represeting this Value's unit.
+value.units	   (note plural spelling): string representation of unit
+
+V. Dimensionless values
+
+Eventually you may need to convert your quantities to regular floating
+point values, for instance to pass to external code.  The first way to
+do this is with the [] notation above.  This is the way to extract the
+value of a quantity with non-trivial units.  The other way is to use
+an expression where the units cancel.  For instance: 5*GHz * 4*us.
+These expressions are automatically converted to an appropriate
+dimensionless type (float, complex, or np.ndarray).  Thus you can
+write:
+
+np.sin(2*np.pi*omega*t)
+
+If 'omega' and 't' have the appropriate units this will just work.  A
+slight wrinkle on this is that the result is not actually a pure
+'float'.  The result is actually a special class DimensionlessFloat
+(or similar for complex or array types) that is a subclass of 'float'
+but implements the WithUnit API.  isDimensionless() alwasy returns
+true and so forth.  This allows code that works with units to not need
+a special case for dimensionless quantities, while allowing
+dimensionless quantities to work transparently with numerical code.
+
+Dimensionless quantities will propogate their type on simple
+arithmetic with other dimensionless quantities or bare
+float/complex/np.ndarray objects.  That is, +,-,*,/,//,-x, abs(x)
+where one or both operands is a dimensionless quantity should always
+return a dimensionless quantity (or something with units if
+appropriate).  However, other math operations such as all of the
+function in the math module will cause scalars to revert to a plain
+float/complex.  DimensionlessArrays are handled by numpy -- some
+operations will pass through the subtype while others will not.  See
+the numpy documentation for a particular function to see if it
+preserves subclasses.  You can always extract the underlying data type
+by using the [''] operator.
+
+VI. LabRAD protocol interaction
+
+pylabrad Values are designed to operate with labrad type tags.  Data
+coming over the wire with units will be unflattened to the appropriate
+Value or Complex types.  Labrad lists will be unflattened as a
+LazyList, but the .asarray property returns a ValueArray.  Likewise,
+pylabrad knows how to flatten Value, Complex, and ValueArray instances
+properly, checking for unit compatibility.
+

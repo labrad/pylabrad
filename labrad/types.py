@@ -38,7 +38,7 @@ from itertools import chain, imap
 from operator import itemgetter
 import functools
 
-from labrad import units as U
+import labrad.units as U
 from labrad.units import Value, Complex
 
 try:
@@ -63,6 +63,7 @@ class Singleton(object):
             inst = super(Singleton, cls).__new__(cls, *a, **kw)
             cls._inst = inst
         return inst
+
 
 # a registry of parsing functions, keyed by type tag
 _parsers = {} # type tag -> parse function
@@ -137,7 +138,6 @@ class Buffer(object):
     def index(self, char):
         """Find index of char in uncomsumed part of buffer."""
         return self.s.index(char, self.ofs)
-        
 
 
 # typetag parsing
@@ -168,7 +168,7 @@ def parseTypeTag(s):
         raise
 
 WHITESPACE = ' ,\t'
-        
+
 def parseSingleType(s):
     """Parse a single type at the beginning of a type string.
     
@@ -182,7 +182,7 @@ def parseSingleType(s):
     return t
 
 COMMENTS = re.compile('\{[^\{\}]*\}')
-    
+
 def stripComments(s):
     """Remove comments from a type tag.
 
@@ -238,13 +238,6 @@ def registerTypeFunc(cls, typeFunc):
     for cls in classes:
         _typeFuncs[cls] = typeFunc
 
-def typeFunc(cls):
-    """Decorator for registering type functions."""
-    def register(func):
-        registerTypeFunc(cls, func)
-        return func
-    return register
-
 def getType(obj):
     """
     Get LabRAD type of python data.
@@ -256,7 +249,6 @@ def getType(obj):
     _typeFuncs[type(obj)](obj)
     _typeFuncs[superclasses of obj](obj)
     """
-    
     if hasattr(obj, '__lrtype__'):
         return obj.__lrtype__()
 
@@ -277,11 +269,7 @@ def getType(obj):
         for cls in _typeFuncs:
             if issubclass(t, cls):
                 return _typeFuncs[cls](obj)
-    raise TypeError("No LabRAD type for: %r." % obj)
-
-def isType(obj, tag):
-    """Returns True if type of obj is equal to or more specific than tag."""
-    return getType(obj) <= parseTypeTag(tag)
+    raise TypeError("No LabRAD type for: %r (type %s)" % (obj, type(obj)))
 
 
 # flattening and unflattening
@@ -303,12 +291,11 @@ def unflatten(s, t, endianness='>'):
         s = Buffer(s)
     return t.__unflatten__(s, endianness)
 
-
-# a registry of flattener functions that can convert python data
-# into LabRAD data, keyed on the python class that they can accept
-
 def flatten(obj, types=None, endianness='>'):
     """Flatten python data into labrad data.
+    
+    Returns a tuple containing the flattened string and the type object
+    representing the LabRAD data type to which obj was flattened.
     
     Flatten returns a tuple of (flattened string, type object).  The
     type object can be converted into a type tag by calling str(typeobj).
@@ -316,6 +303,9 @@ def flatten(obj, types=None, endianness='>'):
     We first try obj.__lrflatten__(endianness). If that fails we go to the list
     of suggested types in order until one of them works. If none of them work,
     we raise FlatteningError.
+    
+    XXX This is worthless without a specification of __lrflatten__'s
+    return signature.
     
     Suggested types can be provided in the form of type tags (strings) or type
     objects as created by parseTypeTag.
@@ -330,42 +320,57 @@ def flatten(obj, types=None, endianness='>'):
     check the registry of flattening functions, to see whether one exists
     for the object type, or a superclass.
     """
+    if hasattr(obj, '__lrflatten__'):
+        s, t = obj.__lrflatten__(endianness)
+    else:
+        s, t = _flatten_to(obj, types, endianness)
+    return s, t
+
+def _flatten_to(obj, types, endianness):
+    """
+    Flatten obj in the case that it has no __lrflatten__ method.
+    """
     if types is None:
         types = []
-    if hasattr(obj, '__lrflatten__'):
-        return obj.__lrflatten__(endianness)
-
     if not isinstance(types, list):
         types = [types]
     types = [parseTypeTag(t) for t in types]
-    
     t = getType(obj)
-
     if not len(types):
         # if there are no type suggestions, just try to
         # flatten to the default type
-        s = t.__flatten__(obj, endianness)
+        s, t = t.__flatten__(obj, endianness)
     else:
         # check the list of allowed types for one compatible
-        # with the computed type
+        # with obj's type
         foundCompatibleType = False
         for tt in types:
+            # If obj has a type which is more specific than one of the
+            # allowed types, use obj's type. This covers cases where
+            # an allowed type is 'v' and obj's type is 'v[Hz]'.
             if t <= tt:
                 foundCompatibleType = True
                 break
+            # If one of the required types is more specific than obj's
+            # type, use that. This covers cases where we're trying to
+            # flatten something like ([],[1,2]) and an allowed type is
+            # eg. (*v*i).
             elif tt <= t:
                 t = tt
                 foundCompatibleType = True
                 break
         if foundCompatibleType:
-            s = t.__flatten__(obj, endianness)
+            s, t = t.__flatten__(obj, endianness)
         else:
-            # since we haven't found anything compatible,
-            # just try to flatten to any of the suggested types
+            # Since we haven't found anything compatible, just try to
+            # flatten to any of the suggested types. This covers cases
+            # such as an allowed type 'v[]' and obj=4. In this case, the
+            # class representing 'v[]', namely LRValue(''), will handle
+            # coercion of obj to the appropriate type.
             s = None
             for t in types:
                 try:
-                    s = t.__flatten__(obj, endianness)
+                    s, t = t.__flatten__(obj, endianness)
                 except Exception:
                     pass
                 else:
@@ -374,13 +379,25 @@ def flatten(obj, types=None, endianness='>'):
                 raise FlatteningError(obj, types)
     return s, t
 
+
+# Evaluation functions
+
 def evalLRData(s):
-    """Evaluate LR data in a namespace with all LRTypes."""
+    """
+    Evaluate LR data in a namespace with all LRTypes.
+    
+    What is this for? -DTS
+    """
     return eval(s)
 
 def reprLRData(s):
-    """Make a repr of LR data in a namespace with all LRTypes."""
+    """
+    Make a repr of LR data in a namespace with all LRTypes.
+    
+    What is this for? -DTS
+    """
     return repr(s)
+
 
 # LabRAD type classes
 
@@ -393,6 +410,9 @@ class LRType(object):
     """
     
     __metaclass__ = RegisterParser
+
+    width = 0
+    isFixedWidth = True
 
     def __str__(self):
         """Convert to a type tag string format.
@@ -414,18 +434,26 @@ class LRType(object):
 
     @classmethod
     def __parse__(cls, s):
-        """Parse type tag into appropriate python type objects.
-
-        The parse function takes the remaining string (after the
-        tag for this type has been removed).  The function may need
-        to consume some more of the string to determine the type.  It
-        should return a tuple of (type object, rest of string).
+        """
+        Parse type tag into appropriate python type objects.
+        
+        Returns the type object.
+        
+        The parse function takes the remaining string (after the tag for
+        this type has been removed).  The function may need to consume
+        some more of the string to determine the type.
         """
         return cls()
 
     @classmethod
     def __lrtype__(cls, obj):
+        """
+        Return the LabRAD type object for a python object.
+        """
         return cls()
+
+    def __cmp__(self, other):
+        raise RuntimeError("Unreachable __cmp__ in LRType")
 
     def __eq__(self, other):
         """Test whether this type is equal to another.
@@ -435,22 +463,32 @@ class LRType(object):
         return type(self) == type(other)
 
     def __le__(self, other):
-        """Test whether this type is equal to on more specific than another.
+        """
+        Test whether this type is equal to on more specific than another.
 
-        By default, just check for equality.
+        By default, just check for equality, or that the other type is LRAny.
+        
+        This operator has a very specific meaning which is easy to
+        misunderstand. For two types, X and Y, X<=Y if and only if a setting
+        advertising 'Y' will happily accept a LaBRAD record with data of type
+        'X'. The simplest example of this is a setting accepting '?'. Such a
+        setting will happily accept 'i', 'b', or anything else. Therefore, we
+        have eg. LRInt()<=LRAny. A more complex example is 'v[Hz]' <= 'v'.
         """
         return type(self) == type(other) or type(other) == LRAny
 
     def isFullySpecified(self):
         return True
 
-    isFixedWidth = True
-    width = 0
-        
     def __width__(self, s, endianness):
+        """
+        Skip n bytes of tag buffer where n is width of this type.
+        
+        Returns number of bytes skipped.
+        """
         s.skip(self.width)
         return self.width
-        
+
     def __unflatten__(self, s, endianness):
         """Unflatten data from a string representation.
 
@@ -461,8 +499,11 @@ class LRType(object):
         raise NotImplementedError
 
     def __flatten__(self, data, endianness):
-        """Flatten python data to this LabRAD type.
-
+        """
+        Flatten python data to this LabRAD type.
+        
+        Returns a tuple of (flattened string, LabRAD type object).
+        
         Each LabRAD type object implements a default unflattener that
         creates python data from the LabRAD data string.  The unflattener
         returns a tuple of (flattened string, labrad type).  Note that
@@ -490,7 +531,7 @@ class LRNone(LRType, Singleton):
     def __flatten__(self, data, endianness):
         if data is not None:
             raise FlatteningError(data, self)
-        return ''
+        return '', self
 
 registerType(type(None), LRNone())
 # register LRNone parser for the empty string as well
@@ -508,7 +549,7 @@ class LRBool(LRType, Singleton):
     def __flatten__(self, b, endianness):
         if not isinstance(b, bool):
             raise FlatteningError(b, self)
-        return chr(b)
+        return chr(b), self
 
 registerType(bool, LRBool())
 
@@ -523,9 +564,11 @@ class LRInt(LRType, Singleton):
     def __flatten__(self, n, endianness):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
-        return pack(endianness + 'i', n)
+        return pack(endianness + 'i', n), self
 
 registerType(int, LRInt())
+registerType(np.int32, LRInt())
+registerType(np.int64, LRInt())
 
 
 class LRWord(LRType, Singleton):
@@ -538,9 +581,11 @@ class LRWord(LRType, Singleton):
     def __flatten__(self, n, endianness):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
-        return pack(endianness + 'I', n)
+        return pack(endianness + 'I', n), self
 
 registerType(long, LRWord())
+registerType(np.uint32, LRWord())
+registerType(np.uint64, LRWord())
 
 
 class LRStr(LRType, Singleton):
@@ -560,7 +605,7 @@ class LRStr(LRType, Singleton):
     def __flatten__(self, s, endianness):
         if not isinstance(s, str):
             raise FlatteningError(s, self)
-        return pack(endianness + 'I', len(s)) + s
+        return pack(endianness + 'I', len(s)) + s, self
 
 registerType(str, LRStr())
 
@@ -591,7 +636,7 @@ class LRTime(LRType, Singleton):
         diff = t - timeOffset()
         secs = diff.days * (60 * 60 * 24) + diff.seconds
         us = long(float(diff.microseconds)/pow(10,6)*pow(2,64))
-        return pack(endianness + 'QQ', secs, us)
+        return pack(endianness + 'QQ', secs, us), self
 
 registerType(dt, LRTime())
 
@@ -611,11 +656,17 @@ registerType(float, LRFloat)
 
 class LRValue(LRType):
     """Represents the type of a real number that carries units."""
-    
+
     tag = 'v'
     width = 8
-
+    
+    # Types which can be flattened by LRValue as 'v[]' via coercion to
+    # float. See __flatten__.
+    CASTABLE_TYPES = [int, long]
+    
     def __init__(self, unit=None):
+        if isinstance(unit, U.Unit):
+            unit = str(unit)
         self.unit = unit
 
     def __str__(self):
@@ -633,7 +684,7 @@ class LRValue(LRType):
 
     def __eq__(self, other):
         return type(self) == type(other) and self.unit == other.unit
-    
+
     def __le__(self, other):
         # this method is a bit funky.  The <= relationship determines
         # which types are allowed to be coerced in flattening.  If the
@@ -645,13 +696,17 @@ class LRValue(LRType):
             return True
         if type(self) != type(other):
             return False
+        # If other is 'v', then any variant of 'v' is allowed. For example, if
+        # we are 'v[]' or 'v[Hz]', we are allowed to pass to a setting
+        # advertising 'v'.
         if other.unit is None:
             return True
         if self.unit is None:
-            return False
-        if not U.Unit(self.unit).isCompatible(U.Unit(other.unit)):
-            return False
-        return True
+            msg = "Unreachable: no python object should get %s as type"%(self,)
+            raise TypeError(msg)
+        # We have a unit, and the other guy has a unit, so make sure our units
+        # are compatible.
+        return U.Unit(self.unit).isCompatible(U.Unit(other.unit))
 
     def isFullySpecified(self):
         return self.unit is not None
@@ -661,27 +716,41 @@ class LRValue(LRType):
         if self.unit is not None:
             v = Value(v, self.unit)
         return v
-        
+
     @classmethod
     def __lrtype__(cls, v):
+        """
+        Get a LRValue instance for a python object.
+        
+        We handle the follwing types:
+            float -> LRValue('')
+            labrad.units.Value(unit) -> LRValue(str(unit))
+        """
         if isinstance(v, U.WithUnit):
             return cls(v.unit)
-        return cls(None)
-        
+        elif isinstance(v, (float, U.DimensionlessFloat)):
+            return cls('')
+        else:
+            raise TypeError("No %s type for %s"%(cls, v))
+
     def __flatten__(self, v, endianness):
         v = self.__check_units__(v)
-        return pack(endianness + 'd', float(v))
-        
+        v = float(v)
+        # If we are an LRValue(None), switch to LRValue('') so that wire
+        # data has correct type tag, eg. 'v[]' instead of 'v'.
+        if self.unit is None:
+            self.unit = ''
+        return pack(endianness + 'd', float(v)), self
+
     def __check_units__(self, v):
         # TODO: implement full labrad unit conversion semantics in pylabrad
-        # If we're trying to flatten to unitless value, then v must be float
-        # or Value with units either None or ''
+        # If v is not a unit-full object, only accept if our unit is
+        # None or ''.
         if not isinstance(v, U.WithUnit):
-            # v is a float or complex; only accept if out unit is None or ''
-            if self.unit not in [None, '']:
+            if self.unit is not None and self.unit != '':
                 raise FlatteningError(v, self)
         else:
-            # v has units; convert to desired units
+            # v has units, so convert to required units.
             v = v[self.unit]
         return v
 
@@ -704,7 +773,18 @@ class LRComplex(LRValue):
     def __flatten__(self, c, endianness):
         c = self.__check_units__(c)
         c = complex(c)
-        return pack(endianness + 'dd', c.real, c.imag)
+        if self.unit is None:
+            self.unit = ''
+        return pack(endianness + 'dd', c.real, c.imag), self
+
+    @classmethod
+    def __lrtype__(cls, c):
+        if isinstance(c, U.WithUnit):
+            return cls(c.unit)
+        elif isinstance(c, (complex, U.DimensionlessComplex)):
+            return cls('')
+        else:
+            raise TypeError("No %s type for %s"%(cls, c))
 
 registerTypeFunc((complex, Complex), LRComplex.__lrtype__)
 
@@ -788,12 +868,12 @@ class LRCluster(LRType):
                     strs.append(s)
                     items.append(t)
                 else:
-                    s = t.__flatten__(elem, endianness)
+                    s, _ = t.__flatten__(elem, endianness) # _ -> t ?
                     strs.append(s)
                     items.append(t)
             self.items = items # warning: type mutated here
-            return ''.join(strs)
-        return ''.join(t.__flatten__(elem, endianness) for t, elem in zip(self.items, c))
+            return ''.join(strs), self
+        return ''.join(t.__flatten__(elem, endianness)[0] for t, elem in zip(self.items, c)), self
 
 registerTypeFunc(tuple, LRCluster.__lrtype__)
 
@@ -939,7 +1019,7 @@ class LRList(LRType):
         n = n or 1 # if there were no digits, make a 1D list
         s = s.strip(WHITESPACE)
         if s[:1] == '_':
-            t = None # empty list
+            t = LRNone() # empty list
             s.get() # drop underscore
         else:
             t = parseSingleType(s)
@@ -947,6 +1027,9 @@ class LRList(LRType):
 
     @classmethod
     def __lrtype__(cls, L):
+        """
+        Return a type object for L.
+        """
         depth, temp = 1, L
         while len(temp) and isinstance(temp[0], list):
             depth, temp = depth+1, temp[0]
@@ -978,12 +1061,17 @@ class LRList(LRType):
         elif L.dtype in ['>i4', '<i4']: t = LRInt()
         elif L.dtype in ['>u4', '<u4']: t = LRWord()
         elif L.dtype in ['>u8', '<u8']: t = LRWord()
-        elif L.dtype in ['>f8', '<f8']: t = LRValue()
+        elif L.dtype in ['>f8', '<f8']: t = LRValue('')
         elif L.dtype in ['>c16', '<c16']: t = LRComplex()
         else:
             raise Exception("Can't flatten array of %s" % L.dtype)
         return cls(t, depth=len(L.shape))
-        
+    
+    @classmethod
+    def __lrtype_ValueArray__(cls, L):
+        t = LRValue(str(L.unit))
+        return cls(t, depth=len(L._value.shape))
+    
     def __le__(self, other):
         """Test whether this type is more specific than another.
 
@@ -1008,8 +1096,14 @@ class LRList(LRType):
 
     def __unflatten__(self, s, endianness):
         data = s.get(self.__width__(Buffer(s), endianness))
-        return LazyList(data, self, endianness)
-    
+        elem = self.elem        
+        arrayTypes = [LRValue(), LRComplex(), LRInt(), LRWord(), LRBool()]
+        for t in arrayTypes:
+            if elem is not None and elem <= t:
+                return self.__unflattenAsArray__(data, endianness)
+        else:
+            return LazyList(data, self, endianness)
+        
         """Unflatten to nested python list."""
         # get list dimensions
         n = self.depth
@@ -1023,7 +1117,41 @@ class LRList(LRType):
             else:
                 return [unflattenNDlist(s, dims[1:]) for _ in xrange(dims[0])]
         return unflattenNDlist(s, dims)
+    
+    def __unflattenAsArray__(self, data, endianness):
+        """
+        Unflatten to numpy array.
         
+        This code is mostly copied from LazyList on 14 July 2014.
+        A useful pursuit would be to refactor the common bits.
+        """
+        n, elem = self.depth, self.elem
+        s = Buffer(data)
+        dims = unpack(endianness + ('i'*n), s.get(4*n))
+        size = np.prod(dims)
+        
+        def make(t, width):
+            sys_byte_order = '<' if sys.byteorder == 'little' else '>'
+            x = fromstring(s.get(size*width), dtype=dtype(t))
+            if endianness != sys_byte_order:
+                x.byteswap(True) # inplace
+            return x
+
+        if elem == LRBool(): a = make('u1', 1)
+        elif elem == LRInt(): a = make('i4', 4)
+        elif elem == LRWord(): a = make('u4', 4)
+        elif elem <= LRValue(): a = make('f8', 8)
+        elif elem <= LRComplex(): a = make('c16', 16)
+        else:
+            raise TypeError("Cannot make numpy array with %s"%(elem,))
+        a.shape = dims + a.shape[1:] # handle clusters as elements
+        if elem <= LRValue():
+            if elem.unit is not None and elem.unit != '':
+                a = U.ValueArray(a, elem.unit)
+            else:
+                a = U.DimensionlessArray(a)
+        return a
+    
     def __flatten__(self, L, endianness):
         """Flatten (nested) python list to LabRAD list.
 
@@ -1041,12 +1169,17 @@ class LRList(LRType):
             # That means if you mutate the array, then flatten
             # the lazy list, the changes will not be reflected.
             if L._endianness==endianness:
-                return L._data
+                return L._data, self
             else:
                 # Make sure it is unflattened so endian conversion happens
                 L.aslist
         if useNumpy and isinstance(L, ndarray):
+            if self.elem <= LRValue() and self.elem.unit != '':
+                msg = "Can't flatten ndarray to %s"%(self,)
+                raise TypeError(msg)
             return self.__flatten_array__(L, endianness)
+        if useNumpy and isinstance(L, U.ValueArray):
+            return self.__flatten_ValueArray__(L, endianness)
         if self.elem == LRAny():
             self.elem = self.__lrtype__(L).elem
         lengths = [None] * self.depth
@@ -1056,12 +1189,12 @@ class LRList(LRType):
             if len(ls) != lengths[n]:
                 raise Exception('List is not rectangular.')
             if n+1 == self.depth:
-                return ''.join(self.elem.__flatten__(e, endianness) for e in ls)
+                return ''.join(self.elem.__flatten__(e, endianness)[0] for e in ls)
             else:
                 return ''.join(flattenNDlist(row, n+1) for row in ls)
         flat = flattenNDlist(L)
         lengths = [l or 0 for l in lengths]
-        return pack(endianness + ('i' * len(lengths)), *lengths) + flat
+        return pack(endianness + ('i' * len(lengths)), *lengths) + flat, self
         
     def __flatten_array__(self, a, endianness):
         """Flatten numpy array to LabRAD list."""
@@ -1084,9 +1217,15 @@ class LRList(LRType):
             a = a.astype(endianness + wanted_dtype)
         else:
             elems = imap(itemgetter(0), (flatten(i, endianness=endianness) for i in a.flat))
-            return dims + ''.join(elems)
-        return dims + a.tostring()
-        
+            return dims + ''.join(elems), self
+        return dims + a.tostring(), self
+    
+    def __flatten_ValueArray__(self, va, endianness):
+        # Convert to appropriate unit and flatten as array
+        numericalData = va[self.elem.unit]
+        return self.__flatten_array__(numericalData, endianness)
+
+
 _known_dtypes = {
     LRBool: 'u1',
     LRInt: 'i4',
@@ -1098,6 +1237,8 @@ _known_dtypes = {
 registerTypeFunc(list, LRList.__lrtype__)
 if useNumpy:
     registerTypeFunc(ndarray, LRList.__lrtype_array__)
+    registerTypeFunc(U.ValueArray, LRList.__lrtype_ValueArray__)
+    registerTypeFunc(U.DimensionlessArray, LRList.__lrtype_array__)
 
 
 def nestedList(obj, n):
@@ -1167,7 +1308,7 @@ class LRError(LRType):
         t = LRCluster(LRInt(), LRStr(), self.payload)
         s, t = flatten((int(code), str(msg), payload), t, endianness)
         self.payload = t.items[2]
-        return s
+        return s, self
 
 registerTypeFunc(Exception, LRError().__lrtype__)
 

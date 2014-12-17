@@ -61,7 +61,9 @@ from math import floor, pi
 #    useNumpy = False
 
 from labrad import grammar
-from labrad.ratio import Ratio
+import numpy as np
+import fractions
+from fractions import Fraction
 
 # Dictionary containing numbers
 #
@@ -130,21 +132,38 @@ class NumberDict(dict):
             new[key] = self[key] / other
         return new
 
-
 class WithUnit(object):
     """Mixin class for adding units to numeric types."""
 
     def __new__(cls, value, unit=None):
-        #if unit is None:
-        #    return 1.0 * value # make sure return value is at least a float
+        # Convert inputs to make sense: 
+        # check for illegal None unit, unit string -> Unit, list -> array, check 
+        # to see if value is 
+        if unit is None:
+            raise RuntimeError("Cannot construct WithUnit with unit=None.  Use correct units, or use a float")
+        if isinstance(value, list):
+            value = np.asarray(value)
+        unit = Unit(unit)
+        if hasattr(value, 'unit'): # This is called from Unit * Value and friends
+            return WithUnit(value._value, value.unit * unit)
+
+        # Ok, with all that business taken care of, look up the right type
+        # (Value, Complex, ValueArray, or the Dimensionless versions of each
+        # and construct a final object
         cls = cls._findClass(type(value), unit)
-        
-        inst = super(WithUnit, cls).__new__(cls, value)
+        if unit and unit.isDimensionless():
+            return cls(value * unit.conversionFactorTo(''))
+        inst = super(WithUnit, cls).__new__(cls)
+        inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
         return inst
-        
+
+    def __reduce__(self):
+        return (WithUnit, (self._value, self.unit.name))
+
     _numericTypes = {}
-        
+    _dimensionlessTypes = {}
+
     @classmethod
     def _findClass(cls, numType, unit):
         """Find a class for a particular numeric type and unit.
@@ -153,14 +172,20 @@ class WithUnit(object):
         """
         # find class with units for this numeric type
         try:
-            cls = cls._numericTypes[numType]
+            if unit.isDimensionless():
+                cls = cls._dimensionlessTypes[numType]
+            else:
+                cls = cls._numericTypes[numType]
         except KeyError:
             raise TypeError('Cannot use units with instances of type %s' % (numType,))
         return cls
         
     @property
-    def value(self):
-        return self.__class__._numType(self)
+    def _value(self):
+        """
+        The underlying numeric value to which the units apply.  Can be float, complex, or array.
+        """
+        return self.__value
 
     @property
     def units(self):
@@ -171,13 +196,13 @@ class WithUnit(object):
 
     def __str__(self):
         if self.unit is None:
-            return str(self.value)
-        return '%s %s' % (self.value, self.unit)
+            return str(self._value)
+        return '%s %s' % (self._value, self.unit)
 
     def __repr__(self):
         if self.unit is None:
-            return '%s(%r, None)' % (self.__class__.__name__, self.value)
-        return '%s(%r, %r)' % (self.__class__.__name__, self.value, self.unit.name)
+            return '%s(%r, None)' % (self.__class__.__name__, self._value)
+        return '%s(%r, %r)' % (self.__class__.__name__, self._value, self.unit.name)
 
     def _sum(self, other, sign1, sign2):
         if isinstance(other, WithUnit):
@@ -185,14 +210,14 @@ class WithUnit(object):
                 factor = other.unit.conversionFactorTo(self.unit)
             else:
                 factor = 1
-            value = sign1 * self.value + sign2 * other.value * factor
+            value = sign1 * self._value + sign2 * other._value * factor
         elif self.isDimensionless():
-            value = sign1 * self.value + sign2 * other / self.unit.conversionFactorTo('')
+            value = sign1 * self._value + sign2 * other / self.unit.conversionFactorTo('')
         elif other==0:
-            value = sign1 * self.value
+            value = sign1 * self._value
         else:
             raise TypeError("Incompatible Units %s, ''" % (self.unit,))
-            #value = sign1 * self.value + sign2 * other
+            #value = sign1 * self._value + sign2 * other
         return WithUnit(value, self.unit)
 
     def __add__(self, other):
@@ -208,17 +233,32 @@ class WithUnit(object):
 
     def __eq__(self, other):
         if not isinstance(other, WithUnit):
+            if self.isDimensionless():
+                return self[''] == other
             if self.unit is None:
-                return self.value == other
+                return self._value == other
+            if self._value == 0:
+                return other==0
             return False
-        return self.__cmp__(other) == 0
+        else:
+            if self.isCompatible(other.unit):
+                return self.__cmp__(other) == 0
+            else:
+                return False
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def __cmp__(self, other):
+        '''
+        This just returns the difference between self and other.
+        We don't call cmp() on it to convert to +/-1 or 0 because
+        that doesn't work on complex numbers, even if we only want
+        to test for equality.
+        '''
         diff = self._sum(other, 1, -1)
-        return cmp(diff.value, 0)
+        return diff._value 
+        # return cmp(diff._value, 0)
     
     def __lt__(self, other):
         return self.__cmp__(other) < 0
@@ -234,72 +274,86 @@ class WithUnit(object):
         
     def __mul__(self, other):
         if isinstance(other, Unit):
-            return WithUnit(self.value, self.unit * other)
+            return WithUnit(self._value, self.unit * other)
         if isinstance(other, WithUnit):
             if self.unit is None:
-                return WithUnit(self.value * other.value, other.unit)
+                return WithUnit(self._value * other._value, other.unit)
             if other.unit is None:
-                return WithUnit(self.value * other.value, self.unit)
-            return WithUnit(self.value * other.value,
+                return WithUnit(self._value * other._value, self.unit)
+            return WithUnit(self._value * other._value,
                             self.unit * other.unit)
-        return WithUnit(self.value * other, self.unit)
+        return WithUnit(self._value * other, self.unit)
 
     __rmul__ = __mul__
 
     def __div__(self, other):
         if isinstance(other, Unit):
-            return WithUnit(self.value, self.unit / other)
+            return WithUnit(self._value, self.unit / other)
         if isinstance(other, WithUnit):
             if self.unit is None and other.unit is None:
-                return WithUnit(self.value / other.value, None)
+                return WithUnit(self._value / other._value, None)
             if self.unit is None:
-                return WithUnit(self.value / other.value, pow(other.unit, -1))
+                return WithUnit(self._value / other._value, pow(other.unit, -1))
             if other.unit is None:
-                return WithUnit(self.value / other.value, self.unit)
-            return WithUnit(self.value / other.value,
+                return WithUnit(self._value / other._value, self.unit)
+            return WithUnit(self._value / other._value,
                             self.unit / other.unit)
-        return WithUnit(self.value / other, self.unit)
-        
+        return WithUnit(self._value / other, self.unit)
+
+    __truediv__ = __div__
+
     def __rdiv__(self, other):
         if isinstance(other, Unit):
-            return WithUnit(self.value, other / self.unit)
+            return WithUnit(self._value, other / self.unit)
         if isinstance(other, WithUnit):
             if self.unit is None and other.unit is None:
-                return WithUnit(other.value / self.value, None)
+                return WithUnit(other._value / self._value, None)
             if self.unit is None:
-                return WithUnit(other.value / self.value, other.unit)
+                return WithUnit(other._value / self._value, other.unit)
             if other.unit is None:
-                return WithUnit(other.value / self.value, pow(self.unit, -1))
-            return WithUnit(other.value / self.value,
+                return WithUnit(other._value / self._value, pow(self.unit, -1))
+            return WithUnit(other._value / self._value,
                             other.unit / self.unit)
-        return WithUnit(other / self.value, pow(self.unit, -1))
+        return WithUnit(other / self._value, pow(self.unit, -1))
 
+    __rtruediv__ = __rdiv__
     def __pow__(self, other):
         if isinstance(other, (WithUnit, Unit)) and not other.isDimensionless():
             raise TypeError('Exponents must be dimensionless')
         if self.unit is None:
-            return WithUnit(pow(self.value, float(other)), None)
-        return WithUnit(pow(self.value, float(other)),
+            return WithUnit(pow(self._value, float(other)), None)
+        return WithUnit(pow(self._value, float(other)),
                         pow(self.unit, other))
 
     def __rpow__(self, other):
         if not self.isDimensionless():
             raise TypeError('Exponents must be dimensionless')
         if self.unit is None:
-            return pow(other, self.value)
-        return pow(other, self.value * self.unit.factor)
+            return pow(other, self._value)
+        return pow(other, self._value * self.unit.factor)
 
     def __abs__(self):
-        return WithUnit(abs(self.value), self.unit)
+        return WithUnit(abs(self._value), self.unit)
 
     def __pos__(self):
         return self
 
     def __neg__(self):
-        return WithUnit(-self.value, self.unit)
+        return WithUnit(-self._value, self.unit)
 
     def __nonzero__(self):
-        return self.value != 0
+        return self._value != 0
+
+    def __hash__(self):
+        '''
+        Not sure if using Value as a dictionary key makes sense, but
+        here it is anyway.  We convert to base units so that 1*km and
+        1000*m hash to the same value.  They also hash to the same
+        value as 1000*V, but that is OK.  Note that this is still kind
+        of messed up: 1001*m != 1.001*km because the latter is not an
+        exact number.  C'est la floating point.
+        '''
+        return hash(self.inBaseUnits()._value)
 
     def inUnitsOf(self, unit):
         """
@@ -321,9 +375,9 @@ class WithUnit(object):
         with the original unit
         """
         if self.unit is None:
-            return WithUnit(self.value, unit)
+            return WithUnit(self._value, unit)
         factor, offset = self.unit.conversionTupleTo(unit)
-        return WithUnit((self.value + offset) * factor, unit)
+        return WithUnit((self._value + offset) * factor, unit)
 
     # Contributed by Berthold Hoellmann
     def inBaseUnits(self):
@@ -349,7 +403,7 @@ class WithUnit(object):
         name = num + denom
         if name == '1':
             name = ''
-        return WithUnit(self.value * self.unit.factor, name)
+        return WithUnit(self._value * self.unit.factor, name)
 
     def isCompatible(self, unit):
         """
@@ -369,41 +423,91 @@ class WithUnit(object):
         return self.unit.isDimensionless()
         
     def sqrt(self):
-        return pow(self, Ratio(1,2))
+        return pow(self, Fraction(1,2))
+    
+    def __copy__(self):
+        return self
+    
+    def __deepcopy__(self, memo):
+        return self
 
-class Value(WithUnit, float):
-    _numType = float
-    
-    def do_copy(self):
-        return self
-    
-    def do_deepcopy(self):
-        return self
-    
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
-        return self.inUnitsOf(unit).value
+        x = self.inUnitsOf(unit)
+        if hasattr(x, '_value'):  # x can come back as a float if unit is dimensionless
+            return x._value
+        return x
+    __array_priority__ = 15
+        
+class Value(WithUnit):
+    _numType = float
+
+    def __float__(self):
+        return self['']
     def __iter__(self):
         raise TypeError("'Value' object is not iterable")
+
 WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
 WithUnit._numericTypes[long] = Value
+WithUnit._numericTypes[np.int32] = Value
+WithUnit._numericTypes[np.int64] = Value
 
-class Complex(WithUnit, complex):
+class Complex(WithUnit):
     _numType = complex
-    
-    def do_copy(self):
-        return self
-    
-    def do_deepcopy(self):
-        return self
-    
-    def __getitem__(self, unit):
-        """Return value of physical quantity expressed in new units."""
-        return self.inUnitsOf(unit).value
+
+    def __complex__(self):
+        return self['']
     def __iter__(self):
         raise TypeError("'Complex' object is not iterable")
 WithUnit._numericTypes[complex] = Complex
+
+
+class ValueArray(WithUnit):
+
+    _numType = np.array # Regular ndarray constructor doesn't work
+
+    def __new__(cls, data, unit=None):
+        '''
+        unit=None can only be used if data is an iterable of items that already have units
+        '''
+        if unit is not None:
+            return super(ValueArray, cls).__new__(cls, data, unit)
+
+        it = iter(data)
+        first = it.next()
+        unit = first.unit
+        first = first[unit] # convert to float
+        rest = [ x[unit] for x in it]
+        return WithUnit([first] + rest, unit)
+        
+    def __getitem__(self, unit):
+        if isinstance(unit, (str, Unit)):
+            """Return value of physical quantity expressed in new units."""
+            return super(ValueArray, self).__getitem__(unit)
+        else:
+            idx = unit
+            return WithUnit(self._value[idx], self.unit)
+
+    def __len__(self):
+        return len(self._value)
+
+    def __setitem__(self, key, value):
+        self._value[key] = value.inUnitsOf(self.unit)._value
+            
+    def __copy__(self):
+        # Numpy arrays are not immutable so we have to 
+        # make a real copy
+        return WithUnit(self._value.copy(), self.unit)
+    
+    def __deepcopy__(self, memo):
+        return self.__copy__()
+
+    def allclose(self, other, *args, **kw):
+        return np.allclose(self._value, other[self.unit], *args, **kw)
+
+WithUnit._numericTypes[np.ndarray] = ValueArray
+WithUnit._numericTypes[list] = ValueArray
 
 # add support for numeric types returned by most numpy/scipy functions
 try:
@@ -428,6 +532,8 @@ class Unit(object):
     and the exponentials of each of the SI base units that enter into
     it. Units can be multiplied, divided, and raised to rational powers.
     """
+
+    __array_priority__ = 15
     def __new__(cls, *args, **kw):
         """Construct a new unit instance.
         
@@ -452,7 +558,7 @@ class Unit(object):
             # previously-defined unit, times a factor
             name, factor, unit = args[:3]
             if isinstance(unit, WithUnit):
-                unit, factor = unit.unit, factor * unit.value
+                unit, factor = unit.unit, factor * unit._value
             elif isinstance(unit, str):
                 unit = cls._parse(unit)
             inst = Unit(name, factor * unit.factor,
@@ -463,10 +569,13 @@ class Unit(object):
         inst._init(*args, **kw)
         return inst
     
-    def do_copy(self):
+    def __reduce__(self):
+        return (Unit, (self.name,))
+
+    def __copy__(self):
         return self
     
-    def do_deepcopy(self, memo):
+    def __deepcopy__(self, memo):
         return self
     
     @classmethod
@@ -486,7 +595,7 @@ class Unit(object):
                     term = elem['name']
                     if term not in _unit_table:
                         _unit_table[term] = cls._stringUnit(term)
-                    unit = unit * _unit_table[term]**(sign*Ratio(num, denom))
+                    unit = unit * _unit_table[term]**(sign*Fraction(num, denom))
         except Exception:
             # TODO handle errors more intelligently here.
             # (might need to change unit grammar)
@@ -529,16 +638,16 @@ class Unit(object):
         """
         if isinstance(names, str):
             self.names = NumberDict()
-            self.names[names] = Ratio(1)
+            self.names[names] = Fraction(1)
         else:
             self.names = names
         self.factor = factor
         self.offset = offset
-        self.powers = [Ratio(p) for p in powers]
+        self.powers = [Fraction(p) for p in powers]
         if isinstance(lex_names, str):
             self.lex_names = NumberDict()
             if lex_names:
-                self.lex_names[lex_names] = Ratio(1)
+                self.lex_names[lex_names] = Fraction(1)
         else:
             self.lex_names = lex_names
             
@@ -653,12 +762,12 @@ class Unit(object):
             inv_exp = 1./other
             rounded = int(floor(inv_exp+0.5))
             if abs(inv_exp - rounded) < 1.e-10:
-                return self.__pow__(Ratio(1, rounded))
+                return self.__pow__(Fraction(1, rounded))
         if isinstance(other, tuple):
-            other = Ratio(*other)
-        if isinstance(other, Ratio):
+            other = Fraction(*other)
+        if isinstance(other, Fraction):
             return Unit(other * self.names,
-                        pow(self.factor, float(other)),
+                        pow(self.factor, other),
                         [p * other for p in self.powers],
                         self.offset,
                         other * self.lex_names)
@@ -691,7 +800,7 @@ class Unit(object):
         if self.offset != other.offset and self.factor != other.factor:
             raise TypeError(('Unit conversion (%s to %s) cannot be expressed ' +
                              'as a simple multiplicative factor') % (self, other))
-        return self.factor / other.factor
+        return float(self.factor / other.factor)
 
     def conversionTupleTo(self, other): # added 1998/09/29 GPW
         """
@@ -723,8 +832,8 @@ class Unit(object):
         #   = ( (x+d1) - (d1*s2/s1) ) * s1/s2
         #   = (x + d1 - d2*s2/s1) * s1/s2
         # thus, D = d1 - d2*s2/s1 and S = s1/s2
-        factor = self.factor / other.factor
-        offset = self.offset - (other.offset * other.factor / self.factor)
+        factor = float(self.factor / other.factor)
+        offset = float(self.offset - (other.offset * other.factor / self.factor))
         return factor, offset
 
     def isDimensionless(self):
@@ -754,8 +863,169 @@ def convert(*args):
     raise Exception('Must call convert with 2 or 3 args')
 
 
-_unit_table = {'': Unit(NumberDict(), 1., [0]*9, 0)}
+_unit_table = {'': Unit(NumberDict(), Fraction(1), [0]*9, 0)}
 
+
+class WithDimensionlessUnit(object):
+    """
+    This is a funny class.  It is designed to be subclassed
+    along float, complex, or ndarray.  It provides a simplified
+    but compatible API as the WithUnit class, but only works
+    for dimensionless quantities.  The reason for this is what
+    to do with expressions like:
+
+    4. ns * 5. GHz
+    
+    Option 1: Return Value(20, '').  This is consistent, but annoying
+    because it won't work directly in contexts that expect a float.
+    i.e., sin(5*GHz * 2 * np.pi * 4*ns) raises an exception.  It is
+    possible to define a __float__() method, but that doesn't catch all
+    cases.
+
+    Option 2: return float(20.0).  This is convenient, but makes
+    writing generic code harder because the expected methods and
+    properties (._value, .inUnitsOf) don't exist.
+
+    Option 3: 
+    WithDimensionlessUnit(20.0).  This creates a subclass of float
+    that has the necessary methods and properties, but in all other
+    ways behaves like a float.
+
+    This implements option 3
+    """
+    __unit = Unit('') # All instances are dimensionless
+    def __new__(cls, value):
+        obj = super(WithDimensionlessUnit, cls).__new__(cls, value)
+        return obj
+
+    def __reduce__(self):
+        return (type(self), (self._value,))
+
+    @property
+    def unit(self):
+        return self.__unit
+    @property
+    def _value(self):
+        return self._numType(self)
+    @property
+    def units(self):
+        return ''
+
+    def __getitem__(self, idx):
+        # getitem with a string tries to do unit conversion.  This is not normally
+        # particularly useful with dimensionless numbers, but WithUnits(3, '')['mm/m']
+        # will give you 3000.0.  If the index isn't a string, pass to the base class
+        # implementation
+        if isinstance(idx, (str, Unit)):
+            return self._value * self.unit.conversionFactorTo(idx)
+        else:
+            return super(WithDimensionlessUnit, self).__getitem__(idx)
+
+    def inUnitsOf(self, unit):
+        if self.unit.conversionFactorTo(unit) != 1.0:
+            raise TypeError("Can't convert dimensionless to %s (scale factor must be 1)" % (unit,))
+        else:
+            return self
+
+    def inBaseUnits(self):
+        return self
+
+    def isDimensionless(self):
+        return True
+
+    def isCompatible(self, unit):
+        return self.unit.isCompatible(unit)
+
+    def sqrt(self):
+        return self.__class__(sqrt(self._value))
+
+    # These are a whole bunch of operations to make sure that math
+    # between WithDimensionlessUnits and float/complex return
+    # the right type.  Without this, DimensionlessValues degrade
+    # to float as soon as you do math on them.  Not sure if this is
+    # actually a problem.
+    def __mul__(self, other):
+        result = self._value * other
+        return WithUnit(result, '')
+    __rmul__ = __mul__
+    def __add__(self, other):
+        result = self._value + other
+        return WithUnit(result, '')
+    __radd__ = __add__
+    def __div__(self, other):
+        result = self._value / other
+        return WithUnit(result, '')
+    __truediv__ = __div__
+
+    def __rdiv__(self, other):
+        result = other / self._value
+        return WithUnit(result, '')
+    __rtruediv__ = __rdiv__
+
+    def __floordiv__(self, other):
+        result = self._value // other
+        return WithUnit(result, '')
+    def __rfloordiv__(self, other):
+        result = other // self._value
+        return WithUnit(result, '')
+    def __sub__(self, other):
+        result = self._value - other
+        return WithUnit(result, '')
+    def __rsub__(self, other):
+        result = other - self._value
+        return WithUnit(result, '')
+    def __neg__(self):
+        result = -self._value
+        return WithUnit(result, '')
+    def __abs__(self):
+        result = abs(self._value)
+        return WithUnit(result, '')
+    __array_priority__ = 15
+
+class DimensionlessFloat(WithDimensionlessUnit, float):
+   _numType = float
+   def __iter__(self):
+       raise TypeError('DimensionlessFloat not iterable')
+
+WithUnit._dimensionlessTypes[float] = DimensionlessFloat
+WithUnit._dimensionlessTypes[int] = DimensionlessFloat
+WithUnit._dimensionlessTypes[long] = DimensionlessFloat
+WithUnit._dimensionlessTypes[numpy.float64] = DimensionlessFloat
+WithUnit._dimensionlessTypes[numpy.int64] = DimensionlessFloat
+WithUnit._dimensionlessTypes[numpy.float32] = DimensionlessFloat
+WithUnit._numericTypes[DimensionlessFloat] = Value
+
+class DimensionlessComplex(WithDimensionlessUnit, complex):
+    _numType = complex
+    def __iter__(self):
+        raise TypeError('DimensionlessComplex not iterable')
+
+WithUnit._dimensionlessTypes[complex] = DimensionlessComplex
+WithUnit._dimensionlessTypes[numpy.complex128] = DimensionlessComplex
+WithUnit._numericTypes[DimensionlessComplex] = Complex
+
+class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
+    _numType = staticmethod(np.asarray) # The is a 'copy constructor' used in ._value()
+    def __new__(cls, value):
+        return (np.array(value)*1.0).view(cls)
+    def allclose(self, other, *args, **kw):
+        return np.allclose(self, other, *args, **kw)
+    def __array_wrap__(self, obj):
+        '''
+        This function is called at the end of uops and similar functions.
+        ndarray has some weird logic where reductions like sum() that result
+        in zero-rank arrays automatically convert to numpy scalars 
+        if-and-only-if the type is a ndarray base class.  If we want the same
+        we have to do it here
+        '''
+        if obj.shape == ():
+            return WithUnit(obj[()], '')
+        else:
+            return np.ndarray.__array_wrap__(self,obj)    
+
+WithUnit._dimensionlessTypes[np.ndarray] = DimensionlessArray
+WithUnit._dimensionlessTypes[list] = DimensionlessArray
+WithUnit._numericTypes[DimensionlessArray] = ValueArray
 
 # SI unit definitions
 def _addUnit(name, factor, unit, comment='', label='', prefixable=False):
@@ -774,6 +1044,30 @@ def _addUnit(name, factor, unit, comment='', label='', prefixable=False):
 _help = []
 
 # SI prefixes
+_prefixes = [
+    ('Y',  Fraction(10**24)),
+    ('Z',  Fraction(10**23)),
+    ('E',  Fraction(10**18)),
+    ('P',  Fraction(10**15)),
+    ('T',  Fraction(10**12)),
+    ('G',  Fraction(10**9)),
+    ('M',  Fraction(10**6)),
+    ('k',  Fraction(10**3)),
+    ('h',  Fraction(10**2)),
+    ('da', Fraction(10**1)),
+    ('d',  Fraction(1, 10**1)),
+    ('c',  Fraction(1, 10**2)),
+    ('m',  Fraction(1, 10**3)),
+    ('u',  Fraction(1, 10**6)),
+    ('n',  Fraction(1, 10**9)),
+    ('p',  Fraction(1, 10**12)),
+    ('f',  Fraction(1, 10**15)),
+    ('a',  Fraction(1, 10**18)),
+    ('z',  Fraction(1, 10**21)),
+    ('y',  Fraction(1, 10**24))
+    ]
+# SI prefixes
+"""
 _prefixes = [
     ('Y',  1.e24),
     ('Z',  1.e21),
@@ -796,7 +1090,7 @@ _prefixes = [
     ('z',  1.e-21),
     ('y',  1.e-24),
     ]
-
+"""
 _help.append('SI prefixes:' +
     ', '.join(prefix + ' (%.0E)' % value for prefix, value in _prefixes))
 
@@ -804,15 +1098,15 @@ _help.append('SI prefixes:' +
 # SI base units
 _help.append('SI base units:')
 
-_addUnit('m',   1.,    [1,0,0,0,0,0,0,0,0], 'meter',     prefixable=True)
-_addUnit('g',   0.001, [0,1,0,0,0,0,0,0,0], 'gram',      prefixable=True)
-_addUnit('s',   1.,    [0,0,1,0,0,0,0,0,0], 'second',    prefixable=True)
-_addUnit('A',   1.,    [0,0,0,1,0,0,0,0,0], 'Ampere',    prefixable=True)
-_addUnit('K',   1.,    [0,0,0,0,1,0,0,0,0], 'Kelvin',    prefixable=True)
-_addUnit('mol', 1.,    [0,0,0,0,0,1,0,0,0], 'mole',      prefixable=True)
-_addUnit('cd',  1.,    [0,0,0,0,0,0,1,0,0], 'candela',   prefixable=True)
-_addUnit('rad', 1.,    [0,0,0,0,0,0,0,1,0], 'radian',    prefixable=True)
-_addUnit('sr',  1.,    [0,0,0,0,0,0,0,0,1], 'steradian', prefixable=True)
+_addUnit('m',   Fraction(1),      [1,0,0,0,0,0,0,0,0], 'meter',     prefixable=True)
+_addUnit('g',   Fraction(1,1000), [0,1,0,0,0,0,0,0,0], 'gram',      prefixable=True)
+_addUnit('s',   Fraction(1),      [0,0,1,0,0,0,0,0,0], 'second',    prefixable=True)
+_addUnit('A',   Fraction(1),      [0,0,0,1,0,0,0,0,0], 'Ampere',    prefixable=True)
+_addUnit('K',   Fraction(1),      [0,0,0,0,1,0,0,0,0], 'Kelvin',    prefixable=True)
+_addUnit('mol', Fraction(1),      [0,0,0,0,0,1,0,0,0], 'mole',      prefixable=True)
+_addUnit('cd',  Fraction(1),      [0,0,0,0,0,0,1,0,0], 'candela',   prefixable=True)
+_addUnit('rad', Fraction(1),      [0,0,0,0,0,0,0,1,0], 'radian',    prefixable=True)
+_addUnit('sr',  Fraction(1),      [0,0,0,0,0,0,0,0,1], 'steradian', prefixable=True)
 
 _base_names = ['m', 'kg', 's', 'A', 'K', 'mol', 'cd', 'rad', 'sr']
 
@@ -820,38 +1114,38 @@ _base_names = ['m', 'kg', 's', 'A', 'K', 'mol', 'cd', 'rad', 'sr']
 # SI derived units; these automatically get prefixes
 _help.append('SI derived units:')
 
-_addUnit('Hz',  1.0,  s**-1,     'Hertz',     '1/s',      prefixable=True)
-_addUnit('N',   1.0,  m*kg/s**2, 'Newton',    'm*kg/s^2', prefixable=True)
-_addUnit('Pa',  1.0,  N/m**2,    'Pascal',    'N/m^2',    prefixable=True)
-_addUnit('J',   1.0,  N*m,       'Joule',     'N*m',      prefixable=True)
-_addUnit('W',   1.0,  J/s,       'Watt',      'J/s',      prefixable=True)
-_addUnit('C',   1.0,  s*A,       'Coulomb',   's*A',      prefixable=True)
-_addUnit('V',   1.0,  W/A,       'Volt',      'W/A',      prefixable=True)
-_addUnit('F',   1.0,  C/V,       'Farad',     'C/V',      prefixable=True)
-_addUnit('Ohm', 1.0,  V/A,       'Ohm',       'V/A',      prefixable=True)
-_addUnit('S',   1.0,  A/V,       'Siemens',   'A/V',      prefixable=True)
-_addUnit('Wb',  1.0,  V*s,       'Weber',     'V*s',      prefixable=True)
-_addUnit('T',   1.0,  Wb/m**2,   'Tesla',     'Wb/m^2',   prefixable=True)
-_addUnit('gauss',1e-4,T,         'gauss',     '1e-4 T',   prefixable=True)
-_addUnit('H',   1.0,  Wb/A,      'Henry',     'Wb/A',     prefixable=True)
-_addUnit('lm',  1.0,  cd*sr,     'Lumen',     'cd*sr',    prefixable=True)
-_addUnit('lx',  1.0,  lm/m**2,   'Lux',       'lm/m^2',   prefixable=True)
-_addUnit('Bq',  1.0,  s**-1,     'Becquerel', '1/s',      prefixable=True)
+_addUnit('Hz',  Fraction(1),  s**-1,     'Hertz',     '1/s',      prefixable=True)
+_addUnit('N',   Fraction(1),  m*kg/s**2, 'Newton',    'm*kg/s^2', prefixable=True)
+_addUnit('Pa',  Fraction(1),  N/m**2,    'Pascal',    'N/m^2',    prefixable=True)
+_addUnit('J',   Fraction(1),  N*m,       'Joule',     'N*m',      prefixable=True)
+_addUnit('W',   Fraction(1),  J/s,       'Watt',      'J/s',      prefixable=True)
+_addUnit('C',   Fraction(1),  s*A,       'Coulomb',   's*A',      prefixable=True)
+_addUnit('V',   Fraction(1),  W/A,       'Volt',      'W/A',      prefixable=True)
+_addUnit('F',   Fraction(1),  C/V,       'Farad',     'C/V',      prefixable=True)
+_addUnit('Ohm', Fraction(1),  V/A,       'Ohm',       'V/A',      prefixable=True)
+_addUnit('S',   Fraction(1),  A/V,       'Siemens',   'A/V',      prefixable=True)
+_addUnit('Wb',  Fraction(1),  V*s,       'Weber',     'V*s',      prefixable=True)
+_addUnit('T',   Fraction(1),  Wb/m**2,   'Tesla',     'Wb/m^2',   prefixable=True)
+_addUnit('gauss',Fraction(1,10000),T,   'gauss',     '1e-4 T',   prefixable=True)
+_addUnit('H',   Fraction(1),  Wb/A,      'Henry',     'Wb/A',     prefixable=True)
+_addUnit('lm',  Fraction(1),  cd*sr,     'Lumen',     'cd*sr',    prefixable=True)
+_addUnit('lx',  Fraction(1),  lm/m**2,   'Lux',       'lm/m^2',   prefixable=True)
+_addUnit('Bq',  Fraction(1),  s**-1,     'Becquerel', '1/s',      prefixable=True)
 
 
 # Time units
 _help.append('Time units:')
 
-_addUnit('min', 60,     s,   'minute', '60*s')
-_addUnit('h',   60,     min, 'hour',   '60*min')
-_addUnit('d',   24,     h,   'day',    '24*h')
+_addUnit('min', 60.,     s,   'minute', '60*s')
+_addUnit('h',   60.,     min, 'hour',   '60*min')
+_addUnit('d',   24.,     h,   'day',    '24*h')
 _addUnit('y',   365.25, d,   'year',   '365.25*d')
 
 # Length units
 _help.append('Length units:')
 
 _addUnit('inch', 2.54, cm,   'inch', '2.54*cm')
-_addUnit('ft',   12,   inch, 'foot', '12*inch')
+_addUnit('ft',   12.,   inch, 'foot', '12*inch')
 _addUnit('mi',   5280, ft,   'mile', '5280*ft')
 
 # Area units
@@ -862,10 +1156,10 @@ _addUnit('acre', 1./640., mi**2, 'acre', '1/640*mi^2')
 # Volume units
 _help.append('Volume units:')
 
-_addUnit('l',  1.0, dm**3, 'liter', 'dm^3')
-_addUnit('dl', 0.1, l, 'deci liter', '0.1 l')
-_addUnit('cl', 0.01, l, 'centi liter', '0.01 l')
-_addUnit('ml', 0.001, l, 'milli liter', '0.001 l')
+_addUnit('l',  Fraction(1),  dm**3, 'liter', 'dm^3')
+_addUnit('dl', Fraction(1,10),   l, 'deci liter', '0.1 l')
+_addUnit('cl', Fraction(1,100),  l, 'centi liter', '0.01 l')
+_addUnit('ml', Fraction(1,1000), l, 'milli liter', '0.001 l')
 
 # Force units
 _help.append('Force units:')
@@ -875,9 +1169,9 @@ _addUnit('dyn', 1.e-5, N, 'dyne (cgs unit)', '10^-5 N')
 # Energy units
 _help.append('Energy units:')
 
-_addUnit('erg', 1.e-7, J, 'erg (cgs unit)', '10^-7 J')
+_addUnit('erg', Fraction(1, 10**7), J, 'erg (cgs unit)', '10^-7 J')
 _addUnit('cal', 4.184, J, 'calorie', '4.184 J')
-_addUnit('kcal', 1000, cal, 'kilocalorie', '1000 cal')
+_addUnit('kcal', 1000., cal, 'kilocalorie', '1000 cal')
 _addUnit('Btu', 1055.05585262, J, 'British thermal unit', '1055.05585262 J')
 _addUnit('eV', 1.602176565e-19, C*V, 'electron volt', '1.602176565*10^19 C*V',
          prefixable=True)
@@ -890,7 +1184,7 @@ _addUnit('hp', 745.7, W, 'horsepower', '745.7 W')
 # Pressure units
 _help.append('Pressure units:')
 
-_addUnit('bar', 1.e5, Pa, 'bar (cgs unit)', '10^5 Pa')
+_addUnit('bar', Fraction(10**5), Pa, 'bar (cgs unit)', '10^5 Pa')
 _addUnit('atm', 101325., Pa, 'standard atmosphere', '101325 Pa')
 _addUnit('torr', 1./760., atm, 'torr = mm of mercury', '1/760 atm')
 
@@ -907,6 +1201,8 @@ _addUnit('degF', 1.0, Unit({}, 5./9., K.powers, 459.67), 'degrees Fahrenheit')
 
 
 # Constants
+
+
 c       = 299792458.*m/s                   # speed of light
 ly      = 1.*c*y                           # light year
 mu0     = 4.e-7*pi*N/A**2                  # permeability of vacuum
@@ -947,6 +1243,8 @@ kcali   = 1000*cali          # international kilocalorie
 psi     = 6894.75729317*Pa   # pounds per square inch
 degR    = (5./9.)*K          # degrees Rankine
 bohr_magneton = 9.2740096820e-24 * J/T # Bohr magneton
+
+_addUnit('phi0', 1.0, hplanck/(2*e), prefixable=True)
 
 # some common textual units (no conversions here)
 dB = Unit('dB')
