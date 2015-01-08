@@ -34,7 +34,7 @@ class DeviceLockedError(Error):
     # TODO should tell who holds lock and when it expires
     code = 4
 
-class DeviceWrapper:
+class DeviceWrapper(object):
     """A wrapper for a device."""
     def __init__(self, guid, name):
         self.guid = guid # globally-unique identifier
