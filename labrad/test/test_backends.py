@@ -9,17 +9,20 @@ class AsyncoreBackendTests(unittest.TestCase):
         cxn.connect()
         self.assertTrue(cxn.loop.is_alive())
         cxn.disconnect()
-        self.assertTrue(not cxn.loop.is_alive())
+        self.assertFalse(cxn.loop.is_alive())
 
     def testBadHostExceptions(self):
         cxn = backend.AsyncoreConnection()
         self.assertRaises(LoginFailedError, cxn.connect, host='bad.host.com', timeout=1)
-        self.assertTrue(not hasattr(cxn, 'loop'))
+        self.assertFalse(hasattr(cxn, 'loop'))
         
     def testBadPasswordException(self):
         cxn = backend.AsyncoreConnection()
         self.assertRaises(LoginFailedError, cxn.connect, password='bad password', timeout=1)
-        self.assertTrue(not cxn.loop.is_alive())
+        self.assertFalse(cxn.connected)
+        # event loop should terminate
+        cxn.loop.join(1)
+        self.assertFalse(cxn.loop.is_alive())
         
     def testRequestCancellation(self):
         cxn = backend.AsyncoreConnection()
@@ -28,7 +31,7 @@ class AsyncoreBackendTests(unittest.TestCase):
         future = cxn.sendRequest(1, [(1L, None)])
         self.assertTrue(cxn.loop.is_alive())
         cxn.disconnect()
-        self.assertTrue(not cxn.loop.is_alive())
+        self.assertFalse(cxn.loop.is_alive())
         self.assertRaises(Exception, future.wait)
         
     def testConnectionDrop(self):
