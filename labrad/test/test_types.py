@@ -287,7 +287,27 @@ class LabradTypesTests(unittest.TestCase):
             pass
         else:
             raise Exception('Cannot flatten float to value with units')
+    
+    def testNumpySupport(self):
+        """Test flattening and unflattening of numpy arrays"""
+        import numpy as np
+        
+        # TODO: flesh this out with more array types
+        a = np.array([1,2,3,4,5])
+        b = T.unflatten(*T.flatten(a)).asarray
+        self.assertTrue(np.all(a == b))
 
+    def testIntegerRanges(self):
+        """Test flattening of out-of-range integer values"""
+        tests = [
+            (0x80000000, 'i'),
+            (-0x80000001, 'i'),
+            (0x100000000, 'w'),
+            (-1, 'w')
+        ]
+        for n, t in tests:
+            with self.assertRaises(T.FlatteningError):
+                T.flatten(n, t)
 
 if __name__ == "__main__":
     unittest.main()

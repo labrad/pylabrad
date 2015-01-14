@@ -360,7 +360,10 @@ def _flatten_to(obj, types, endianness):
                 foundCompatibleType = True
                 break
         if foundCompatibleType:
-            s, t = t.__flatten__(obj, endianness)
+            try:
+                s, t = t.__flatten__(obj, endianness)
+            except Exception, e:
+                raise FlatteningError(obj, t)
         else:
             # Since we haven't found anything compatible, just try to
             # flatten to any of the suggested types. This covers cases
@@ -564,6 +567,8 @@ class LRInt(LRType, Singleton):
     def __flatten__(self, n, endianness):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
+        if n >= 0x8000000 or n < -0x80000000:
+            raise ValueError("out of range for type i: {0}".format(n))
         return pack(endianness + 'i', n), self
 
 registerType(int, LRInt())
@@ -581,6 +586,8 @@ class LRWord(LRType, Singleton):
     def __flatten__(self, n, endianness):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
+        if n > 0xFFFFFFFF or n < 0:
+            raise ValueError("out of range for type w: {0}".format(n))
         return pack(endianness + 'I', n), self
 
 registerType(long, LRWord())
