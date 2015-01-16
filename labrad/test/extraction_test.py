@@ -21,7 +21,7 @@ def extractAverage(packets):
     Is, Qs = np.fromstring(data, dtype='<i2').reshape(-1, 2).astype(int).T
     return (Is, Qs)
 
-def testExtraction(packets):
+def extract(packets):
     result = [data for src, dest, eth, data in packets]
     answer = extractAverage(result)
     return answer
@@ -32,6 +32,6 @@ eth = 1
 packets = [(mac, mac, eth, '\x00'*44) for _ in range(9000)]
 data, t = types.flatten(packets)
 
-timeIt(testExtraction, packets)
+timeIt(extract, packets)
 data, t = timeIt(types.flatten, packets)
 timeIt(types.unflatten, data, t)

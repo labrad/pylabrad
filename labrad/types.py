@@ -987,7 +987,7 @@ class LRList(LRType):
     
     tag = '*'
 
-    def __init__(self, elem=None, depth=1):
+    def __init__(self, elem=LRNone(), depth=1):
         self.elem = elem
         self.depth = depth
 

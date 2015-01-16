@@ -44,7 +44,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(resp, TEST_STR)
 
         resp = pts.echo(T.Value(15.0, 's'))
-        self.assertEqual(float(resp), 15.0)
+        self.assertEqual(resp['s'], 15.0)
         self.assertEqual(resp.unit.name, 's')
 
         # single setting with the name looked up
