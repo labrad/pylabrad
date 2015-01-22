@@ -32,7 +32,7 @@ class NodeWrapper(DeviceWrapper):
     def connect(self, node):
         """Connect to this node."""
         self.node = node # asynchronous wrapper for the node server
-        
+
     def running_servers(self):
         return self.node.running_servers()
 

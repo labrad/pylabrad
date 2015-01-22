@@ -14,7 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os, sys
-__path__ = [os.path.abspath(os.path.join(x, 'labrad', 'servers')) 
+__path__ = [os.path.abspath(os.path.join(x, 'labrad', 'servers'))
             for x in sys.path]
 
 __all__ = []

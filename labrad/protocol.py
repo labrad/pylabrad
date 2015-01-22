@@ -32,12 +32,12 @@ from labrad import constants as C, errors, util
 from labrad.interfaces import ILabradProtocol, IMessageContext
 from labrad.stream import packetStream, flattenPacket
 
-    
+
 class LabradProtocol(protocol.Protocol):
     """Receive and send labrad packets."""
 
     implements(ILabradProtocol)
-    
+
     def __init__(self):
         self.disconnected = False
         self._nextRequest = 1
@@ -50,7 +50,7 @@ class LabradProtocol(protocol.Protocol):
         # create a generator to assemble the packets
         self.packetStream = packetStream(self.packetReceived, self.endianness)
         self.packetStream.next() # start the packet stream
-        
+
         self.onDisconnect = util.DeferredSignal()
 
     # network events
@@ -58,10 +58,10 @@ class LabradProtocol(protocol.Protocol):
         # set the SO_KEEPALIVE option on all connections
         self.transport.setTcpNoDelay(True)
         self.transport.setTcpKeepAlive(True)
-    
+
     def connectionLost(self, reason):
         """Called when the network connection is lost.
-        
+
         This can be due to the disconnect() method being
         called, or because of some network error.
         """
@@ -72,19 +72,19 @@ class LabradProtocol(protocol.Protocol):
             self.onDisconnect.callback(None)
         else:
             self.onDisconnect.errback(reason)
-        
+
     def disconnect(self):
         """Close down the connection to LabRAD."""
         self.disconnected = True
         self.transport.loseConnection()
-    
+
     # sending
     def sendPacket(self, target, context, request, records):
         """Send a raw packet to the specified target."""
         raw = flattenPacket(target, context, request, records, endianness=self.endianness)
         self.transport.write(raw)
-    
-    @inlineCallbacks        
+
+    @inlineCallbacks
     def sendMessage(self, target, records, context=(0, 0)):
         """Send a message to the specified target."""
         target, records = yield self._lookupNames(target, records)
@@ -105,7 +105,7 @@ class LabradProtocol(protocol.Protocol):
         target, records = yield self._lookupNames(target, records)
         resp = yield self._sendRequestNoLookup(target, records, context, timeout)
         returnValue(resp)
-            
+
     @inlineCallbacks
     def _lookupNames(self, server, records):
         """Translate server and setting names into IDs.
@@ -116,19 +116,19 @@ class LabradProtocol(protocol.Protocol):
         result.
         """
         records = list(records)
-        
+
         # try to lookup server in cache
         if isinstance(server, str) and server in self._serverCache:
             server = self._serverCache[server]
-            
+
         # try to lookup settings in cache
         if server in self._settingCache:
             settings = self._settingCache[server]
             for i, rec in enumerate(records):
                 name = rec[0]
                 if isinstance(name, str) and name in settings:
-                    records[i] = (settings[name],) + tuple(rec[1:]) 
-        
+                    records[i] = (settings[name],) + tuple(rec[1:])
+
         # check to see whether there is still anything to look up
         settingLookups = [(i, rec[0]) for i, rec in enumerate(records)
                                       if isinstance(rec[0], str)]
@@ -177,23 +177,23 @@ class LabradProtocol(protocol.Protocol):
         d.addBoth(self._finishRequest, n)
         self.sendPacket(target, context, n, records)
         return d
-        
+
     def _cancelTimeout(self, result, timeoutCall):
         """Cancel a pending request timeout call."""
         if timeoutCall.active():
             timeoutCall.cancel()
         return result
-        
+
     def _finishRequest(self, result, n):
         """Finish a request."""
         del self.requests[n]
         self.pool.add(n) # reuse request numbers
         return result
-    
+
     # receiving
     def dataReceived(self, data):
         self.packetStream.send(data)
-    
+
     def packetReceived(self, source, context, request, records):
         """Process incoming packet."""
         if request > 0:
@@ -202,10 +202,10 @@ class LabradProtocol(protocol.Protocol):
             self.responseReceived(source, context, request, records)
         else:
             self.messageReceived(source, context, records)
-        
+
     def requestReceived(self, source, context, request, records):
         """Process incoming request."""
-            
+
     def responseReceived(self, source, context, request, records):
         """Process incoming response."""
         if -request in self.requests: # reply has request number negated
@@ -225,7 +225,7 @@ class LabradProtocol(protocol.Protocol):
     def messageReceived(self, source, context, records):
         """Process incoming messages."""
         self._messageLock.run(self._dispatchMessage, source, context, records)
-        
+
     @inlineCallbacks
     def _dispatchMessage(self, source, context, records):
         """Dispatch a message to all matching listeners."""
@@ -250,16 +250,16 @@ class LabradProtocol(protocol.Protocol):
                     except Exception:
                         self._handleListenerError(
                             failure.Failure(), msgCtx, data, listener)
-                        
+
     def _handleListenerError(self, failure, msgCtx, data, listener):
         """Catch errors in message listeners.
-        
+
         Just prints out a (hopefully informative) message
         about any errors that may have occurred.
         """
         print 'Unhandled error in message listener:', msgCtx, data, listener
         failure.printTraceback(elideFrameworkCode=1)
-                        
+
     # message handling
     def addListener(self, listener, source=None, context=None, ID=None, async=True, args=(), kw={}):
         """Add a listener for messages with the specified attributes.
@@ -289,7 +289,7 @@ class LabradProtocol(protocol.Protocol):
     def loginClient(self, password, name):
         """Log in as a client."""
         return self._doLogin(password, name)
-    
+
     def loginServer(self, password, name, descr, notes):
         """Log in as a server."""
         return self._doLogin(password, name, descr, notes)
@@ -300,7 +300,7 @@ class LabradProtocol(protocol.Protocol):
         # send login packet
         resp = yield self.sendRequest(C.MANAGER_ID, [])
         challenge = resp[0][1] # get password challenge
-    
+
         # send password response
         m = hashlib.md5()
         m.update(challenge)
@@ -311,7 +311,7 @@ class LabradProtocol(protocol.Protocol):
             raise errors.LoginFailedError('Incorrect password.')
         self.password = C.PASSWORD = password # save password, since it worked
         self.loginMessage = resp[0][1] # get welcome message
-    
+
         # send identification
         try:
             resp = yield self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)])
@@ -322,14 +322,14 @@ class LabradProtocol(protocol.Protocol):
 
 class MessageContext(object):
     """Object to be passed as the first argument to message handlers."""
-    
+
     implements(IMessageContext)
-    
+
     def __init__(self, source, context, target):
         self.source = source
         self.ID = context
         self.target = target
-        
+
     def __repr__(self):
         return 'MessageContext(source=%s, ID=%s, target=%s)' % (self.source, self.ID, self.target)
 

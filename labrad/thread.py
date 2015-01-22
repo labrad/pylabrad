@@ -48,6 +48,6 @@ def startReactor():
         _reactorThread = ReactorThread()
         _reactorThread.start()
 
-def stopReactor(): 
+def stopReactor():
     reactor.callFromThread(reactor.stop)
 

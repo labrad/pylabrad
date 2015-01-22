@@ -45,14 +45,14 @@ def _product(lists):
 
 class Setting(object):
     implements(IRequestHandler)
-    
+
     def __init__(self, func):
         self.func = func
-    
+
     def getRegistrationInfo(self):
         return (long(self.ID), self.name, self.description,
                 self.accepts, self.returns, self.notes)
-    
+
     def handleRequest(self, c, data):
         return self.func(c, data)
 
@@ -86,7 +86,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         Nparams = len(args)
         Noptional = 0 if defaults is None else len(defaults)
         Nrequired = Nparams - Noptional
-        
+
         if Nparams == 0:
             accepts_s = [''] # only accept notifier
             accepts_t = [T.parseTypeTag(s) for s in accepts_s]
@@ -98,7 +98,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         elif Nparams == 1:
             accepts_s = params.get(args[0], [])
             accepts_t = [T.parseTypeTag(s) for s in accepts_s]
-            
+
             if Nrequired == 0:
                 # if accepted types were specified, add '' to the list
                 # we don't add '' if the list of accepted types is empty,
@@ -107,7 +107,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     accepts_s.append(': defaults [%s=%r]' \
                                      % (args[0], defaults[0]))
                     accepts_t.append(T.LRNone())
-                
+
                 @wraps(f)
                 def handleRequest(self, c, data):
                     if data is None:
@@ -131,7 +131,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                         raise Exception('Cannot accept cluster or ? in first '
                                         'arg when fewer than two args are '
                                         'required.')
-                                        
+
             # '' is not allowed on first arg when Nrequired > 1
             types = [T.parseTypeTag(s) for s in params.get(args[0], [])]
             if Nrequired > 1 and T.LRNone() in types:
@@ -187,7 +187,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                                        for a, d in zip(args, defaults))
                     accepts_s.append(': defaults [%s]' % defstr)
                     accepts_t.append(T.LRNone())
-                
+
                 @wraps(f)
                 def handleRequest(self, c, data):
                     if isinstance(data, tuple):
@@ -210,28 +210,28 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         f.returns = [returns] if isinstance(returns, str) else returns
         f.isSetting = True
         f.handleRequest = handleRequest
-        
+
         # this is the data that will be sent to the manager to
         # register this setting to be remotely callable
         f.description, f.notes = util.parseSettingDoc(f.__doc__)
         def getRegistrationInfo():
-            return (long(f.ID), f.name, f.description, 
+            return (long(f.ID), f.name, f.description,
                     f.accepts, f.returns, f.notes)
         f.getRegistrationInfo = getRegistrationInfo
-        
+
         return f
     return decorated
 
 
 class MessageHandler(object):
     implements(IMessageHandler)
-    
+
     def __init__(self, func):
         self.func = func
-    
+
     def handleMessage(self, c, data):
         return self.func(c, data)
-    
+
     def handleNamedMessage(self, c, data):
         c.source, data = data
         return self.func(c, data)
@@ -266,7 +266,7 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         Nparams = len(args)
         Noptional = 0 if defaults is None else len(defaults)
         Nrequired = Nparams - Noptional
-        
+
         if Nparams == 0:
             accepts_s = [''] # only accept notifier
             accepts_t = [T.parseTypeTag(s) for s in accepts_s]
@@ -278,7 +278,7 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         elif Nparams == 1:
             accepts_s = params.get(args[0], [])
             accepts_t = [T.parseTypeTag(s) for s in accepts_s]
-            
+
             if Nrequired == 0:
                 # if accepted types were specified, add '' to the list
                 # we don't add '' if the list of accepted types is empty,
@@ -287,7 +287,7 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     accepts_s.append(': defaults [%s=%r]' \
                                      % (args[0], defaults[0]))
                     accepts_t.append(T.LRNone())
-                
+
                 @wraps(f)
                 def handleRequest(self, c, data):
                     if data is None:
@@ -311,7 +311,7 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                         raise Exception('Cannot accept cluster or ? in first '
                                         'arg when fewer than two args are '
                                         'required.')
-                                        
+
             # '' is not allowed on first arg when Nrequired > 1
             types = [T.parseTypeTag(s) for s in params.get(args[0], [])]
             if Nrequired > 1 and T.LRNone() in types:
@@ -367,7 +367,7 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                                        for a, d in zip(args, defaults))
                     accepts_s.append(': defaults [%s]' % defstr)
                     accepts_t.append(T.LRNone())
-                
+
                 @wraps(f)
                 def handleRequest(self, c, data):
                     if isinstance(data, tuple):
@@ -390,14 +390,14 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         f.returns = returns
         f.isSetting = True
         f.handleRequest = handleRequest
-        
+
         # this is the data that will be sent to the manager to
         # register this setting to be remotely callable
         f.description, f.notes = util.parseSettingDoc(f.__doc__)
         def getRegistrationInfo():
-            return (long(f.ID), f.name, f.description, 
+            return (long(f.ID), f.name, f.description,
                     f.accepts, f.returns, f.notes)
         f.getRegistrationInfo = getRegistrationInfo
-        
+
         return f
     return decorated

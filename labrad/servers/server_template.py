@@ -17,11 +17,11 @@ from labrad.server import LabradServer
 
 class ServerTemplate(LabradServer):
     """Template for a python LabRAD server.
-    
+
     This doc string will appear as descriptive help text when
     this server connects to LabRAD.
     """
-    
+
     # the server name will identify this server in LabRAD
     # note that this name should match that given in the
     # .ini file for this server, if you want to use this
@@ -56,7 +56,7 @@ class ServerTemplate(LabradServer):
     # context object will get passed in to request handlers as well.
     def initContext(self, c):
         """Initialize a new context object."""
-        
+
     def expireContext(self, c):
         """Expire Context.
 
@@ -76,8 +76,8 @@ class ServerTemplate(LabradServer):
 
     def serverDisconnected(self, ID, name):
         """This function will be called when a server disconnects from LabRAD."""
-        
-        
+
+
 # create an instance of our server class
 __server__ = ServerTemplate()
 

@@ -25,7 +25,7 @@ def packetStream(packetHandler, endianness='>'):
 
         # unflatten the data
         records = unflattenRecords(s, endianness=endianness)
-        
+
         packetHandler(source, context, request, records)
 
 def unflattenPacket(data, endianness='>'):

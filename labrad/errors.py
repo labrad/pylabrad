@@ -29,7 +29,7 @@ class ConnectionTimeoutError(Exception):
 
 class LoginFailedError(Exception):
     """Failed to log in to LabRAD manager."""
-    
+
 ## Servers
 
 class DeviceNotSelectedError(Error):

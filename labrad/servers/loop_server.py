@@ -66,7 +66,7 @@ class LoopServer(LabradServer):
     def get_readings(self, c):
         """Requests current readings."""
         return [s['last'] for s in self.queries]
-        
+
 
     @setting(10, 'Delay Time', delay=['v[s]'], returns=['v[s]'])
     def delay_time(self, c, delay=None):
@@ -78,4 +78,4 @@ class LoopServer(LabradServer):
 __server__ = LoopServer()
 
 if __name__ == '__main__':
-    util.runServer(__server__)    
+    util.runServer(__server__)

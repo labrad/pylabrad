@@ -57,15 +57,15 @@ def hexdump(s):
     '''
     result = []
     for substr in chunks(s, 16):
-        hex_repr = " ".join('%02X'% (ord(x),) for x in substr)
-        string_repr = "".join( x if ord(x)>32 and ord(x) <127 else '.' for x in substr)
+        hex_repr = " ".join('%02X' % (ord(x),) for x in substr)
+        string_repr = "".join(x if ord(x) > 32 and ord(x) < 127 else '.' for x in substr)
         result.append('%s    %s' % (hex_repr.ljust(47), string_repr))
     return '\n'.join(result)
 
 
 class SafeIterDict(dict):
     """A dict subclass that allows insertion and deletion while iterating.
-    
+
     This is accomplished by overriding keys, items, values, etc. to return
     copies of their respective lists, rather than the lists themselves.
     Note that this negates the efficiency gains of using the iter* methods.
@@ -125,7 +125,7 @@ class MultiDict(SafeIterDict):
         if k in self.aliases:
             k = self.aliases[k]
         return dict.__getitem__(self, k)
-    
+
     def _updateAliases(self, k, *aliases):
         """Update the aliases for a given key."""
         for a in set(self._keys[k]) - set(aliases):

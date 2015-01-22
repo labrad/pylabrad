@@ -18,7 +18,7 @@
 [info]
 name = GPIB Mock Device Server
 version = 1.0
-description = 
+description =
 
 [startup]
 cmdline = %PYTHON% %FILE%
@@ -38,7 +38,7 @@ class Mock0ADevice(GPIBDeviceWrapper):
     @inlineCallbacks
     def initialize(self):
         """Notify that we are being made
-        
+
         Note the important yield statement
         """
         print("Made a Mock0A device")
@@ -48,12 +48,12 @@ class Mock1BDevice(GPIBDeviceWrapper):
     @inlineCallbacks
     def initialize(self):
         """Notify that we are being made
-        
+
         Note the important yield statement
         """
         print("Made a Mock1B device")
         yield
-        
+
 class GpibMockDeviceServer(GPIBManagedServer):
     """Provides basic CW control for Anritsu 68367C Microwave Generators"""
     name = 'GPIB Mock Device Server'

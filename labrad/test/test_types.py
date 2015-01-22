@@ -45,7 +45,7 @@ class LabradTypesTests(unittest.TestCase):
             '(s)': T.LRCluster(T.LRStr()),
             '((siw))': T.LRCluster(T.LRCluster(T.LRStr(), T.LRInt(),
                                                T.LRWord())),
-            
+
             # lists
             '*b': T.LRList(T.LRBool()),
             '*_': T.LRList(),
@@ -97,13 +97,13 @@ class LabradTypesTests(unittest.TestCase):
     def testDefaultFlatAndBack(self):
         """
         Test roundtrip python->LabRAD->python conversion.
-        
+
         No type requirements are given in these tests. In other words, we allow
         pylabrad to choose a default type for flattening.
-        
+
         In this test, we expect A == unflatten(*flatten(A)). In other words,
         we expect the default type chosen for each object to unflatten as
-        an object equal to the one originally flattened. 
+        an object equal to the one originally flattened.
         """
         tests = [
             # simple types
@@ -157,10 +157,10 @@ class LabradTypesTests(unittest.TestCase):
     def testDefaultFlatAndBackNonIdentical(self):
         """
         Test flattening/unflattening of objects which change type.
-        
+
         No type requirements are given in these tests. In other words, we allow
         pylabrad to choose a default type for flattening.
-        
+
         In this test, we do not expect A == unflatten(*flatten(A)). This is
         mostly because list of numbers, both with an without units, should
         unflatten to ndarray or ValueArray, rather than actual python lists.
@@ -168,7 +168,7 @@ class LabradTypesTests(unittest.TestCase):
         def compareValueArrays(a, b):
             """I check near equality of two ValueArrays"""
             self.assertTrue(a.allclose(b))
-        
+
         tests = [
             ([1, 2, 3], np.array([1, 2, 3], dtype='int32'),
                 np.testing.assert_array_equal),
@@ -182,7 +182,7 @@ class LabradTypesTests(unittest.TestCase):
                 compareValueArrays),
             ([Value(1.0, 'm'), Value(10, 'cm')], ValueArray([1.0, 0.1], 'm'),
                 compareValueArrays),
-            (ValueArray([1,2], 'Hz'), ValueArray([1,2], 'Hz'),
+            (ValueArray([1, 2], 'Hz'), ValueArray([1, 2], 'Hz'),
                 compareValueArrays),
             (ValueArray([1.0, 2], ''), np.array([1.0, 2]),
                 np.testing.assert_array_almost_equal)
@@ -221,11 +221,11 @@ class LabradTypesTests(unittest.TestCase):
             (Value(4, 'm'), 'v[]'),
             (Value(3, 's'), ['v[Hz]', 'i', 'w']),
             # ndarray
-            (np.array([1,2,3], dtype='int32'), '*v[Hz]'),
+            (np.array([1, 2, 3], dtype='int32'), '*v[Hz]'),
             (np.array([1.0, 2.4]), ['*i', '*w']),
             # ValueArray
-            (U.ValueArray([1,2,3], 'm'), '*v[s]'),
-            (U.ValueArray([1,2], 'm'), '*v[]')
+            (U.ValueArray([1, 2, 3], 'm'), '*v[s]'),
+            (U.ValueArray([1, 2], 'm'), '*v[]')
         ]
         for data, targetTag in cases:
             self.assertRaises(T.FlatteningError, T.flatten, data, targetTag)
@@ -246,7 +246,7 @@ class LabradTypesTests(unittest.TestCase):
 
             # empty list gets type from hint
             ([], ['s', '*(ww)'], '*(ww)'),
-            
+
             # handle unknown pieces inside clusters and lists
             (['a', 'b'], ['*?'], '*s'),
             ((1, 2, 'a'), ['ww?'], 'wws'),
@@ -267,14 +267,14 @@ class LabradTypesTests(unittest.TestCase):
 
     def testUnitTypes(self):
         """Test flattening with units.
-        
+
         The flattening code should not do unit conversion,
         but should leave that up to the LabRAD manager to handle.
         Basically, for purposes of flattening, a unit is a unit.
         """
         tests = [
             (Value(5.0, 'ft'), ['v[m]'], 'v[ft]'),
-            (U.ValueArray([1,2,3], 'm'), ['*v[m]'], '*v[m]')
+            (U.ValueArray([1, 2, 3], 'm'), ['*v[m]'], '*v[m]')
         ]
         for data, hints, tag in tests:
             self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
@@ -287,13 +287,13 @@ class LabradTypesTests(unittest.TestCase):
             pass
         else:
             raise Exception('Cannot flatten float to value with units')
-    
+
     def testNumpySupport(self):
         """Test flattening and unflattening of numpy arrays"""
         import numpy as np
-        
+
         # TODO: flesh this out with more array types
-        a = np.array([1,2,3,4,5])
+        a = np.array([1, 2, 3, 4, 5])
         b = T.unflatten(*T.flatten(a)).asarray
         self.assertTrue(np.all(a == b))
 

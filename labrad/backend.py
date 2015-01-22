@@ -54,7 +54,7 @@ class BaseConnection(object):
 
 try:
     from twisted.internet import defer, reactor
-    
+
     from labrad.thread import startReactor
     from labrad.wrappers import getConnection
 
@@ -63,10 +63,10 @@ try:
             startReactor()
             self.cxn = self.call(getConnection, self.host, self.port, self.name, password).wait()
             return self.cxn.ID
-            
+
         def _disconnect(self):
             self.call(self.cxn.disconnect).wait()
-            
+
         def call(self, func, *args, **kw):
             f = Future()
             def wrapped():
@@ -75,13 +75,13 @@ try:
                                lambda failure: f.errback(failure))
             reactor.callFromThread(wrapped)
             return f
-            
+
         def sendRequest(self, target, records, *args, **kw):
             return self.call(self.cxn.sendRequest, target, records, *args, **kw)
-    
+
         def sendMessage(self, target, records, *args, **kw):
             return self.call(self.cxn.sendMessage, target, records, *args, **kw).wait()
-    
+
     backends['twisted'] = TwistedConnection
 
 except ImportError:
@@ -111,16 +111,16 @@ class AsyncoreConnection(BaseConnection):
             raise
         except Exception, e:
             raise LoginFailedError(e)
-    
+
     def _disconnect(self):
         self.cxn.drop()
         self.loop.join()
-    
+
     def login(self, password, *ident):
         # send login packet
         resp = self.sendRequest(C.MANAGER_ID, []).wait()
         challenge = resp[0][1] # get password challenge
-    
+
         # send password response
         if password is None:
             password = getPassword()
@@ -132,7 +132,7 @@ class AsyncoreConnection(BaseConnection):
         except Exception:
             raise LoginFailedError('Incorrect password.')
         self.loginMessage = resp[0][1] # get welcome message
-    
+
         # send identification
         try:
             resp = self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)]).wait()
@@ -158,7 +158,7 @@ class AsyncoreConnection(BaseConnection):
         """Send a message to the specified target."""
         target, records = self._lookupNames(target, records)
         self._sendPacket(target, context, records)
-        
+
     def _lookupNames(self, server, records):
         """Translate server and setting names into IDs.
 
@@ -168,19 +168,19 @@ class AsyncoreConnection(BaseConnection):
         result.
         """
         records = list(records)
-        
+
         # try to lookup server in cache
         if isinstance(server, str) and server in self.serverCache:
             server = self.serverCache[server]
-            
+
         # try to lookup settings in cache
         if server in self.settingCache:
             settings = self.settingCache[server]
             for i, rec in enumerate(records):
                 name = rec[0]
                 if isinstance(name, str) and name in settings:
-                    records[i] = (settings[name],) + tuple(rec[1:]) 
-        
+                    records[i] = (settings[name],) + tuple(rec[1:])
+
         # check to see whether there is still anything to look up
         settingLookups = [(i, rec[0]) for i, rec in enumerate(records)
                                       if isinstance(rec[0], str)]
@@ -203,7 +203,7 @@ class AsyncoreConnection(BaseConnection):
             # update the records for the packet
             for index, ID in zip(indices, IDs):
                 records[index] = (ID,) + tuple(records[index][1:])
-        
+
         return (server, records)
 
     def _sendRequestNoLookup(self, target, records, context=(0, 0), timeout=None):
@@ -228,10 +228,10 @@ backends['asyncore'] = AsyncoreConnection
 
 class AsyncoreProtocol(asyncore.dispatcher):
     """Receive and send labrad packets."""
-    
+
     def __init__(self, socket, **kw):
         asyncore.dispatcher.__init__(self, socket, **kw)
-        
+
         self.alive = True
         self.lock = threading.Condition()
         self.nextRequest = 1
@@ -239,11 +239,11 @@ class AsyncoreProtocol(asyncore.dispatcher):
         self.pool = set()
         self.queue = Queue.Queue()
         self.buffer = ''
-    
+
         # create a generator to assemble the packets
         self.stream = packetStream(self.handleResponse)
         self.stream.next() # start the packet stream
-    
+
     def enqueue(self, target, context, flatrecs, future):
         """Called from another thread to enqueue a packet"""
         self.lock.acquire()
@@ -252,14 +252,14 @@ class AsyncoreProtocol(asyncore.dispatcher):
                 raise Exception('not connected')
             self.queue.put((target, context, flatrecs, future))
         finally:
-            self.lock.release()        
-    
+            self.lock.release()
+
     def drop(self):
         self.queue.put(None)
-    
+
     def handle_error(self):
         self.terminate(Exception('AsyncoreProtocol error'))
-    
+
     def handle_close(self):
         self.terminate(Exception('Connection lost'))
 
@@ -273,19 +273,19 @@ class AsyncoreProtocol(asyncore.dispatcher):
             self.flushCommands()
             for d in self.requests.values():
                 d.errback(reason)
-        
+
     def readable(self):
         return True
-    
+
     def writable(self):
         """Only register for writing if we have something to write
-        
+
         For some reason each command submitted from the interactive shell
         seems to fire the writing code twice. This isn't really a problem
         because an empty self.queue is properly handeled.
         """
         return not self.queue.empty()
-    
+
     def handle_write(self):
         if self.flushCommands():
             sent = self.send(self.buffer)
@@ -322,11 +322,11 @@ class AsyncoreProtocol(asyncore.dispatcher):
             self.nextRequest += 1
         self.requests[n] = future
         return n
-    
+
     def handle_read(self):
         data = self.recv(4096)
         self.stream.send(data)
-    
+
     def handleResponse(self, _source, _context, request, records):
         n = -request # reply has request number negated
         if n not in self.requests:
@@ -359,9 +359,9 @@ class Failure(object):
             raise self.exctype, self.value
 
 class Future(object):
-    
+
     ready = Queue.Queue()
-    
+
     def __init__(self):
         self.done = False
         self.result = None
@@ -373,17 +373,17 @@ class Future(object):
         else:
             self.callbacks.append((f, args, kw))
         return self
-        
+
     def callback(self, result):
         self.result = result
         self.ready.put(self)
-    
+
     def errback(self, error=None):
         if not hasattr(error, 'raiseException'):
             error = Failure(error)
         self.result = error
         self.ready.put(self)
-    
+
     def wait(self):
         if self.done:
             return self.result
@@ -403,7 +403,7 @@ class Future(object):
                 f.result = result
             if f is self:
                 return result
-    
+
     def __repr__(self):
         if self.done:
             return '<Future: result=%r>' % (self.result,)

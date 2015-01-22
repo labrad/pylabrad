@@ -31,14 +31,14 @@ class LabradUnitsTests(unittest.TestCase):
         # division
         # powers
         pass
-    
+
     def testArithmetic(self):
         m = units.Unit('m')
         kg = units.Unit('kg')
         km = units.Unit('km')
-        
+
         #self.assertEqual(units.Value(5.0, None)*m, 5.0*m)
-        
+
         # addition
         self.assertEqual(1.0*kg + 0.0, 1.0*kg)
         with self.assertRaises(TypeError): _ = 1.0*kg + 1.0*m
@@ -49,11 +49,11 @@ class LabradUnitsTests(unittest.TestCase):
     @unittest.expectedFailure # TODO: fix isfinite on ValueArray
     def testValueArray(self):
         # Slicing
-        self.assertTrue((ValueArray([1,2,3], 'm')[0:2] == ValueArray([1,2], 'm')).all())
+        self.assertTrue((ValueArray([1, 2, 3], 'm')[0:2] == ValueArray([1, 2], 'm')).all())
         # Cast to unit
         self.assertTrue((ValueArray([1.2, 4, 5], 'm')['m'] == np.array([1.2, 4, 5])).all())
         # Addition and subtraction of compatible units
-        self.assertTrue((ValueArray([3,4], 'm') + ValueArray([100, 200], 'cm') == 
+        self.assertTrue((ValueArray([3, 4], 'm') + ValueArray([100, 200], 'cm') ==
                          ValueArray([4, 6], 'm')).all())
         self.assertTrue((ValueArray([2, 3, 4], 'm') - ValueArray([100, 200, 300], 'cm') ==
                          ValueArray([1, 1, 1], 'm')).all())
@@ -66,16 +66,16 @@ class LabradUnitsTests(unittest.TestCase):
         # Powers
         self.assertTrue((ValueArray([2, 3], 'm')**2 == ValueArray([4, 9], 'm^2')).all())
 
-        self.assertTrue((ValueArray([2,3], 'GHz') * Value(3,'ns')).dtype == np.float64)
-        
+        self.assertTrue((ValueArray([2, 3], 'GHz') * Value(3, 'ns')).dtype == np.float64)
+
         # isfinite
-        self.assertTrue(np.isfinite(ValueArray([1,2], 'GHz')).all())
-        self.assertTrue((np.isfinite(ValueArray([1,float('nan')], 'GHz')) == np.array([True, False])).all())
+        self.assertTrue(np.isfinite(ValueArray([1, 2], 'GHz')).all())
+        self.assertTrue((np.isfinite(ValueArray([1, float('nan')], 'GHz')) == np.array([True, False])).all())
 
     def testNegativePowers(self):
         self.assertEqual(str(units.Unit('1/s')), 's^-1')
         self.assertEqual(str(units.Unit('1/s^1/2')), 's^-1/2')
-    
+
     def testTypeConversions(self):
         m = units.Unit('m')
         V = units.Unit('V')
@@ -149,7 +149,7 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue(0*s == 0)
         self.assertTrue(4*s > 0)
         with self.assertRaises(TypeError): _ = 4*s > 1
-    
+
     def testComplex(self):
         V = units.Unit('V')
 
@@ -164,10 +164,10 @@ class LabradUnitsTests(unittest.TestCase):
 
         self.assertTrue(isinstance((5*ns)*(5*GHz), float))
         self.assertTrue(hasattr((5*ns)*(5*GHz), 'inUnitsOf'))
-        self.assertTrue( ((5*ns)*(5*GHz)).isDimensionless() )
-        self.assertTrue( (5*ns)*(5*GHz) < 50 )
+        self.assertTrue(((5*ns)*(5*GHz)).isDimensionless())
+        self.assertTrue((5*ns)*(5*GHz) < 50)
         self.assertTrue(isinstance(units.WithUnit(5.0, ''), units.DimensionlessFloat))
-        
+
         self.assertTrue((5*ns*5j*GHz) == 25j)
         self.assertTrue((5*ns*5j*GHz).isDimensionless())
 
@@ -180,7 +180,7 @@ class LabradUnitsTests(unittest.TestCase):
             return cPickle.loads(cPickle.dumps(obj))
         self.assertEqual(round_trip(5*GHz), 5*GHz) # Value
         self.assertEqual(round_trip(GHz), GHz)     # Unit
-        self.assertTrue((round_trip(np.arange(5)*ns)==np.arange(5)*ns).all()) # array
+        self.assertTrue((round_trip(np.arange(5)*ns) == np.arange(5)*ns).all()) # array
         self.assertEqual(round_trip(5*GHz*ns), 5)  # Dimensionless
         self.assertIsInstance(round_trip(3*blank), type(3*blank)) # Don't loose dimensionless type
     def testUnitCreation(self):
