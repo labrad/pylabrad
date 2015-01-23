@@ -293,8 +293,8 @@ class LabradTypesTests(unittest.TestCase):
         import numpy as np
 
         # TODO: flesh this out with more array types
-        a = np.array([1, 2, 3, 4, 5])
-        b = T.unflatten(*T.flatten(a)).asarray
+        a = np.array([1, 2, 3, 4, 5], dtype='int32')
+        b = T.unflatten(*T.flatten(a))
         self.assertTrue(np.all(a == b))
 
     def testIntegerRanges(self):
