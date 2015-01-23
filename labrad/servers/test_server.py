@@ -53,7 +53,7 @@ class TestServer(LabradServer):
     def serverDisconnected(self, ID, name):
         print 'server disconnected:', ID, name
         self.checkServerWrappers(name)
-    
+
     @inlineCallbacks
     def checkServerWrappers(self, name):
         """Check that server wrappers are up to date with the manager."""
@@ -66,11 +66,11 @@ class TestServer(LabradServer):
             print 'self.client not properly refreshed:'
             print '  servers that should be disconnected:', list(cxnServers - mgrServers)
             print '  servers that have not been connected:', list(mgrServers - cxnServers)
-    
+
     def initContext(self, c):
         c['delay'] = 1*s
         c['dict'] = {}
-    
+
     @setting(2, "Delayed Echo", data='?')
     def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""
@@ -146,7 +146,7 @@ class TestServer(LabradServer):
     def bad_return_type(self, c, data):
         """Returns a value that does not match the declared return type."""
         return 5
-        
+
     @setting(11, "Get Random Data", tag='s')
     def get_random_data(self, c, tag=None):
         """Get a random bit of data conforming to the specified type tag."""
@@ -155,7 +155,7 @@ class TestServer(LabradServer):
         else:
             t = T.parseTypeTag(tag)
         return hydrant.randValue(t)
-        
+
     @setting(12, "Get Random Tag")
     def get_random_tag(self, c):
         """Get a random LabRAD type tag."""
@@ -164,18 +164,18 @@ class TestServer(LabradServer):
     @setting(100, "Set", key='s', value='?', returns='')
     def set(self, c, key, value):
         c['dict'][key] = value
-    
+
     @setting(101, "Get", key='s', returns='?')
     def get(self, c, key):
         return c['dict'][key]
-    
+
     @setting(102, "Keys", returns='*s')
     def keys(self, c):
         return sorted(c['dict'].keys())
 
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')
-        
+
 __server__ = TestServer()
 
 if __name__ == '__main__':

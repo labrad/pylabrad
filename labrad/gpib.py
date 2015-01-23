@@ -33,7 +33,7 @@ class GPIBDeviceWrapper(DeviceWrapper):
     @inlineCallbacks
     def connect(self, gpib, addr):
         """Connect to this device.
-        
+
         We set the address and timeout in the context reserved
         for talking to this device.  Then call initialize, which may
         be overridden in subclasses.
@@ -42,13 +42,13 @@ class GPIBDeviceWrapper(DeviceWrapper):
         self.addr = addr
         self._context = gpib.context() # create a new context for this device
         self._timeout = T.Value(C.TIMEOUT, 's')
-        
+
         # set the address and timeout in this context
         p = self._packet()
         p.address(self.addr)
         p.timeout(self._timeout)
         yield p.send()
-        
+
         # do device-specific initialization
         yield self.initialize()
 
@@ -109,30 +109,30 @@ class GPIBDeviceWrapper(DeviceWrapper):
 
 class GPIBDeviceServer(DeviceServer):
     """A server for a GPIB device.
-    
+
     Creates a GPIBDeviceWrapper for each device it finds that
     is appropriately named.  Provides standard settings for listing
     devices, selecting a device for the current context, and
     refreshing the list of devices.  Also, allows us to read from,
     write to, and query the selected GPIB device directly.
-    
+
     2013 October 22 - Daniel Sank
     I'm pretty sure this is obsolte and you should use the GPIBManagedServer
     """
     name = 'Generic GPIB Device Server'
     deviceName = 'Generic GPIB Device'
     deviceWrapper = GPIBDeviceWrapper
-    
+
     def serverConnected(self, ID, name):
         """Refresh devices when a gpib server comes on line."""
         if 'gpib' in name.lower():
             self.refreshDeviceList()
-    
+
     def serverDisconnected(self, ID, name):
         """Refresh devices when a gpib server goes off line."""
         if 'gpib' in name.lower():
             self.refreshDeviceList()
-    
+
     @inlineCallbacks
     def findDevices(self):
         """Find all available matching GPIB devices."""
@@ -153,7 +153,7 @@ class GPIBDeviceServer(DeviceServer):
                 name = _getDeviceName(srv, address)
                 found.append((name, (srv, address), {}))
         returnValue(found)
-        
+
     # server settings
 
     @setting(1001, 'GPIB Write', string='s', returns='*b')
@@ -173,13 +173,13 @@ class GPIBDeviceServer(DeviceServer):
 
 class ManagedDeviceServer(LabradServer):
     """A server for devices.
-    
+
     Creates a DeviceWrapper for each device it finds, based on a
     user-provided function.  Provides standard settings for listing
     devices, selecting a device for the current context, and
     refreshing the list of devices.  Also, provides for device-locking
     with timeouts.
-    
+
     Device names and associated wrappers can be specified in two ways
     1 (old way)
     Give a device name or list of device names:
@@ -196,25 +196,25 @@ class ManagedDeviceServer(LabradServer):
     This allows you to use the same server for eg. devices of the same
     general type but from different manufacturers or of different
     models.
-    
+
     1. Old way example
     deviceName = "Acme Widget"
     deviceWrapper = AcmeWidgetWrapper
     2. New way example
     deviceWrappers={"Acme Widget": AcmeWidgetExample}
-    
+
     Optionally specify a device specific identication function
     deviceIdentFunc = 'identify_device'
     """
     name = 'Generic Device Server'
     deviceManager = 'Device Manager'
-    
+
     # Default device name and wrapper for backwards compatibility with servers
     # written before we supported multiple different device types, and which
     # do not explicitly set deviceWrapper and/or deviceName.
     deviceName = 'Generic Device'
     deviceWrapper = DeviceWrapper
-    
+
     messageID = 21436587
 
     def __init__(self):
@@ -226,7 +226,7 @@ class ManagedDeviceServer(LabradServer):
                 names = [names]
             self.deviceWrappers = dict((name, self.deviceWrapper) for name in names)
         LabradServer.__init__(self)
-    
+
     @inlineCallbacks
     def initServer(self):
         self.devices = MultiDict() # aliases -> device
@@ -266,7 +266,7 @@ class ManagedDeviceServer(LabradServer):
             yield self.client.refresh()
             yield dev.connect(self.client[server], address)
             self.devices[guid, name] = dev
-            
+
         else: # remove device
             yield self.removeDevice(name)
 
@@ -287,7 +287,7 @@ class ManagedDeviceServer(LabradServer):
     @inlineCallbacks
     def connectToDeviceManager(self):
         """
-        
+
         """
         #yield self.client.refresh()
         manager = self.client[self.deviceManager]
@@ -304,7 +304,7 @@ class ManagedDeviceServer(LabradServer):
                      for name in self.device_guids.keys()
                      if name not in names]
         yield defer.DeferredList(additions + deletions)
-        
+
     def serverConnected(self, ID, name):
         if name == self.deviceManager:
             self.connectToDeviceManager()
@@ -356,7 +356,7 @@ class ManagedDeviceServer(LabradServer):
             raise errors.NoSuchDeviceError()
         if not dev.accessibleFrom(context.ID):
             raise DeviceLockedError()
-        
+
         if 'device' in context:
             if context['device'] != dev.guid:
                 try:
@@ -408,7 +408,7 @@ class ManagedDeviceServer(LabradServer):
     @setting(1, 'List Devices', returns='*(ws)')
     def list_devices(self, c):
         """Get a list of available devices.
-        
+
         The list entries have a numerical ID and a string name.
         It is recommended to use the names wherever possible to
         identify devices, since this contains human-readable
@@ -452,7 +452,7 @@ class ManagedDeviceServer(LabradServer):
 
 class GPIBManagedServer(ManagedDeviceServer):
     """A server for a GPIB device.
-    
+
     Creates a GPIBDeviceWrapper for each device it finds that
     is appropriately named.  Provides standard settings for listing
     devices, selecting a device for the current context, and
@@ -488,7 +488,7 @@ def _gpibServers(cxn):
         if 'gpib_bus' in name and 'list_devices' in srv.settings:
             gpibs.append(srv)
     return gpibs
-        
+
 def _getDeviceName(server, deviceID):
     """Create a name for a device on a particular server."""
     return '%s - %s' % (server.name, deviceID)

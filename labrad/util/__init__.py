@@ -75,7 +75,7 @@ def parseSettingDoc(s):
 
 
 # a list of printable representations of the ascii character codes
-FILTER = ''.join(chr(x) if len(repr(chr(x)))==3 else '.' for x in range(256))
+FILTER = ''.join(chr(x) if len(repr(chr(x))) == 3 else '.' for x in range(256))
 
 def dump(src, length=16):
     """Nicely-formatted hex dump of raw data."""
@@ -104,7 +104,7 @@ def findEnvironmentVars(string):
 
 def interpEnvironmentVars(string, env=None):
     """Replace all environment variables of the form %VAR% in a string.
-    
+
     Values are taken from the env variable, a dict-like object.  Variable
     names are converted to upper case before interpolation, to maintain
     case insensitivity.  If any required variables are not found in env,
@@ -139,7 +139,7 @@ def timing(f, n=100, **kw):
 # convenience functions for dealing with units
 def convert(v, u):
     """Convert quantity v into units u.
-    
+
     If v is just a number, no conversion is performed.
     If u is None, then the units of v are simply stripped
     but otherwise no conversion is performed.
@@ -163,25 +163,25 @@ def convertUnits(**unitdict):
     plain floats.  Not all arguments to the function need
     to be specified in the decorator.  Those that are not
     specified will be passed through unmodified.
-    
+
     Usage:
-    
+
     @convertUnits(t0='ns', amp=None)
     def func(t0, amp):
         <do stuff>
-        
+
     This is essentially equivalent to:
-    
+
     def func(t0, amp):
         t0 = convert(t0, 'ns')
         amp = convert(amp, None)
         <do stuff>
-        
+
     The convert function, defined above, will convert
     any quantities with units into the specified units,
     or strip off any units if unit is None.
     """
-    
+
     def wrap(f):
         args = inspect.getargspec(f)[0] # list of argument names
         for arg in unitdict:
@@ -190,7 +190,7 @@ def convertUnits(**unitdict):
         # unitdict maps argument names to units
         # posdict maps argument positions to units
         posdict = dict((i, unitdict[arg]) for i, arg in enumerate(args) if arg in unitdict)
-        
+
         @functools.wraps(f)
         def wrapped(*a, **kw):
             # convert positional arguments if they have a unit
@@ -238,7 +238,7 @@ def maybeTimeout(deferred, timeout, timeoutResult):
 
 class DeferredSignal(object):
     """An object that can create multiple deferreds on demand.
-    
+
     When the signal is fired, all created deferreds will be fired
     or have their errback method called, as appropriate.
     """
@@ -246,7 +246,7 @@ class DeferredSignal(object):
         self.waiters = []
         self.listeners = []
         self.fired = None
-        
+
     def callback(self, data=None):
         self._fire(True, data)
 
@@ -265,7 +265,7 @@ class DeferredSignal(object):
         if success:
             for func in self.listeners:
                 func(data)
-        
+
     def __call__(self):
         if self.fired:
             success, data = self.fired
@@ -277,7 +277,7 @@ class DeferredSignal(object):
             d = defer.Deferred()
             self.waiters.append(d)
             return d
-    
+
     def connect(self, listener):
         if listener not in self.listeners:
             self.listeners.append(listener)
@@ -290,7 +290,7 @@ class DeferredSignal(object):
 
 def runServer(srv):
     """Run a server of the specified class."""
-    
+
     import os, sys, time
     from twisted.internet import reactor
     from twisted.python import usage

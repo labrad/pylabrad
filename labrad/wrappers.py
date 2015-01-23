@@ -31,7 +31,7 @@ from labrad.support import indent, mangle, extractKey, MultiDict, PacketResponse
 
 class AsyncSettingWrapper(object):
     """Represents a setting on a remote LabRAD server."""
-    
+
     def __init__(self, server, name, pyName, ID, info):
         self.name = self.__name__ = self._labrad_name = name
         self._py_name = pyName
@@ -56,13 +56,13 @@ class AsyncSettingWrapper(object):
         d = self._server._send([(self.ID, args, tag)], **kw)
         d.addCallback(lambda r: r[0][1])
         return d
-    
+
     @inlineCallbacks
     def connect(self, handler, context=(0, 0),
                 connectargs=(), connectkw={},
                 handlerargs=(), handlerkw={}):
         """Connect a handler to messages from this signal.
-        
+
         This is only applicable if the remote setting handles
         signal connection and disconnection.  We also keep
         track of the number of handlers that have been added to
@@ -79,35 +79,35 @@ class AsyncSettingWrapper(object):
                                       source=self._server.ID, context=context, ID=self.ID)
             self._num_listeners -= 1
             raise
-    
+
     def disconnect(self, handler, context=(0, 0),
                    disconnectargs=(), disconnectkw={}):
         """Disconnect a handler for messages from this signal.
-        
+
         If the number of handlers drops to zero, we make a request to
         tell the signal to stop sending us messages.
         """
         self._prot.removeListener(handler, source=self._server.ID, context=context, ID=self.ID)
         self._num_listeners = max(self._num_listeners - 1, 0)
-        return self.__call__(context=context, *disconnectargs, **disconnectkw)     
+        return self.__call__(context=context, *disconnectargs, **disconnectkw)
 
 class SettingBinder(object):
     """A dictionary proxy that binds methods to an instance.
-    
+
     This is used to emulate the old 'settings' attribute on a packet
     wrapper, now that the settings have been moved into a class.
     """
     # TODO fill out dict functionality here (.keys(), .items(), etc.)
     def __init__(self, inst):
         self._inst = inst
-    
+
     def __getitem__(self, key):
         inst = self._inst
         return inst._bind(inst.__class__.settings[key])
 
 class AsyncPacketWrapper(object):
     """Represents a LabRAD packet to a server.
-    
+
     One wrapper class is created for each server.  Settings can be added or
     removed from the wrapper class as needed, if the server settings change.
     """
@@ -115,7 +115,7 @@ class AsyncPacketWrapper(object):
     @classmethod
     def _addSetting(cls, setting):
         """Add a new instance method for the specified setting.
-        
+
         Instance methods are cached, so that if a setting goes away and
         comes back later, the method will still point back to the
         same setting object.
@@ -137,12 +137,12 @@ class AsyncPacketWrapper(object):
         cls._cache[setting.name] = method
         cls.settings[setting.name, setting._py_name, setting.ID] = method
         setattr(cls, setting._py_name, method)
-    
+
     @classmethod
     def _refreshSetting(cls, setting):
         """Refresh a setting by updating its aliases in our setting MultiDict."""
         cls.settings._updateAliases(setting.name, setting._py_name, setting.ID)
-    
+
     @classmethod
     def _delSetting(cls, setting):
         """Delete the instance method for the specified setting."""
@@ -167,31 +167,31 @@ class AsyncPacketWrapper(object):
     def _bind(self, method):
         """Bind a method to this instance."""
         return functools.partial(method, self)
-    
+
     def __getitem__(self, key):
         """Get a setting method from the class and bind it to this instance."""
         return self._bind(self.__class__.settings[key])
 
     def __setitem__(self, key, value):
         """Update existing parts of the packet, indexed by key.
-        
+
         Note that if multiple records share the same key, they will
         all be updated.
         """
         for i, rec in enumerate(self._packet):
             if key == rec[3]:
                 self._packet[i] = rec[0], value, rec[2], rec[3]
-    
+
     def __delitem__(self, key):
         """Delete a setting call from this packet, indexed by key.
-        
+
         Note that if multiple records share the same key, they will
         all be deleted.
         """
         for i, rec in enumerate(self._packet):
             if key == rec[3]:
                 self._packet.pop(i)
-    
+
     def _dataStr(self, data):
         if len(data) < 160:
             return self._dataRepr(data)
@@ -201,7 +201,7 @@ class AsyncPacketWrapper(object):
             return "string of length %d beginning with... \n%s" % (len(data), x)
 
     def _dataRepr(self, data):
-        if all((ord(x)>31 and ord(x)<127) or x.isspace() for x in data): # Is string printable ascii
+        if all((ord(x) > 31 and ord(x) < 127) or x.isspace() for x in data): # Is string printable ascii
             return data
         else:
             return hexdump(data)
@@ -223,7 +223,7 @@ class AsyncPacketWrapper(object):
             |
             |Data:
             |%s""") % (self._server.name, indent(data_str))
-    
+
     # TODO implement flattened versions of packet object to allow for packet forwarding
     # naively, this can be done just by converting to a tuple of setting/parameter tuples,
     # but we would also like to preserve the type hints provided by the accepted types
@@ -231,7 +231,7 @@ class AsyncPacketWrapper(object):
     # information along to be used later.
     #def __lrtype__(self):
     #    pass
-    
+
     #def __lrflatten__(self):
     #    pass
 
@@ -247,11 +247,11 @@ def makePacketWrapperClass(server):
         _server = server
         _cache = {}
     return CustomPacketWrapper
-    
+
 
 class AsyncServerWrapper(object):
     """Represents a remote LabRAD server."""
-    
+
     def __init__(self, cxn, name, pyName, ID):
         self._cxn = cxn
         self._mgr = cxn._mgr
@@ -284,10 +284,10 @@ class AsyncServerWrapper(object):
         for n in self.settings:
             if n not in names:
                 self._delSetting(n)
-        
+
     _staticAttrs = ['settings', 'refresh', 'context', 'packet',
                     'sendMessage', 'addListener', 'removeListener']
-    
+
     def _fixName(self, name):
         pyName = mangle(name)
         if pyName in self._staticAttrs:
@@ -296,7 +296,7 @@ class AsyncServerWrapper(object):
 
     def _addSetting(self, name, ID, info):
         """Add a wrapper for a new setting for this server.
-        
+
         The wrapper will be pulled from the cache and reused if
         one has already been created for a setting with this name.
         Also add this setting to the packet wrapper class.
@@ -315,7 +315,7 @@ class AsyncServerWrapper(object):
 
     def _refreshSetting(self, name, ID, info):
         """Refresh the info about a particular setting.
-        
+
         In particular, update the MultiDict mapping if the
         setting ID has changed.
         """
@@ -351,17 +351,17 @@ class AsyncServerWrapper(object):
         elif len(args) == 1:
             args = args[0]
         self._cxn._sendMessage(self.ID, [(ID, args, tag)], **kw)
-    
+
     def addListener(self, listener, **kw):
         """Add a listener for messages from this server."""
         kw['source'] = self.ID
         self._cxn._addListener(listener, **kw)
-        
+
     def removeListener(self, listener, **kw):
         """Remove a listener for messages from this server."""
         kw['source'] = self.ID
         self._cxn._removeListener(listener, **kw)
-        
+
     def __call__(self):
         return self
         # TODO this should make a clone that can have different
@@ -406,9 +406,9 @@ def runAsync(func, *args, **kw):
 
 class ClientAsync(object):
     """Adapt a LabRAD request protocol object to an asynchronous client."""
-    
+
     implements(IClientAsync)
-    
+
     def __init__(self, prot):
         self.servers = MultiDict()
         self._cache = {}
@@ -416,13 +416,13 @@ class ClientAsync(object):
         self._mgr = manager.AsyncManager(self._cxn)
         self._next_context = 1
         self._refreshLock = defer.DeferredLock()
-        
+
     _staticAttrs = ['servers', 'refresh', 'context']
 
     @inlineCallbacks
     def _init(self):
         """Refresh the cache of available servers and their settings.
-        
+
         Also set up messages so that servers that connect and disconnect later
         will be automatically detected, without needing a refresh.
         """
@@ -436,7 +436,7 @@ class ClientAsync(object):
             print 'error!'
             print repr(e)
             raise
-            
+
     @inlineCallbacks
     def _serverConnected(self, _c, data):
         """Add a wrapper when a server connects."""
@@ -446,7 +446,7 @@ class ClientAsync(object):
         except Exception, e:
             print 'Error adding server %d, "%s":' % (ID, name)
             print str(e)
-        
+
     @inlineCallbacks
     def _serverDisconnected(self, _c, data):
         """Remove the wrapper when a server disconnects."""
@@ -463,11 +463,11 @@ class ClientAsync(object):
     @inlineCallbacks
     def _refresh(self):
         """Update the list of available LabRAD servers."""
-        
+
         # get a list of the currently-available servers
         slist = yield self._mgr.getServersList()
         names = [s[0] for s in slist]
-        
+
         # determine what to add, update and delete to be current
         additions = [s for s in slist if s[0] not in self.servers]
         refreshes = [n for n in self.servers if n in names]
@@ -487,7 +487,7 @@ class ClientAsync(object):
     @inlineCallbacks
     def _addServer(self, name, ID):
         """Create a wrapper for a new server and add it to the list.
-        
+
         Wrappers are cached so that if a server stops and restarts,
         the old wrapper will be reused and references to it do not
         need to be updated.
@@ -522,7 +522,7 @@ class ClientAsync(object):
 
     def _delServer(self, name):
         """Remove a server wrapper.
-        
+
         The wrapper is kept in the cache, to be reused if this
         server ever comes back.
         """
@@ -544,18 +544,18 @@ class ClientAsync(object):
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
         return self._cxn.sendRequest(target, records, *args, **kw)
-        
+
     def _sendMessage(self, target, records, *args, **kw):
         """Send a message over this connection."""
         return self._cxn.sendMessage(target, records, *args, **kw)
-        
+
     def disconnect(self):
         self._cxn.disconnect()
-        
+
     @property
     def _addListener(self):
         return self._cxn.addListener
-    
+
     @property
     def _removeListener(self):
         return self._cxn.removeListener

@@ -68,13 +68,13 @@ class DeviceWrapper(object):
 
     def lockedInContext(self, c):
         return self.locked and (self._lockContext == c)
-        
+
     def accessibleFrom(self, c):
         return (not self.locked) or (self._lockContext == c)
-        
+
     def connect(self, *args, **kw):
         """Connect to this device.
-        
+
         This method will be called with the args and kw args returned
         by findDevices, when a new device is created.
         """
@@ -90,7 +90,7 @@ class DeviceWrapper(object):
 
 class DeviceServer(LabradServer):
     """A server for devices.
-    
+
     Creates a DeviceWrapper for each device it finds, based on a
     user-provided function.  Provides standard settings for listing
     devices, selecting a device for the current context, and
@@ -124,23 +124,23 @@ class DeviceServer(LabradServer):
 
     def refreshDeviceList(self):
         """Refresh the list of available devices.
-        
+
         Devices are assigned a unique identifying
         number that will persist between refreshes, so that
         clients that have selected devices in context will still
         be able to refer to them after the refresh.
         """
         return self._refreshLock.run(self._doRefresh)
-        
+
     def chooseDeviceWrapper(self, *args, **kw):
         """
         Override in subclass to support multiple device wrapper classes
-        
+
         args and kw come from findDevices (ie same as are passed into the
         device wrapper's connect method).
         """
         return self.deviceWrapper
-    
+
     @inlineCallbacks
     def _doRefresh(self):
         """Do the actual refreshing."""
@@ -179,8 +179,8 @@ class DeviceServer(LabradServer):
             else:
                 guid = self.device_guids[name] = self._next_guid
                 self._next_guid += 1
-            
-            deviceWrapper = self.chooseDeviceWrapper(name, *args, **kw)            
+
+            deviceWrapper = self.chooseDeviceWrapper(name, *args, **kw)
             dev = deviceWrapper(guid, name)
             yield dev.connect(*args, **kw)
             self.devices[guid, name] = dev
@@ -250,7 +250,7 @@ class DeviceServer(LabradServer):
             raise errors.NoSuchDeviceError()
         if not dev.accessibleFrom(context.ID):
             raise DeviceLockedError()
-        
+
         if 'device' in context:
             if context['device'] != dev.guid:
                 try:
@@ -319,7 +319,7 @@ class DeviceServer(LabradServer):
     def deselect_device(self, c):
         """Select a device for the current context."""
         dev = self.deselectDevice(c)
-    
+
     @setting(4, 'Refresh Devices', returns=['*(ws)'])
     def refresh_devices(self, c):
         """Refresh the list of available devices."""

@@ -15,7 +15,7 @@ class AsyncoreBackendTests(unittest.TestCase):
         cxn = backend.AsyncoreConnection()
         self.assertRaises(LoginFailedError, cxn.connect, host='bad.host.com', timeout=1)
         self.assertFalse(hasattr(cxn, 'loop'))
-        
+
     def testBadPasswordException(self):
         cxn = backend.AsyncoreConnection()
         self.assertRaises(LoginFailedError, cxn.connect, password='bad password', timeout=1)
@@ -23,7 +23,7 @@ class AsyncoreBackendTests(unittest.TestCase):
         # event loop should terminate
         cxn.loop.join(1)
         self.assertFalse(cxn.loop.is_alive())
-        
+
     def testRequestCancellation(self):
         cxn = backend.AsyncoreConnection()
         cxn.connect()
@@ -33,7 +33,7 @@ class AsyncoreBackendTests(unittest.TestCase):
         cxn.disconnect()
         self.assertFalse(cxn.loop.is_alive())
         self.assertRaises(Exception, future.wait)
-        
+
     def testConnectionDrop(self):
         badPacket = (
             '\x00\x00\x00\x00\x00\x00\x00\x00' # context
@@ -43,7 +43,7 @@ class AsyncoreBackendTests(unittest.TestCase):
             '\x00\x00\x00\x00' # id
             '\x00\x00\x00\x04' # tag string claims to have four bytes
         )
-        
+
         cxn = backend.AsyncoreConnection()
         cxn.connect()
         self.assertTrue(cxn.loop.is_alive())
@@ -56,4 +56,4 @@ class AsyncoreBackendTests(unittest.TestCase):
             cxn.sendRequest(1, [(1L, None)]).wait()
         self.assertRaises(Exception, doRequest)
         self.assertRaises(Exception, doRequest)
-        
+

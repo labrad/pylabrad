@@ -19,9 +19,9 @@ from labrad import constants as C
 
 class AsyncManager:
     """Adapt client to the ILabradManager interface."""
-    
+
     ID = C.MANAGER_ID
-    
+
     def __init__(self, cxn):
         self.cxn = cxn
 
@@ -37,7 +37,7 @@ class AsyncManager:
 
     def _reorderIDList(self, L):
         return [(name, ID) for ID, name in L]
-        
+
     def getServersList(self):
         """Get a list of connected servers."""
         return self._getIDList(C.SERVERS_LIST)
@@ -80,7 +80,7 @@ class AsyncManager:
         resp = yield self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         returnValue((description, accepts, returns, notes))
-        
+
     @inlineCallbacks
     def subscribeToNamedMessage(self, name, ID, enable=True):
         """Subscribe to or stop a named message."""

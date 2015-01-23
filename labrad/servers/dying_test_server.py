@@ -116,7 +116,7 @@ class TestServer(LabradServer):
 
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')
-        
+
 __server__ = TestServer()
 
 if __name__ == '__main__':

@@ -28,7 +28,7 @@ class ClientTests(unittest.TestCase):
 
         self._get_manager()
         self._get_tester()
-        
+
         self._get_manager()
         self._get_tester()
 
@@ -48,7 +48,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(resp.unit.name, 's')
 
         # single setting with the name looked up
-        resp = pts.settings['echo']([1,2,3,4])
+        resp = pts.settings['echo']([1, 2, 3, 4])
         self.assertEqual(len(resp), 4)
 
         # single setting with delayed response
@@ -70,7 +70,7 @@ class ClientTests(unittest.TestCase):
         self.assertTrue('echo' in resp.settings)
         self.assertEqual(len(resp.settings['echo']), 3)
         self.assertEqual(len(resp['echo']), 3)
-        
+
         # test using keys to refer to parts of a packet
         pkt2 = pts.packet()
         resp = pkt2.echo(1L, key='one')\
@@ -87,20 +87,20 @@ class ClientTests(unittest.TestCase):
         pkt2['two'] = TEST_STR
         resp = pkt2.send()
         self.assertEqual(resp.two, TEST_STR)
-        
+
     def testTupleKeys(self):
         # allow the use of tuples as packet keys
         pts = self._get_tester()
-        
+
         p = pts.packet()
         p.echo(1, key='a')
-        p.echo(2, key=(1,2))
+        p.echo(2, key=(1, 2))
         r = repr(p)
         s = str(p)
         resp = p.send()
         self.assertEqual(resp.a, 1)
         self.assertEqual(resp['a'], 1)
-        self.assertEqual(resp[(1,2)], 2)
+        self.assertEqual(resp[(1, 2)], 2)
 
     def testExceptions(self):
         pts = self._get_tester()
@@ -115,20 +115,19 @@ class ClientTests(unittest.TestCase):
     def testContextWrappers(self):
         cxn1 = self.cxn()
         cxn2 = self.cxn()
-        
+
         pts1 = cxn1.python_test_server
         pts2 = cxn2.python_test_server
         pts3 = cxn1.python_test_server()
         pts4 = pts2()
-        
+
         pts1.set('1', 1)
         pts2.set('2', 2)
         pts3.set('3', 3)
         pts4.set('4', 4)
-        
+
         self.assertEqual(pts1.keys(), ['1'])
         self.assertEqual(pts2.keys(), ['2'])
         self.assertEqual(pts3.keys(), ['3'])
         self.assertEqual(pts4.keys(), ['4'])
 
-        

@@ -35,10 +35,10 @@ def randType(noneOkay=True, listOkay=True, nStructs=0):
         lambda: T.LRValue(randUnits()),
         lambda: T.LRComplex(randUnits()),
         lambda: T.LRCluster(*[randType(noneOkay=False, nStructs=nStructs+1)
-                              for _ in range(randint(1,5))]),
+                              for _ in range(randint(1, 5))]),
         lambda: T.LRList(randType(noneOkay=False, listOkay=False,
                                   nStructs=nStructs+1),
-                         depth=randint(1,3)),
+                         depth=randint(1, 3)),
     ]
     if not noneOkay:
         choices = choices[1:]
@@ -125,7 +125,7 @@ def hoseDataVault(dv, n=1000, silent=True):
             print str(T.flatten(v)[1]), str(T.flatten(resp)[1])
             raise
 
-            
+
 if __name__ == '__main__':
     import labrad
     cxn = labrad.connect()

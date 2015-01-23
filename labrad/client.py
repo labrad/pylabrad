@@ -89,7 +89,7 @@ class SettingWrapper(object):
             info = self._mgr.getSettingInfo(self._server.ID, self.ID)
             self.__doc__, self._accepts, self._returns, self._notes = info
             self._refreshed = True
-        
+
     def refresh(self):
         # mark that we need to refresh.  This doesn't happen immediately,
         # but instead only when needed later due to property access
@@ -114,7 +114,7 @@ class SettingWrapper(object):
 
 class DynamicAttrDict(PrettyMultiDict):
     _parent = None
-    
+
     def __getitem__(self, key):
         try:
             return super(DynamicAttrDict, self).__getitem__(key)
@@ -202,7 +202,7 @@ class HasDynamicAttrs(object):
         return []
 
     _staticAttrs = [] # static attributes names, so dynamic names don't collide
-    
+
     def _wrapAttr(self, *args):
         """Should be overridden by subclasses"""
 
@@ -230,7 +230,7 @@ class HasDynamicAttrs(object):
 
 class ServerWrapper(HasDynamicAttrs):
     """A wrapper for a labrad server."""
-    
+
     def __init__(self, cxn, name, pyName, ID, context=None):
         HasDynamicAttrs.__init__(self)
         self._cxn = cxn
@@ -337,8 +337,8 @@ class SyncPacketWrapper(HasDynamicAttrs):
             key = kw.pop('key', pyName)
             tag = kw.pop('tag', None) or s.accepts # data type
             result = s(*args, **dict(kw, context=self._context)) # If you set a context, it will be overridden
-            self._packet.append((0,0,tag,key)) # Don't store the ID and data.
-            self._response.append((ID,result))
+            self._packet.append((0, 0, tag, key)) # Don't store the ID and data.
+            self._response.append((ID, result))
         return wrapped
 
 
@@ -411,7 +411,7 @@ class PacketWrapper(HasDynamicAttrs):
             return "string of length %d beginning with... \n%s" % (len(data), x)
 
     def _dataRepr(self, data):
-        if all((ord(x)>31 and ord(x)<127) or x.isspace() for x in data): # Is string printable ascii
+        if all((ord(x) > 31 and ord(x) < 127) or x.isspace() for x in data): # Is string printable ascii
             return data
         else:
             return hexdump(data)
@@ -447,7 +447,7 @@ class Client(HasDynamicAttrs):
     def __enter__(self):
         """Enter the body of a with statement."""
         return self
-        
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit the body of a with statement."""
         try:
@@ -455,15 +455,15 @@ class Client(HasDynamicAttrs):
         except:
             pass
         return False
-    
+
     def __call__(self, context=None):
         return Client(self._backend, context)
-    
+
     def _getAttrs(self):
         if not self.connected:
             return []
         return self._mgr.getServersList()
-        
+
     _staticAttrs = ['servers', 'connect', 'disconnect', 'context']
     _wrapAttr = ServerWrapper
 
@@ -476,19 +476,19 @@ class Client(HasDynamicAttrs):
     @property
     def name(self):
         return self._backend.name
-    
+
     @property
     def ID(self):
         return self._backend.ID
-    
+
     @property
     def host(self):
         return self._backend.host
-    
+
     @property
     def port(self):
         return self._backend.port
-    
+
     @property
     def connected(self):
         return self._backend.connected

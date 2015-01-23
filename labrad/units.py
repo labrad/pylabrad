@@ -49,7 +49,7 @@ The version included with LabRAD has been slightly changed:
     - Value and Complex types define a __getitem__ method to
       express the value in a new unit, e.g:
       >>> Value(1, 'GHz')['Hz'] -> 1e9
-      
+
 """
 
 from math import floor, pi
@@ -123,7 +123,7 @@ class NumberDict(dict):
         for key in self.keys():
             new[key] = other * self[key]
         return new
-        
+
     __rmul__ = __mul__
 
     def __div__(self, other):
@@ -136,9 +136,9 @@ class WithUnit(object):
     """Mixin class for adding units to numeric types."""
 
     def __new__(cls, value, unit=None):
-        # Convert inputs to make sense: 
-        # check for illegal None unit, unit string -> Unit, list -> array, check 
-        # to see if value is 
+        # Convert inputs to make sense:
+        # check for illegal None unit, unit string -> Unit, list -> array, check
+        # to see if value is
         if unit is None:
             raise RuntimeError("Cannot construct WithUnit with unit=None.  Use correct units, or use a float")
         if isinstance(value, list):
@@ -167,7 +167,7 @@ class WithUnit(object):
     @classmethod
     def _findClass(cls, numType, unit):
         """Find a class for a particular numeric type and unit.
-        
+
         Classes will be created if they haven't been already.
         """
         # find class with units for this numeric type
@@ -179,7 +179,7 @@ class WithUnit(object):
         except KeyError:
             raise TypeError('Cannot use units with instances of type %s' % (numType,))
         return cls
-        
+
     @property
     def _value(self):
         """
@@ -213,7 +213,7 @@ class WithUnit(object):
             value = sign1 * self._value + sign2 * other._value * factor
         elif self.isDimensionless():
             value = sign1 * self._value + sign2 * other / self.unit.conversionFactorTo('')
-        elif other==0:
+        elif other == 0:
             value = sign1 * self._value
         else:
             raise TypeError("Incompatible Units %s, ''" % (self.unit,))
@@ -238,7 +238,7 @@ class WithUnit(object):
             if self.unit is None:
                 return self._value == other
             if self._value == 0:
-                return other==0
+                return other == 0
             return False
         else:
             if self.isCompatible(other.unit):
@@ -257,21 +257,21 @@ class WithUnit(object):
         to test for equality.
         '''
         diff = self._sum(other, 1, -1)
-        return diff._value 
+        return diff._value
         # return cmp(diff._value, 0)
-    
+
     def __lt__(self, other):
         return self.__cmp__(other) < 0
-    
+
     def __le__(self, other):
         return self.__cmp__(other) <= 0
-    
+
     def __gt__(self, other):
         return self.__cmp__(other) > 0
-    
+
     def __ge__(self, other):
         return self.__cmp__(other) >= 0
-        
+
     def __mul__(self, other):
         if isinstance(other, Unit):
             return WithUnit(self._value, self.unit * other)
@@ -416,18 +416,18 @@ class WithUnit(object):
         if self.unit is None:
             return True
         return self.unit.isCompatible(unit)
-        
+
     def isDimensionless(self):
         if self.unit is None:
             return True
         return self.unit.isDimensionless()
-        
+
     def sqrt(self):
-        return pow(self, Fraction(1,2))
-    
+        return pow(self, Fraction(1, 2))
+
     def __copy__(self):
         return self
-    
+
     def __deepcopy__(self, memo):
         return self
 
@@ -438,7 +438,7 @@ class WithUnit(object):
             return x._value
         return x
     __array_priority__ = 15
-        
+
 class Value(WithUnit):
     _numType = float
 
@@ -478,9 +478,9 @@ class ValueArray(WithUnit):
         first = it.next()
         unit = first.unit
         first = first[unit] # convert to float
-        rest = [ x[unit] for x in it]
+        rest = [x[unit] for x in it]
         return WithUnit([first] + rest, unit)
-        
+
     def __getitem__(self, unit):
         if isinstance(unit, (str, Unit)):
             """Return value of physical quantity expressed in new units."""
@@ -494,12 +494,12 @@ class ValueArray(WithUnit):
 
     def __setitem__(self, key, value):
         self._value[key] = value.inUnitsOf(self.unit)._value
-            
+
     def __copy__(self):
-        # Numpy arrays are not immutable so we have to 
+        # Numpy arrays are not immutable so we have to
         # make a real copy
         return WithUnit(self._value.copy(), self.unit)
-    
+
     def __deepcopy__(self, memo):
         return self.__copy__()
 
@@ -536,7 +536,7 @@ class Unit(object):
     __array_priority__ = 15
     def __new__(cls, *args, **kw):
         """Construct a new unit instance.
-        
+
         Units can be constructed in several ways:
             one argument: a Unit, WithUnit or str
             three arguments: name, factor, and Unit, WithUnit or str
@@ -564,20 +564,20 @@ class Unit(object):
             inst = Unit(name, factor * unit.factor,
                         unit.powers, unit.offset)
             return inst
-        # construct a new unit 
+        # construct a new unit
         inst = super(Unit, cls).__new__(cls)
         inst._init(*args, **kw)
         return inst
-    
+
     def __reduce__(self):
         return (Unit, (self.name,))
 
     def __copy__(self):
         return self
-    
+
     def __deepcopy__(self, memo):
         return self
-    
+
     @classmethod
     def _parse(cls, name):
         if name in _unit_table:
@@ -610,12 +610,12 @@ class Unit(object):
         # object that is already in the table.  This means units that
         # parse to the same name will end up being the same object.
         return _unit_table.setdefault(unit.name, unit)
-        
+
     @staticmethod
     def _stringUnit(name):
         """Create a unit that has a name, but is outside the usual SI system."""
         return Unit(NumberDict(), 1., [0]*9, 0, name)
-    
+
     def _init(self, names, factor, powers, offset=0, lex_names=''):
         """
         @param names: a dictionary mapping each name component to its
@@ -650,7 +650,7 @@ class Unit(object):
                 self.lex_names[lex_names] = Fraction(1)
         else:
             self.lex_names = lex_names
-            
+
     @property
     def name(self):
         if hasattr(self, '_name'):
@@ -678,7 +678,7 @@ class Unit(object):
         if name not in _unit_table:
             _unit_table[name] = self
         return name
-            
+
     def __repr__(self):
         return "<Unit '%s'>" % self.name
 
@@ -696,10 +696,10 @@ class Unit(object):
             return (self.powers == other.powers and
                     self.lex_names == other.lex_names)
         return False
-        
+
     def __ne__(self, other):
         return not self.__eq__(other)
-        
+
     def __mul__(self, other):
         if other is None:
             return self
@@ -783,7 +783,7 @@ class Unit(object):
         """
         other = Unit(other)
         return self.powers == other.powers and self.lex_names == other.lex_names
-        
+
     def conversionFactorTo(self, other):
         """
         @param other: another unit
@@ -842,12 +842,12 @@ class Unit(object):
     def isAngle(self):
         return (self.powers[7] == 1 and
                 sum(self.powers) == 1 and
-                not any(self.lex_names.values())) 
+                not any(self.lex_names.values()))
 
 
 def convert(*args):
     """Convert between different units.
-    
+
     There are two calling conventions:
     - 2 args: >>> convert(Value(1, 'mi'), 'm')
     - 3 args: >>> convert(1, 'mi', 'm')
@@ -875,7 +875,7 @@ class WithDimensionlessUnit(object):
     to do with expressions like:
 
     4. ns * 5. GHz
-    
+
     Option 1: Return Value(20, '').  This is consistent, but annoying
     because it won't work directly in contexts that expect a float.
     i.e., sin(5*GHz * 2 * np.pi * 4*ns) raises an exception.  It is
@@ -886,7 +886,7 @@ class WithDimensionlessUnit(object):
     writing generic code harder because the expected methods and
     properties (._value, .inUnitsOf) don't exist.
 
-    Option 3: 
+    Option 3:
     WithDimensionlessUnit(20.0).  This creates a subclass of float
     that has the necessary methods and properties, but in all other
     ways behaves like a float.
@@ -983,9 +983,9 @@ class WithDimensionlessUnit(object):
     __array_priority__ = 15
 
 class DimensionlessFloat(WithDimensionlessUnit, float):
-   _numType = float
-   def __iter__(self):
-       raise TypeError('DimensionlessFloat not iterable')
+    _numType = float
+    def __iter__(self):
+        raise TypeError('DimensionlessFloat not iterable')
 
 WithUnit._dimensionlessTypes[float] = DimensionlessFloat
 WithUnit._dimensionlessTypes[int] = DimensionlessFloat
@@ -1014,14 +1014,14 @@ class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
         '''
         This function is called at the end of uops and similar functions.
         ndarray has some weird logic where reductions like sum() that result
-        in zero-rank arrays automatically convert to numpy scalars 
+        in zero-rank arrays automatically convert to numpy scalars
         if-and-only-if the type is a ndarray base class.  If we want the same
         we have to do it here
         '''
         if obj.shape == ():
             return WithUnit(obj[()], '')
         else:
-            return np.ndarray.__array_wrap__(self,obj)    
+            return np.ndarray.__array_wrap__(self, obj)
 
 WithUnit._dimensionlessTypes[np.ndarray] = DimensionlessArray
 WithUnit._dimensionlessTypes[list] = DimensionlessArray
@@ -1110,7 +1110,7 @@ _addUnit('sr',  Fraction(1),      [0,0,0,0,0,0,0,0,1], 'steradian', prefixable=T
 
 _base_names = ['m', 'kg', 's', 'A', 'K', 'mol', 'cd', 'rad', 'sr']
 
-    
+
 # SI derived units; these automatically get prefixes
 _help.append('SI derived units:')
 

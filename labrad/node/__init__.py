@@ -36,7 +36,7 @@ Key -- Value
   javapath -- [full path to the java executable on this system,
                including 'java.exe' at the end]
   packages -- currently unused.
-  
+
 Changes required on the server:
 
 See "launchable-server.ini" for a description of how to have a server appear in
@@ -45,7 +45,7 @@ the node. See labrad-servers/Qubit Server/ for an example of a java server.
 Another option is to have this configuration in the file itself, set off by
 ### BEGIN NODE INFO and ### END NODE INFO. See servers/gpibMockDeviceServer.py
 in this repository for an example.
-***N.B.*** The name given in the server's [info] section MUST MATCH the name 
+***N.B.*** The name given in the server's [info] section MUST MATCH the name
 given as a class variable in the server class itself. That is, note that the
 name string "GPIB Mock Device Server" appears _twice_. If this is not the case,
 then while the node will still start the server, it will not register that the
@@ -88,7 +88,7 @@ LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
 
 class IServerProcess(Interface):
     pass
-    
+
 class ServerProcess(ProcessProtocol):
     """A class to represent a running server instance."""
     implements(IServerProcess)
@@ -119,7 +119,7 @@ class ServerProcess(ProcessProtocol):
         self.stopping = False
         self.output = []
         self._lock = defer.DeferredLock()
-            
+
     @property
     def status(self):
         if self.starting:
@@ -130,19 +130,19 @@ class ServerProcess(ProcessProtocol):
             return 'STOPPING'
         else:
             return 'STOPPED'
-        
+
     def start(self):
         """Start this server instance."""
         return self._lock.run(self._start)
-    
+
     def stop(self):
         """Stop this server instance."""
         return self._lock.run(self._stop)
-    
+
     def restart(self):
         """Restart this server instance."""
         return self._lock.run(self._restart)
-    
+
     @inlineCallbacks
     def _start(self):
         if self.started:
@@ -172,7 +172,7 @@ class ServerProcess(ProcessProtocol):
                 dispatcher.disconnect(self.serverConnected, 'serverConnected')
             except Exception, e:
                 print 'Error while disconnecting signal:', e
-        
+
     @inlineCallbacks
     def _stop(self):
         if not self.started:
@@ -191,22 +191,22 @@ class ServerProcess(ProcessProtocol):
         #print 'killed'
         self.stopping = False
         self.emitMessage('server_stopped')
-        
+
     @inlineCallbacks
     def _restart(self):
         yield self._stop()
         yield self._start()
-        
+
     def emitMessage(self, msg):
         """Emit a message to other parts of this application."""
         dispatcher.send(msg,
                         sender=self,
                         server=self.__class__.name,
                         instance=self.name)
-        
+
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD.
-        
+
         If the name matches our name, we'll assume this server
         started successfully.  This may not be the case (e.g. if
         two nodes are trying to start the same server simultaneously),
@@ -221,7 +221,7 @@ class ServerProcess(ProcessProtocol):
 
     def processEnded(self, reason):
         """Called when the server process ends.
-        
+
         We check to see the reason why this process failed, and then
         call the appropriate deferred, depending on the current state.
         """
@@ -240,7 +240,7 @@ class ServerProcess(ProcessProtocol):
         else:
             # looks like this thing died on its own
             self.emitMessage('server_stopped')
-    
+
     @inlineCallbacks
     def kill(self, finished=None):
         """Kill the server process."""
@@ -260,12 +260,12 @@ class ServerProcess(ProcessProtocol):
                     except:
                         pass
                 yield util.wakeupCall(self.shutdownTimeout)
-                
+
             # hack to let us know that we did indeed finish killing the server
             if finished is not None:
                 if finished[0]:
                     return
-                
+
             # if we're not dead yet, kill with a vengeance
             if self.started:
                 self.proc.signalProcess('KILL')
@@ -273,7 +273,7 @@ class ServerProcess(ProcessProtocol):
             msg = 'Error while trying to kill server process for "%s":'
             print msg % self.name
             failure.Failure().printTraceback(elideFrameworkCode=1)
-        
+
     def outReceived(self, data):
         """Called when the server prints to stdout."""
         self.output.append((datetime.now(), data))
@@ -308,18 +308,18 @@ def findConfigBlock(path, filename):
                 line = line.replace('\n', '')
                 lines.append(line)
         return '\n'.join(lines) if lines else None
-            
+
 
 def createGenericServerCls(path, filename, conf):
     """Create a ServerProcess class representing a generic server.
-    
+
     Options for this server are passed in as a string in standard
     .ini format.  We use a string rather than a file to allow this
     configuration to be extracted from a larger file if necessary.
     """
     class cls(ServerProcess):
         pass
-    
+
     scp = SafeConfigParser()
     scp.readfp(StringIO.StringIO(conf))
 
@@ -360,7 +360,7 @@ def createGenericServerCls(path, filename, conf):
 
 def createPythonServerCls(plugin):
     """Create a ServerProcess class representing a python server.
-    
+
     Options for this server are read from the python object itself,
     located with the twisted plugin system.
     """
@@ -380,11 +380,11 @@ def createPythonServerCls(plugin):
         cls.instancename = plugin.name
     cls.environVars = findEnvironmentVars(cls.instancename)
     cls.isLocal = len(cls.environVars) > 0
-    
+
     # startup
     cls.cmdline = ' '.join([sys.executable, '-m', plugin.__module__])
     cls.path, cls.filename = os.path.split(sys.modules[plugin.__module__].__file__)
-    
+
     # shutdown
     if hasattr(plugin, 'shutdownMessage'):
         cls.shutdownMode = 'message', plugin.shutdownMessage
@@ -394,18 +394,18 @@ def createPythonServerCls(plugin):
         cls.shutdownTimeout = float(plugin.shutdownTimeout)
     except:
         pass
-    
+
     return cls
 
 class Node(MultiService):
     """Parent Service that keeps the node running.
-    
+
     If the manager is stopped or we lose the network connection,
     this service attempts to restart it so that we will come
     back online when the manager is back up.
     """
     reconnectDelay = 10
-    
+
     def __init__(self, name, host, port):
         MultiService.__init__(self)
         self.name = name
@@ -449,7 +449,7 @@ class Node(MultiService):
 class NodeConfig(object):
     """Load configuration from the registry and monitor it for changes."""
     # TODO add to config: autostarting, refreshinterval, preferred start location
-        
+
     @classmethod
     @inlineCallbacks
     def create(cls, parent):
@@ -457,7 +457,7 @@ class NodeConfig(object):
         instance = cls(parent)
         yield instance._init()
         returnValue(instance)
-    
+
     def __init__(self, parent):
         self.parent = parent
         self.nodename = parent.nodename
@@ -465,11 +465,11 @@ class NodeConfig(object):
         self._cxn = cxn
         self._reg = cxn.registry
         self._ctx = cxn.context()
-        
+
     @inlineCallbacks
     def _init(self):
         """Initialize by loading from the registry.
-        
+
         Copy from the default directory, creating it if necessary.
         Also, set up messages to monitor the config directory for
         changes.
@@ -479,34 +479,34 @@ class NodeConfig(object):
         p.dir()
         ans = yield p.send()
         dirs, keys = ans.dir
-        
+
         # load defaults (creating them if necessary)
         create = '__default__' not in dirs
         defaults = ([], ['labrad.servers'], ['.ini', '.py'], '')
         defaults = yield self._load('__default__', create, defaults)
-        
+
         # load this node (creating config if necessary)
         create = self.nodename not in dirs
         config = yield self._load(self.nodename, create, defaults)
         self._update(config, False)
-        
+
         # setup messages when registry changes
         self._reg.addListener(self._handleMessage, context=self._ctx)
         p = self._packet()
         p.notify_on_change(2345, True)
         yield p.send()
-    
+
     def _packet(self):
         """Create a packet to the registry server in our context."""
         return self._reg.packet(context=self._ctx)
-    
+
     def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
         self.dirs, self.mods, self.extensions, self.java = config
         print 'config updated:', self.dirs, self.mods, self.extensions, self.java
         if triggerRefresh:
             self.parent.refreshServers()
-        
+
     @inlineCallbacks
     def _load(self, nodename=None, create=False, defaults=None):
         """Load the current configuration out of the registry."""
@@ -528,7 +528,7 @@ class NodeConfig(object):
         exts = filter(None, ans.exts)
         java = ans.java
         returnValue((dirs, mods, exts, java))
-        
+
     def _save(self):
         """Save the current configuration to the registry."""
         p = self._packet()
@@ -537,7 +537,7 @@ class NodeConfig(object):
         p.set('extensions', self.extensions)
         p.set('javapath', self.java)
         return p.send()
-        
+
     @inlineCallbacks
     def _handleMessage(self, c, msg):
         """Reload when we get a message from the registry."""
@@ -547,11 +547,11 @@ class NodeConfig(object):
 
 class NodeServer(LabradServer):
     """Start and stop LabRAD servers remotely.
-    
+
     The node server allows you to control and
     monitor servers running on a remote machine.
     """
-    
+
     name = 'node %LABRADNODE%'
 
     def __init__(self, nodename, host, port):
@@ -572,16 +572,16 @@ class NodeServer(LabradServer):
         self.initMessages(True)
         self.config = yield NodeConfig.create(self)
         self.refreshServers()
-    
+
     def stopServer(self):
         """Stop this node by killing all subprocesses."""
         self.initMessages(False)
         stoppages = [srv.stop() for srv in self.runners.values()]
         return defer.DeferredList(stoppages)
-        
-        
+
+
     # message handling
-        
+
     def initMessages(self, connect=True):
         """Set up message dispatching."""
         attr = 'connect' if connect else 'disconnect'
@@ -613,7 +613,7 @@ class NodeServer(LabradServer):
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD."""
         dispatcher.send('serverConnected', ID=ID, name=name)
-        
+
     def subprocessStarting(self, sender):
         """Called when a subprocess begins connecting."""
         self.starters[sender.name] = sender
@@ -636,10 +636,10 @@ class NodeServer(LabradServer):
             del self.runners[sender.name]
         if sender.name in self.stoppers:
             del self.stoppers[sender.name]
-            
-    
+
+
     # status information
-            
+
     def status(self):
         """Get information about all servers on this node."""
         def serverInfo(cls):
@@ -652,7 +652,7 @@ class NodeServer(LabradServer):
 
 
     # server refresh
-            
+
     def refreshServers(self):
         """Refresh the list of available servers."""
         servers = {}
@@ -705,11 +705,11 @@ class NodeServer(LabradServer):
                         failure.Failure().printTraceback(elideFrameworkCode=1)
         self.servers = servers
         # send a message with the current server list
-        dispatcher.send('status', servers=self.status())        
-    
-    
+        dispatcher.send('status', servers=self.status())
+
+
     # LabRAD settings
-    
+
     @setting(1, name='s', environ='*(ss)', returns='s')
     def start(self, c, name, environ={}):
         """Start an instance of a server."""
@@ -795,17 +795,17 @@ class NodeServer(LabradServer):
         if name not in self.servers:
             raise Exception("'%s' not found." % name)
         return self.servers[name].version
-    
+
     @setting(103, name='s', enable='b', returns='')
     def stream_output(self, c, name, enable):
         """Enable or disable server output messages.
-        
+
         This allows you to receive messages whenever a server
         outputs something on its stdout, effectively giving a
         remote view of the server's console window.
         """
         pass
-    
+
     @setting(1000, returns='*(ss)')
     def node_version(self, c):
         """Return a list of key-value tuples containing info about this node."""

@@ -20,7 +20,7 @@ class RegistryWrapperAsync(SafeIterDict):
 
     """Wrapper around the labrad registry.
 
-    The LabRAD registry can be used like a python class or a list. 
+    The LabRAD registry can be used like a python class or a list.
     Registry entries are mapped to valid python identifiers by
     replacing all characters except letters and digits with '_', and by
     prefixing with '_' if the first letter is a digit.
@@ -30,9 +30,9 @@ class RegistryWrapperAsync(SafeIterDict):
     For registry entries that are not valid python names you should use
     attributes e.g. mywrapper['Key Name'].
     """
-    
+
     MESSAGE_ID = 463462
-    
+
     @classmethod
     @inlineCallbacks
     def create(cls, cxn, directory=''):
@@ -40,7 +40,7 @@ class RegistryWrapperAsync(SafeIterDict):
         wrapper = cls(cxn, directory)
         yield wrapper._init()
         returnValue(wrapper)
-    
+
     def __init__(self, cxn, directory=''):
         """Basic (synchronous) initialization."""
         self._cxn = cxn
@@ -51,11 +51,11 @@ class RegistryWrapperAsync(SafeIterDict):
             directory = [''] + directory
         self._dir = directory
         self._listen(True)
-        
+
     @inlineCallbacks
     def _init(self):
         """Initialize this registry wrapper.
-        
+
         We get the data for this directory and create wrappers for
         all subdirectories.  We also sign up for change notifications.
         """
@@ -83,7 +83,7 @@ class RegistryWrapperAsync(SafeIterDict):
     def __del__(self):
         """Remove the listener when we are garbage collected."""
         self._listen(False)
-    
+
     def _listen(self, listen):
         """Add or remove a listener for update messages."""
         #def print_(*args):
@@ -96,19 +96,19 @@ class RegistryWrapperAsync(SafeIterDict):
             func = self._cxn._cxn.removeListener
         source = self._cxn.registry.ID # doesn't seem to work
         func(self._messageReceived, context=self._ctx, ID=self.MESSAGE_ID)
-    
+
     def _wrapSubdir(self, dir):
         """Create a registry wrapper of a subdirectory."""
         return self.__class__.create(self._cxn, self._dir + [dir])
-    
+
     def _getKey(self, key):
         """Get a key from this directory."""
         return self._cxn.registry.get(key, context=self._ctx)
-    
+
     def _packet(self):
         """Create a packet to the registry."""
         return self._cxn.registry.packet(context=self._ctx)
-        
+
     @inlineCallbacks
     def _messageReceived(self, c, data):
         """Handle update messages from the registry."""
