@@ -14,3 +14,4 @@ before_script:
 script: scripts/test/test.sh
 after_success:
   - coveralls
+
