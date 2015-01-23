@@ -13,4 +13,4 @@ python labrad/servers/test_server.py 1>.test_server.log 2>.test_server.err.log &
 sleep 20
 
 # run the tests
-python -m pytest -v .
+python $(dirname $0)/test.py -v . && coverage run --source=labrad $(dirname $0)/test.py -v .
