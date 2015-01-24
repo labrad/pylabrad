@@ -30,12 +30,11 @@ from __future__ import absolute_import
 
 import re
 import sys
-from struct import pack, unpack
+import struct
 import time
 from types import InstanceType
 from datetime import timedelta, datetime as dt
-from itertools import chain, imap
-from operator import itemgetter
+from itertools import chain
 import functools
 
 import labrad.units as U
@@ -138,6 +137,90 @@ class Buffer(object):
     def index(self, char):
         """Find index of char in uncomsumed part of buffer."""
         return self.s.index(char, self.ofs)
+
+class OutputStream(object):
+    """Endian-aware output stream backed by in-memory buffer.
+
+    Allows outputting structured data (multi-byte ints, doubles, etc)
+    into a resizable buffer. By capturing the endianness in this class,
+    we avoid needing to pass it separately when flattening.
+    """
+
+    _big_endian_structs = {
+        'int32': struct.Struct('>i'),
+        'int64': struct.Struct('>q'),
+        'uint32': struct.Struct('>I'),
+        'uint64': struct.Struct('>Q'),
+        'double': struct.Struct('>d')
+    }
+
+    _little_endian_structs = {
+        'int32': struct.Struct('<i'),
+        'int64': struct.Struct('<q'),
+        'uint32': struct.Struct('<I'),
+        'uint64': struct.Struct('<Q'),
+        'double': struct.Struct('<d')
+    }
+
+    def __init__(self, endianness='>', init_capacity=1024):
+        if endianness == '>':
+            self._structs = self._big_endian_structs
+        elif endianness == '<':
+            self._structs = self._little_endian_structs
+        else:
+            msg = "endianness must be one of '>' (big-endian) or '<' (little-endian). got: {0}".format(endianness)
+            raise ValueError(msg)
+        self.endianness = endianness
+        self._buf = bytearray(init_capacity)
+        self._ofs = 0
+        self._len = init_capacity
+
+    def _add_structs(self, structs):
+        for k, v in structs.items():
+            setattr(self, k, v)
+
+    def _resize(self, n):
+        """Resize the buffer if needed to handle n additional bytes of input"""
+        if self._ofs + n > self._len:
+            new_len = max(self._len * 2, 32)
+            new_buf = bytearray(new_len)
+            new_buf[:self._ofs] = self._buf[:self._ofs]
+            self._buf = new_buf
+            self._len = new_len
+
+    def write_byte(self, b):
+        self._resize(1)
+        self._buf[self._ofs] = b
+        self._ofs += 1
+
+    def write_bytes(self, bs):
+        self._resize(len(bs))
+        self._buf[self._ofs:self._ofs + len(bs)] = bs
+        self._ofs += len(bs)
+
+    def _write_struct(self, _struct, n, x):
+        self._resize(n)
+        _struct.pack_into(self._buf, self._ofs, x)
+        self._ofs += n
+
+    def write_int32(self, n):
+        self._write_struct(self._structs['int32'], 4, n)
+
+    def write_int64(self, n):
+        self._write_struct(self._structs['int64'], 8, n)
+
+    def write_uint32(self, n):
+        self._write_struct(self._structs['uint32'], 4, n)
+
+    def write_uint64(self, n):
+        self._write_struct(self._structs['uint64'], 8, n)
+
+    def write_double(self, n):
+        self._write_struct(self._structs['double'], 8, n)
+
+    def tobytes(self):
+        """Return the current contents of the buffer as a bytearray."""
+        return self._buf[:self._ofs]
 
 
 # typetag parsing
@@ -300,7 +383,7 @@ def flatten(obj, types=None, endianness='>'):
     Flatten returns a tuple of (flattened string, type object).  The
     type object can be converted into a type tag by calling str(typeobj).
 
-    We first try obj.__lrflatten__(endianness). If that fails we go to the list
+    We first try obj.__lrflatten__(buf). If that fails we go to the list
     of suggested types in order until one of them works. If none of them work,
     we raise FlatteningError.
 
@@ -320,13 +403,20 @@ def flatten(obj, types=None, endianness='>'):
     check the registry of flattening functions, to see whether one exists
     for the object type, or a superclass.
     """
-    if hasattr(obj, '__lrflatten__'):
-        s, t = obj.__lrflatten__(endianness)
-    else:
-        s, t = _flatten_to(obj, types, endianness)
-    return s, t
+    buf = OutputStream(endianness=endianness)
+    t = flatten_into(buf, obj, types)
+    return str(buf.tobytes()), t
 
-def _flatten_to(obj, types, endianness):
+def flatten_into(buf, obj, types=None):
+    """Flatten python data into the given buffer.
+    """
+    if hasattr(obj, '__lrflatten__'):
+        t = obj.__lrflatten__(buf)
+    else:
+        t = _flatten_to(buf, obj, types)
+    return t
+
+def _flatten_to(buf, obj, types):
     """
     Flatten obj in the case that it has no __lrflatten__ method.
     """
@@ -339,7 +429,7 @@ def _flatten_to(obj, types, endianness):
     if not len(types):
         # if there are no type suggestions, just try to
         # flatten to the default type
-        s, t = t.__flatten__(obj, endianness)
+        t = t.__flatten__(buf, obj)
     else:
         # check the list of allowed types for one compatible
         # with obj's type
@@ -361,7 +451,7 @@ def _flatten_to(obj, types, endianness):
                 break
         if foundCompatibleType:
             try:
-                s, t = t.__flatten__(obj, endianness)
+                t = t.__flatten__(buf, obj)
             except Exception, e:
                 raise FlatteningError(obj, t)
         else:
@@ -370,17 +460,18 @@ def _flatten_to(obj, types, endianness):
             # such as an allowed type 'v[]' and obj=4. In this case, the
             # class representing 'v[]', namely LRValue(''), will handle
             # coercion of obj to the appropriate type.
-            s = None
+            ok = False
             for t in types:
                 try:
-                    s, t = t.__flatten__(obj, endianness)
-                except Exception:
+                    t = t.__flatten__(buf, obj)
+                except Exception as e:
                     pass
                 else:
+                    ok = True
                     break
-            if s is None:
+            if not ok:
                 raise FlatteningError(obj, types)
-    return s, t
+    return t
 
 
 # Evaluation functions
@@ -501,7 +592,7 @@ class LRType(object):
         """
         raise NotImplementedError
 
-    def __flatten__(self, data, endianness):
+    def __flatten__(self, buf, data):
         """
         Flatten python data to this LabRAD type.
 
@@ -531,10 +622,10 @@ class LRNone(LRType, Singleton):
     def __unflatten__(self, s, endianness):
         return None
 
-    def __flatten__(self, data, endianness):
+    def __flatten__(self, buf, data):
         if data is not None:
             raise FlatteningError(data, self)
-        return '', self
+        return self
 
 registerType(type(None), LRNone())
 # register LRNone parser for the empty string as well
@@ -549,10 +640,11 @@ class LRBool(LRType, Singleton):
     def __unflatten__(self, s, endianness):
         return bool(ord(s.get(1)))
 
-    def __flatten__(self, b, endianness):
+    def __flatten__(self, buf, b):
         if not isinstance(b, bool):
             raise FlatteningError(b, self)
-        return chr(b), self
+        buf.write_byte(chr(b))
+        return self
 
 registerType(bool, LRBool())
 
@@ -562,14 +654,15 @@ class LRInt(LRType, Singleton):
     tag = 'i'
     width = 4
     def __unflatten__(self, s, endianness):
-        return unpack(endianness + 'i', s.get(4))[0]
+        return struct.unpack(endianness + 'i', s.get(4))[0]
 
-    def __flatten__(self, n, endianness):
+    def __flatten__(self, buf, n):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
         if n >= 0x8000000 or n < -0x80000000:
             raise ValueError("out of range for type i: {0}".format(n))
-        return pack(endianness + 'i', n), self
+        buf.write_int32(n)
+        return self
 
 registerType(int, LRInt())
 registerType(np.int32, LRInt())
@@ -581,14 +674,15 @@ class LRWord(LRType, Singleton):
     tag = 'w'
     width = 4
     def __unflatten__(self, s, endianness):
-        return long(unpack(endianness + 'I', s.get(4))[0])
+        return long(struct.unpack(endianness + 'I', s.get(4))[0])
 
-    def __flatten__(self, n, endianness):
+    def __flatten__(self, buf, n):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
         if n > 0xFFFFFFFF or n < 0:
             raise ValueError("out of range for type w: {0}".format(n))
-        return pack(endianness + 'I', n), self
+        buf.write_uint32(n)
+        return self
 
 registerType(long, LRWord())
 registerType(np.uint32, LRWord())
@@ -601,18 +695,20 @@ class LRStr(LRType, Singleton):
     isFixedWidth = False
 
     def __width__(self, s, endianness):
-        width = unpack(endianness + 'i', s.get(4))[0]
+        width = struct.unpack(endianness + 'i', s.get(4))[0]
         s.skip(width)
         return 4 + width
 
     def __unflatten__(self, s, endianness):
-        n = unpack(endianness + 'i', s.get(4))[0]
+        n = struct.unpack(endianness + 'i', s.get(4))[0]
         return s.get(n)
 
-    def __flatten__(self, s, endianness):
+    def __flatten__(self, buf, s):
         if not isinstance(s, str):
             raise FlatteningError(s, self)
-        return pack(endianness + 'I', len(s)) + s, self
+        buf.write_uint32(len(s))
+        buf.write_bytes(s)
+        return self
 
 registerType(str, LRStr())
 
@@ -634,16 +730,18 @@ class LRTime(LRType, Singleton):
     width = 16
 
     def __unflatten__(self, s, endianness):
-        secs, us = unpack(endianness + 'QQ', s.get(16))
+        secs, us = struct.unpack(endianness + 'QQ', s.get(16))
         us = float(us) / pow(2, 64) * pow(10, 6)
         t = timeOffset() + timedelta(seconds=secs, microseconds=us)
         return t
 
-    def __flatten__(self, t, endianness):
+    def __flatten__(self, buf, t):
         diff = t - timeOffset()
         secs = diff.days * (60 * 60 * 24) + diff.seconds
         us = long(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
-        return pack(endianness + 'QQ', secs, us), self
+        buf.write_uint64(secs)
+        buf.write_uint64(us)
+        return self
 
 registerType(dt, LRTime())
 
@@ -653,7 +751,7 @@ class LRFloat(LRType, Singleton):
     width = 8
 
     def __unflatten__(self, s, endianness):
-        return unpack(endianness + 'd', s.get(8)[0])
+        return struct.unpack(endianness + 'd', s.get(8)[0])
 
     def __flatten__(self, f, endianness):
         return pack(endianness + 'd', f)
@@ -719,7 +817,7 @@ class LRValue(LRType):
         return self.unit is not None
 
     def __unflatten__(self, s, endianness):
-        v = unpack(endianness + 'd', s.get(8))[0]
+        v = struct.unpack(endianness + 'd', s.get(8))[0]
         if self.unit is not None:
             v = Value(v, self.unit)
         return v
@@ -740,14 +838,15 @@ class LRValue(LRType):
         else:
             raise TypeError("No %s type for %s"%(cls, v))
 
-    def __flatten__(self, v, endianness):
+    def __flatten__(self, buf, v):
         v = self.__check_units__(v)
         v = float(v)
         # If we are an LRValue(None), switch to LRValue('') so that wire
         # data has correct type tag, eg. 'v[]' instead of 'v'.
         if self.unit is None:
             self.unit = ''
-        return pack(endianness + 'd', float(v)), self
+        buf.write_double(float(v))
+        return self
 
     def __check_units__(self, v):
         # TODO: implement full labrad unit conversion semantics in pylabrad
@@ -771,18 +870,20 @@ class LRComplex(LRValue):
     width = 16
 
     def __unflatten__(self, s, endianness):
-        real, imag = unpack(endianness + 'dd', s.get(16))
+        real, imag = struct.unpack(endianness + 'dd', s.get(16))
         c = complex(real, imag)
         if self.unit is not None:
             c = Complex(c, self.unit)
         return c
 
-    def __flatten__(self, c, endianness):
+    def __flatten__(self, buf, c):
         c = self.__check_units__(c)
         c = complex(c)
         if self.unit is None:
             self.unit = ''
-        return pack(endianness + 'dd', c.real, c.imag), self
+        buf.write_double(c.real)
+        buf.write_double(c.imag)
+        return self
 
     @classmethod
     def __lrtype__(cls, c):
@@ -860,27 +961,26 @@ class LRCluster(LRType):
         """Unflatten items into a python tuple."""
         return tuple(unflatten(s, t, endianness) for t in self.items)
 
-    def __flatten__(self, c, endianness):
+    def __flatten__(self, buf, c):
         """Flatten python tuple to LabRAD cluster."""
         if len(c) == 0:
             raise FlatteningError('Cannot flatten zero-length clusters')
         if len(c) != len(self.items):
             raise FlatteningError('Cannot flatten %s to %s' % (c, self.items))
         if LRAny() in self.items:
-            strs = []
             items = []
             for t, elem in zip(self.items, c):
                 if t == LRAny():
-                    s, t = flatten(elem, endianness=endianness)
-                    strs.append(s)
+                    t = flatten_into(buf, elem)
                     items.append(t)
                 else:
-                    s, _ = t.__flatten__(elem, endianness) # _ -> t ?
-                    strs.append(s)
+                    _ = t.__flatten__(buf, elem) # _ -> t ?
                     items.append(t)
             self.items = items # warning: type mutated here
-            return ''.join(strs), self
-        return ''.join(t.__flatten__(elem, endianness)[0] for t, elem in zip(self.items, c)), self
+            return self
+        for t, elem in zip(self.items, c):
+            t.__flatten__(buf, elem)
+        return self
 
 registerTypeFunc(tuple, LRCluster.__lrtype__)
 
@@ -1004,7 +1104,7 @@ class LRList(LRType):
 
     def __width__(self, s, endianness):
         n, elem = self.depth, self.elem
-        dims = unpack(endianness + ('i'*n), s.get(4*n))
+        dims = struct.unpack(endianness + ('i'*n), s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if elem is None:
             width = 0
@@ -1114,7 +1214,7 @@ class LRList(LRType):
         """Unflatten to nested python list."""
         # get list dimensions
         n = self.depth
-        dims = unpack(endianness + ('i'*n), s.get(4*n))
+        dims = struct.unpack(endianness + ('i'*n), s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if self.elem is None or size == 0:
             return nestedList([], n-1)
@@ -1134,7 +1234,7 @@ class LRList(LRType):
         """
         n, elem = self.depth, self.elem
         s = Buffer(data)
-        dims = unpack(endianness + ('i'*n), s.get(4*n))
+        dims = struct.unpack(endianness + ('i'*n), s.get(4*n))
         size = np.prod(dims)
 
         def make(t, width):
@@ -1150,7 +1250,7 @@ class LRList(LRType):
         elif elem <= LRValue(): a = make('f8', 8)
         elif elem <= LRComplex(): a = make('c16', 16)
         else:
-            raise TypeError("Cannot make numpy array with %s"%(elem,))
+            raise TypeError("Cannot make numpy array with %s" % (elem,))
         a.shape = dims + a.shape[1:] # handle clusters as elements
         if elem <= LRValue():
             if elem.unit is not None and elem.unit != '':
@@ -1159,12 +1259,12 @@ class LRList(LRType):
                 a = U.DimensionlessArray(a)
         return a
 
-    def __flatten__(self, L, endianness):
+    def __flatten__(self, buf, L):
         """Flatten (nested) python list to LabRAD list.
 
         Lists must be homogeneous and rectangular.
         """
-        if isinstance(L, LazyList) and not hasattr(L, '_list'):
+        if isinstance(L, LazyList) and not hasattr(L, '_list') and not hasattr(L, '_array'):
             # if we get a LazyList that hasn't been unflattened,
             # we can just return the original data unchanged
             # if  it has been unflattened, though, then it may
@@ -1175,40 +1275,50 @@ class LRList(LRType):
             # is mutable but does not write-back to the list.
             # That means if you mutate the array, then flatten
             # the lazy list, the changes will not be reflected.
-            if L._endianness == endianness:
-                return L._data, self
+            if L._endianness == buf.endianness:
+                buf.write_bytes(L._data)
+                return self
             else:
                 # Make sure it is unflattened so endian conversion happens
                 L.aslist
         if useNumpy and isinstance(L, ndarray):
             if self.elem <= LRValue() and self.elem.unit != '':
-                msg = "Can't flatten ndarray to %s"%(self,)
+                msg = "Can't flatten ndarray to %s" % (self,)
                 raise TypeError(msg)
-            return self.__flatten_array__(L, endianness)
+            return self.__flatten_array__(buf, L)
         if useNumpy and isinstance(L, U.ValueArray):
-            return self.__flatten_ValueArray__(L, endianness)
+            return self.__flatten_ValueArray__(buf, L)
         if self.elem == LRAny():
             self.elem = self.__lrtype__(L).elem
-        lengths = [None] * self.depth
+
+        shape = [0] * self.depth
+        def get_shape(ls, n=0):
+            shape[n] = len(ls)
+            if len(ls) and n+1 < self.depth:
+                get_shape(ls[0], n+1)
+        get_shape(L)
+        for n in shape:
+            buf.write_uint32(n)
+
         def flattenNDlist(ls, n=0):
-            if lengths[n] is None:
-                lengths[n] = len(ls)
-            if len(ls) != lengths[n]:
+            if len(ls) != shape[n]:
                 raise Exception('List is not rectangular.')
             if n+1 == self.depth:
-                return ''.join(self.elem.__flatten__(e, endianness)[0] for e in ls)
+                for e in ls:
+                    self.elem.__flatten__(buf, e)
             else:
-                return ''.join(flattenNDlist(row, n+1) for row in ls)
-        flat = flattenNDlist(L)
-        lengths = [l or 0 for l in lengths]
-        return pack(endianness + ('i' * len(lengths)), *lengths) + flat, self
+                for row in ls:
+                    flattenNDlist(row, n+1)
+        flattenNDlist(L)
+        return self
 
-    def __flatten_array__(self, a, endianness):
+    def __flatten_array__(self, buf, a):
         """Flatten numpy array to LabRAD list."""
         shape = a.shape[:self.depth]
         if len(shape) != self.depth:
             raise Exception("Bad array shape.")
-        dims = pack(endianness + ('i' * len(shape)), *shape)
+        for n in shape:
+            buf.write_uint32(n)
         if self.elem == LRAny():
             self.elem = self.__lrtype_array__(a).elem
 
@@ -1218,19 +1328,21 @@ class LRList(LRType):
         if wanted_dtype is not None:
             if wanted_dtype == 'u4':
                 if a.dtype in ['<i8', '>i8']:
-                    a = a.astype(endianness + 'u4')
+                    a = a.astype(buf.endianness + 'u4')
             if a.dtype.itemsize > dtype(wanted_dtype).itemsize:
                 raise Exception("Narrowing type cast while flattening numpy array: dtype=%s, wanted_dtype=%s" % (a.dtype, dtype(wanted_dtype)))
-            a = a.astype(endianness + wanted_dtype)
+            a = a.astype(buf.endianness + wanted_dtype)
         else:
-            elems = imap(itemgetter(0), (flatten(i, endianness=endianness) for i in a.flat))
-            return dims + ''.join(elems), self
-        return dims + a.tostring(), self
+            for x in a.flat:
+                flatten_into(buf, x)
+            return self
+        buf.write_bytes(a.tostring())
+        return self
 
-    def __flatten_ValueArray__(self, va, endianness):
+    def __flatten_ValueArray__(self, buf, va):
         # Convert to appropriate unit and flatten as array
         numericalData = va[self.elem.unit]
-        return self.__flatten_array__(numericalData, endianness)
+        return self.__flatten_array__(buf, numericalData)
 
 
 _known_dtypes = {
@@ -1306,16 +1418,16 @@ class LRError(LRType):
             code, msg, payload = unflatten(s, t, endianness)
         return Error(msg, code, payload)
 
-    def __flatten__(self, E, endianness):
+    def __flatten__(self, buf, E):
         """Flatten python Exception to LabRAD error."""
         # TODO add ability to grab tracebacks here, or more information of other types
         code = getattr(E, 'code', 0)
         msg = getattr(E, 'msg', repr(E))
         payload = getattr(E, 'payload', None)
         t = LRCluster(LRInt(), LRStr(), self.payload)
-        s, t = flatten((int(code), str(msg), payload), t, endianness)
+        t = flatten_into(buf, (int(code), str(msg), payload), t)
         self.payload = t.items[2]
-        return s, self
+        return self
 
 registerTypeFunc(Exception, LRError().__lrtype__)
 
@@ -1348,9 +1460,9 @@ class Error(Exception):
     def __lrtype__(self):
         return LRError(getType(self.payload))
 
-    def __lrflatten__(self, endianness):
-        s, t = flatten((self.code, self.msg, self.payload), endianness=endianness)
-        return s, LRError(t.items[2])
+    def __lrflatten__(self, buf, endianness):
+        t = flatten_into(buf, (self.code, self.msg, self.payload))
+        return LRError(t.items[2])
 
 class Int(int):
     def __lrtype__(self):
@@ -1404,7 +1516,7 @@ class LazyList(list):
 
         s = Buffer(self._data)
         n, elem = self._lrtype.depth, self._lrtype.elem
-        dims = unpack(self._endianness + ('i'*n), s.get(4*n))
+        dims = struct.unpack(self._endianness + ('i'*n), s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
 
         if elem is None or size == 0:
@@ -1428,7 +1540,7 @@ class LazyList(list):
 
         s = Buffer(self._data)
         n, elem = self._lrtype.depth, self._lrtype.elem
-        dims = unpack(self._endianness + ('i'*n), s.get(4*n))
+        dims = struct.unpack(self._endianness + ('i'*n), s.get(4*n))
         size = np.prod(dims)
 
         def make(t, width):
