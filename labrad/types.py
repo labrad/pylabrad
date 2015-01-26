@@ -704,13 +704,16 @@ class LRStr(LRType, Singleton):
         return s.get(n)
 
     def __flatten__(self, buf, s):
-        if not isinstance(s, str):
+        if not isinstance(s, (str, bytes, bytearray, memoryview)):
             raise FlatteningError(s, self)
         buf.write_uint32(len(s))
         buf.write_bytes(s)
         return self
 
 registerType(str, LRStr())
+registerType(bytes, LRStr())
+registerType(bytearray, LRStr())
+registerType(memoryview, LRStr())
 
 
 def timeOffset():

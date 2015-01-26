@@ -154,6 +154,36 @@ class LabradTypesTests(unittest.TestCase):
             else:
                 self.assertEqual(data_in, data_out)
 
+    def testBufferTypes(self):
+        """
+        Test flattening of types supporting python's buffer interface (str, bytes, etc.).
+
+        All such types can be considered as arrays of bytes, and so flatten to 's' in labrad.
+        TODO: introduce a separation between bytes and text (unicode), as in python3.
+        """
+        tests = [
+            # strings
+            '', 'a', '\x00\x01\x02\x03',
+
+            # bytes (immutable)
+            b'', b'a', 'b\x00\x01\x02\x03',
+
+            # bytearray (mutable)
+            bytearray(b''), bytearray(b'a'), bytearray(b'\x00\x01\x02\x03'),
+
+            # memoryview
+            memoryview(b''), memoryview(b'a'), memoryview(b'\x00\x01\x02\x03')
+        ]
+        for data_in in tests:
+            s, t = T.flatten(data_in)
+            self.assertEquals(t, T.parseTypeTag('s'))
+            data_out = T.unflatten(s, t)
+            if isinstance(data_in, memoryview):
+                expected = str(data_in.tobytes())
+            else:
+                expected = str(data_in)
+            self.assertEqual(data_out, expected)
+
     def testDefaultFlatAndBackNonIdentical(self):
         """
         Test flattening/unflattening of objects which change type.
