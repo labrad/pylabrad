@@ -425,6 +425,44 @@ class WithUnit(object):
     def sqrt(self):
         return pow(self, Fraction(1, 2))
 
+    def round(self, unit, multiplier=1):
+        """
+        Round the value to an integer number of the specified unit.
+        The optional multiplier parameter allows rounding to other
+        values like x.round('ns', 4).  We warned that numbers like 0.1
+        are not exactly representable in floating point so rounding to
+        fractions may not give you the results you expect.
+        """
+        delta = multiplier * Unit(unit)
+        rv = delta * np.round((self/delta)[''])
+        return rv
+
+    def ceil(self, unit, multiplier=1):
+        """
+        ceiling function in the specified units.  An optional
+        multiplier allows increments other than one, e.g.,
+        x.ceil('ns',4) finds the smallest multiple of 4 ns greater
+        than x.  Fractional multipliers may give surprising results
+        due to the inexact nature of floating point numbers.  0.1 is
+        not representable by floating point numbers.
+        """
+        delta = multiplier * Unit(unit)
+        rv = delta * np.ceil((self/delta)[''])
+        return rv
+
+    def floor(self, unit, multiplier=1):
+        """
+        floor function in the specified units.  An optional
+        multiplier allows increments other than one, e.g.,
+        x.ceil('ns',4) finds the smallest multiple of 4 ns greater
+        than x.  Fractional multipliers may give surprising results
+        due to the inexact nature of floating point numbers.  0.1 is
+        not representable by floating point numbers.
+        """
+        delta = multiplier * Unit(unit)
+        rv = delta * np.floor((self/delta)[''])
+        return rv
+
     def __copy__(self):
         return self
 

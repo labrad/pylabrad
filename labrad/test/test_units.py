@@ -150,6 +150,17 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue(4*s > 0)
         with self.assertRaises(TypeError): _ = 4*s > 1
 
+    def testRounding(self):
+        s = units.Unit('s')
+        ns = units.Unit('ns')
+        kg = units.Unit('kg')
+        self.assertTrue((32.1*ns).round('ns') == 32*ns)
+        self.assertTrue((34.7*ns).round(ns) == 35*ns)
+        self.assertTrue((31.1*ns).ceil('ns', 2) == 32*ns)
+        self.assertTrue((5.7*ns).floor('ns') == 5*ns)
+        with self.assertRaises(TypeError):
+            (4.2*kg).round('ns')
+
     def testComplex(self):
         V = units.Unit('V')
 
