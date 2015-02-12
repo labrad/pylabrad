@@ -207,6 +207,13 @@ class LabradTypesTests(unittest.TestCase):
             unflat = T.unflatten(*flat)
             comparison_func(expected, unflat)
 
+    def testBooleanArrayFlattening(self):
+        flat = T.flatten([True, False, True])
+        unflat = T.unflatten(*flat)
+        flat2 = T.flatten(unflat)
+        unflat2 = T.unflatten(*flat2)
+        np.testing.assert_array_equal(unflat, unflat2)
+
     def testFailedFlattening(self):
         """
         Trying to flatten data to an incompatible type should raise an error.

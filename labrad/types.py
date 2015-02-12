@@ -1144,7 +1144,7 @@ class LRList(LRType):
                 x.byteswap(True) # inplace
             return x
 
-        if elem == LRBool(): a = make('u1', 1)
+        if elem == LRBool(): a = make('bool', 1)
         elif elem == LRInt(): a = make('i4', 4)
         elif elem == LRWord(): a = make('u4', 4)
         elif elem <= LRValue(): a = make('f8', 8)
