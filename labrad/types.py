@@ -567,7 +567,7 @@ class LRInt(LRType, Singleton):
     def __flatten__(self, n, endianness):
         if not isinstance(n, (int, long)):
             raise FlatteningError(n, self)
-        if n >= 0x8000000 or n < -0x80000000:
+        if n >= 0x80000000 or n < -0x80000000:
             raise ValueError("out of range for type i: {0}".format(n))
         return pack(endianness + 'i', n), self
 

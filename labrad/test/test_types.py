@@ -109,8 +109,8 @@ class LabradTypesTests(unittest.TestCase):
             # simple types
             None,
             True, False,
-            1, -1, 2, -2,
-            1L, 2L, 3L, 4L,
+            1, -1, 2, -2, 2**31-1, -2**31,
+            1L, 2L, 3L, 4L, 0L, 0xFFFFFFFFL,
             '', 'a', '\x00\x01\x02\x03',
             datetime.now(),
 
