@@ -49,7 +49,7 @@ def randType(noneOkay=True, listOkay=True, nStructs=0):
     return choice(choices)()
 
 def randUnits():
-    return choice((None, '', 's', 'ms', 'us', 'm', 'm/s', 'V^2/Hz', 'V/Hz^1/2'))
+    return choice(('', 's', 'ms', 'us', 'm', 'm/s', 'V^2/Hz', 'V/Hz^1/2'))
 
 def randValue(t):
     if isinstance(t, T.LRNone): return genNone()
