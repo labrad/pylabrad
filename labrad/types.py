@@ -1069,14 +1069,17 @@ class LRList(LRType):
         elif L.dtype in ['>u4', '<u4']: t = LRWord()
         elif L.dtype in ['>u8', '<u8']: t = LRWord()
         elif L.dtype in ['>f8', '<f8']: t = LRValue('')
-        elif L.dtype in ['>c16', '<c16']: t = LRComplex()
+        elif L.dtype in ['>c16', '<c16']: t = LRComplex('')
         else:
             raise Exception("Can't flatten array of %s" % L.dtype)
         return cls(t, depth=len(L.shape))
 
     @classmethod
     def __lrtype_ValueArray__(cls, L):
-        t = LRValue(str(L.unit))
+        if L[L.unit].dtype in ['>c16', '<c16']:
+            t = LRComplex(L.unit)
+        else:
+            t = LRValue(L.unit)
         return cls(t, depth=len(L._value.shape))
 
     def __le__(self, other):
@@ -1152,7 +1155,7 @@ class LRList(LRType):
         else:
             raise TypeError("Cannot make numpy array with %s"%(elem,))
         a.shape = dims + a.shape[1:] # handle clusters as elements
-        if elem <= LRValue():
+        if elem <= LRValue() or elem <= LRComplex():
             if elem.unit is not None and elem.unit != '':
                 a = U.ValueArray(a, elem.unit)
             else:

@@ -128,6 +128,7 @@ class LabradTypesTests(unittest.TestCase):
             # unflatten as ndarray with dtype=int32, we do not put lists
             # in this test.
             U.ValueArray([1, 2, 3], 'm'),
+            U.ValueArray([1j, 2j, 3j], 's'),
             np.array([1, 3, 4], dtype='int32'),
             np.array([1.1, 2.2, 3.3]),
 
@@ -281,7 +282,14 @@ class LabradTypesTests(unittest.TestCase):
         """
         tests = [
             (Value(5.0, 'ft'), ['v[m]'], 'v[ft]'),
-            (U.ValueArray([1, 2, 3], 'm'), ['*v[m]'], '*v[m]')
+
+            # real value array
+            (U.ValueArray([1, 2, 3], ''), [], '*v[]'),
+            (U.ValueArray([1, 2, 3], 'm'), ['*v[m]'], '*v[m]'),
+
+            # complex value array
+            (U.ValueArray([1j, 2j, 3j], ''), [], '*c[]'),
+            (U.ValueArray([1j, 2j, 3j], 'm'), [], '*c[m]')
         ]
         for data, hints, tag in tests:
             self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))

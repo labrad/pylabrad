@@ -53,16 +53,9 @@ The version included with LabRAD has been slightly changed:
 """
 
 from math import floor, pi
-#try:
-#    from numpy import array, ndarray
-#    useNumpy = True
-#except ImportError:
-#    array = ndarray = None
-#    useNumpy = False
 
 from labrad import grammar
 import numpy as np
-import fractions
 from fractions import Fraction
 
 # Dictionary containing numbers
@@ -510,12 +503,8 @@ WithUnit._numericTypes[np.ndarray] = ValueArray
 WithUnit._numericTypes[list] = ValueArray
 
 # add support for numeric types returned by most numpy/scipy functions
-try:
-    import numpy
-    WithUnit._numericTypes[numpy.float64] = Value
-    WithUnit._numericTypes[numpy.complex128] = Complex
-except ImportError:
-    pass
+WithUnit._numericTypes[np.float64] = Value
+WithUnit._numericTypes[np.complex128] = Complex
 
 #if useNumpy:
 #    class ValueArray(WithUnit, ndarray):
@@ -990,9 +979,9 @@ class DimensionlessFloat(WithDimensionlessUnit, float):
 WithUnit._dimensionlessTypes[float] = DimensionlessFloat
 WithUnit._dimensionlessTypes[int] = DimensionlessFloat
 WithUnit._dimensionlessTypes[long] = DimensionlessFloat
-WithUnit._dimensionlessTypes[numpy.float64] = DimensionlessFloat
-WithUnit._dimensionlessTypes[numpy.int64] = DimensionlessFloat
-WithUnit._dimensionlessTypes[numpy.float32] = DimensionlessFloat
+WithUnit._dimensionlessTypes[np.float64] = DimensionlessFloat
+WithUnit._dimensionlessTypes[np.int64] = DimensionlessFloat
+WithUnit._dimensionlessTypes[np.float32] = DimensionlessFloat
 WithUnit._numericTypes[DimensionlessFloat] = Value
 
 class DimensionlessComplex(WithDimensionlessUnit, complex):
@@ -1001,7 +990,7 @@ class DimensionlessComplex(WithDimensionlessUnit, complex):
         raise TypeError('DimensionlessComplex not iterable')
 
 WithUnit._dimensionlessTypes[complex] = DimensionlessComplex
-WithUnit._dimensionlessTypes[numpy.complex128] = DimensionlessComplex
+WithUnit._dimensionlessTypes[np.complex128] = DimensionlessComplex
 WithUnit._numericTypes[DimensionlessComplex] = Complex
 
 class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
