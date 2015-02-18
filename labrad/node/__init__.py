@@ -338,7 +338,13 @@ def createGenericServerCls(path, filename, conf):
     cls.isLocal = len(cls.environVars) > 0
 
     # startup
-    cls.cmdline = scp.get('startup', 'cmdline', raw=True)
+    platform_cmdline_option = 'cmdline_{}'.format(sys.platform)
+    if scp.has_option('startup', platform_cmdline_option):
+        # use platform-specific command line
+        cls.cmdline = scp.get('startup', platform_cmdline_option, raw=True)
+    else:
+        # use generic command line
+        cls.cmdline = scp.get('startup', 'cmdline', raw=True)
     cls.path = path
     cls.filename = filename
     try:
