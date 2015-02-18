@@ -8,6 +8,7 @@ from collections import defaultdict
 import getpass
 import os
 import socket
+import keyword
 
 from labrad import constants
 
@@ -30,6 +31,8 @@ def mangle(name):
     newname = ''.join(c if c in ALLOWED else '_' for c in name.lower())
     if newname[0] not in FIRST:
         newname = '_' + newname
+    if newname in keyword.kwlist:
+        newname = newname + '_'
     return newname
 
 def indent(s, level=1):
