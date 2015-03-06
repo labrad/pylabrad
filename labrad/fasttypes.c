@@ -42,6 +42,7 @@ PyObject *ft_gv_2 = NULL;
 PyObject *ft_gv_long_num_bits = NULL;
 PyObject *ft_gv_UINT_MAX = NULL;
 PyObject *ft_gv_numpy = NULL;
+PyObject *ft_gv_labrad_types = NULL;
 PyObject *ft_gv_labrad_units = NULL;
 PyTypeObject *ft_gv_labrad_units_WithUnit = NULL;
 PyTypeObject *ft_gv_labrad_units_Value = NULL;
@@ -60,15 +61,19 @@ int ft_type_strings_equivalent(char *str1, int len1, char *str2, int len2);
 char *ft_create_unambiguous_type_string(PyObject *o, int *len_ptr);
 int ft_size(PyObject *o);
 int ft_verify_long_ints_nonnegative(PyObject *o, char *str);
-int ft_write_direct_to_buf(PyObject *o, char *buf);
+int ft_write_to_buf(PyObject *o, char *buf);
 void ft_reverse_memcpy(void *dest, void *src, int len);
-int ft_write_reverse_to_buf(PyObject *o, char *buf);
+void ft_appropriate_memcpy(void *dest, void *src, int len);
 PyObject *ft_create_empty_PyStringObject(int size);
 PyObject *ft_flatten_no_parse(PyObject *o);
 PyObject *ft_flatten(PyObject *self, PyObject *args);
 
 // functions supporting ft_unflatten
-PyObject *ft_make_stuff(PyObject *self, PyObject *args);
+// PyObject *ft_make_stuff(PyObject *self, PyObject *args);
+PyObject *ft_build_Value(PyObject *o, char *t, int *ti_ptr);
+PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, char *t, int *ti_ptr);
+PyObject *ft_unflatten_partial_parse(PyObject *o);
+PyObject *ft_unflatten(PyObject *self, PyObject *args);
 
 // test function: verifies o_i == unflatten(flatten(o_i)) for all o_i in [o_1, ..., o_n]
 PyObject *ft_test(PyObject *self, PyObject *args);
@@ -97,6 +102,9 @@ int ft_initialize() {
     ft_gv_numpy = PyImport_ImportModule("numpy");
     if (PyErr_Occurred() != NULL) goto exception;
     
+    ft_gv_labrad_types = PyImport_ImportModule("labrad.types");
+    if (PyErr_Occurred() != NULL) goto exception;
+
     ft_gv_labrad_units = PyImport_ImportModule("labrad.units");
     if (PyErr_Occurred() != NULL) goto exception;
 
@@ -255,9 +263,12 @@ int ft_find_beginning_next_type_token(char *str, int i) {
 int ft_type_strings_equivalent(char *str1, int len1, char *str2, int len2) {
     int i, j;
     
+    // for (i=0; i<len2; i++) printf("%c", str2[i]);
+    // printf("\n");
+    
     i = j = 0;
     while (i < len1) {
-        if (str1[i] == str2[j]) {
+        if (str1[i] == str2[j] || (str1[i] == 'w' && str2[j] == 'i')) {
             i++;
             j++;
         }
@@ -327,6 +338,7 @@ char *ft_create_unambiguous_type_string(PyObject *o, int *len_ptr) {
                     PyErr_SetString(PyExc_TypeError, "Unable to infer a valid type string, inhomogeneous list.");
                     goto exception;
                 }
+                free(str2);
             }
         }
     }
@@ -388,7 +400,7 @@ int ft_size(PyObject *o) {
         }
     }
     else if (PyList_Check(o)) {
-        size += FIXED_INT_SIZE;
+        size = FIXED_INT_SIZE;
         n = PyList_GET_SIZE(o);
         for (i=0; i<n; i++) {
             val = ft_size(PyList_GET_ITEM(o, i));
@@ -397,6 +409,7 @@ int ft_size(PyObject *o) {
         }
     }
     else if (PyTuple_Check(o)) {
+        size = FIXED_INT_SIZE;
         n = PyTuple_GET_SIZE(o);
         for (i=0; i<n; i++) {
             val = ft_size(PyTuple_GET_ITEM(o, i));
@@ -458,7 +471,7 @@ exception:
     return EXCEPTION_RAISED;
 }
 
-int ft_write_direct_to_buf(PyObject *o, char *buf) {
+int ft_write_to_buf(PyObject *o, char *buf) {
     int i, n, size = 0;
     unsigned int w;
     double x;
@@ -472,28 +485,28 @@ int ft_write_direct_to_buf(PyObject *o, char *buf) {
     else if (PyInt_Check(o)) {
         i = PyInt_AS_LONG(o);
         size = FIXED_INT_SIZE;
-        memcpy(buf, &i, size);
+        ft_appropriate_memcpy(buf, &i, size);
     }
     else if (PyLong_Check(o)) {
         w = PyInt_AsUnsignedLongMask(o);
         size = FIXED_LONG_SIZE;
-        memcpy(buf, &w, size);
+        ft_appropriate_memcpy(buf, &w, size);
     }
     else if (PyFloat_Check(o)) {
         x = PyFloat_AS_DOUBLE(o);
         size = FIXED_FLOAT_SIZE;
-        memcpy(buf, &x, size);
+        ft_appropriate_memcpy(buf, &x, size);
     }
     else if (PyComplex_Check(o)) {
         x = PyComplex_RealAsDouble(o);
-        memcpy(buf, &x, FIXED_FLOAT_SIZE);
+        ft_appropriate_memcpy(buf, &x, FIXED_FLOAT_SIZE);
         x = PyComplex_ImagAsDouble(o);
-        memcpy(buf + FIXED_FLOAT_SIZE, &x, FIXED_FLOAT_SIZE);
+        ft_appropriate_memcpy(buf + FIXED_FLOAT_SIZE, &x, FIXED_FLOAT_SIZE);
         size = FIXED_COMPLEX_SIZE;
     }
     else if (PyString_Check(o)) {
         size = PyString_GET_SIZE(o);
-        memcpy(buf, &size, FIXED_INT_SIZE);
+        ft_appropriate_memcpy(buf, &size, FIXED_INT_SIZE);
         memcpy(buf + FIXED_INT_SIZE, ((PyStringObject *)o)->ob_sval, size);
         size += FIXED_INT_SIZE;
     }
@@ -502,13 +515,13 @@ int ft_write_direct_to_buf(PyObject *o, char *buf) {
         if (PyObject_TypeCheck(o, ft_gv_labrad_units_Value)) {
             x = PyFloat_AS_DOUBLE(t);
             size = FIXED_FLOAT_SIZE;
-            memcpy(buf, &x, size);
+            ft_appropriate_memcpy(buf, &x, size);
         }
         else if (PyObject_TypeCheck(o, ft_gv_labrad_units_Complex)) {
             x = PyComplex_RealAsDouble(t);
-            memcpy(buf, &x, FIXED_FLOAT_SIZE);
+            ft_appropriate_memcpy(buf, &x, FIXED_FLOAT_SIZE);
             x = PyComplex_ImagAsDouble(t);
-            memcpy(buf + FIXED_FLOAT_SIZE, &x, FIXED_FLOAT_SIZE);
+            ft_appropriate_memcpy(buf + FIXED_FLOAT_SIZE, &x, FIXED_FLOAT_SIZE);
             size = FIXED_COMPLEX_SIZE;
         }
         else {
@@ -518,27 +531,35 @@ int ft_write_direct_to_buf(PyObject *o, char *buf) {
     }
     else if (PyList_Check(o)) {
         n = PyList_GET_SIZE(o);
-        memcpy(buf, &n, FIXED_INT_SIZE);
-        size += FIXED_INT_SIZE;
+        // printf("list n: %d\n", n);
+        ft_appropriate_memcpy(buf, &n, FIXED_INT_SIZE);
+        size = FIXED_INT_SIZE;
         for (i=0; i<n; i++) {
-            size += ft_write_direct_to_buf(PyList_GET_ITEM(o, i), buf+size);
+            // printf("list i: %d\n", i);
+            size += ft_write_to_buf(PyList_GET_ITEM(o, i), buf+size);
         }
     }
     else if (PyTuple_Check(o)) {
         n = PyTuple_GET_SIZE(o);
+        // printf("tup n: %d\n", n);
+        ft_appropriate_memcpy(buf, &n, FIXED_INT_SIZE);
+        size = FIXED_INT_SIZE;
         for (i=0; i<n; i++) {
-            size += ft_write_direct_to_buf(PyTuple_GET_ITEM(o, i), buf+size);
+            // printf("tup i: %d\n", i);
+            size += ft_write_to_buf(PyTuple_GET_ITEM(o, i), buf+size);
         }
     }
     else {
         goto exception;
     }
 
+    // printf("size: %d\n", size);
+    
     return size;
     
 exception:
 
-    printf("Serious fasttypes.c bug, detected in ft_write_direct_to_buf, likely located in ft_size.\n");
+    printf("Serious fasttypes.c bug, detected in ft_write_to_buf, likely located in ft_size.\n");
     assert(0);
 
     return EXCEPTION_RAISED;
@@ -554,90 +575,9 @@ void ft_reverse_memcpy(void *dest, void *src, int len) {
     for (i=0; i<len; i++) cdest[i] = csrc[len-1-i];
 }
 
-int ft_write_reverse_to_buf(PyObject *o, char *buf) {
-    int i, n, size = 0;
-    unsigned int w;
-    double x;
-    PyObject *t;
-    
-    if (PyBool_Check(o)) {
-        size = FIXED_BOOL_SIZE;
-        if (o == Py_True) *buf = 1;
-        else *buf = 0;
-    }
-    else if (PyInt_Check(o)) {
-        i = PyInt_AS_LONG(o);
-        size = FIXED_INT_SIZE;
-        ft_reverse_memcpy(buf, &i, size);
-    }
-    else if (PyLong_Check(o)) {
-        w = PyInt_AsUnsignedLongMask(o);
-        size = FIXED_LONG_SIZE;
-        ft_reverse_memcpy(buf, &w, size);
-    }
-    else if (PyFloat_Check(o)) {
-        x = PyFloat_AS_DOUBLE(o);
-        size = FIXED_FLOAT_SIZE;
-        ft_reverse_memcpy(buf, &x, size);
-    }
-    else if (PyComplex_Check(o)) {
-        x = PyComplex_RealAsDouble(o);
-        ft_reverse_memcpy(buf, &x, FIXED_FLOAT_SIZE);
-        x = PyComplex_ImagAsDouble(o);
-        ft_reverse_memcpy(buf + FIXED_FLOAT_SIZE, &x, FIXED_FLOAT_SIZE);
-        size = FIXED_COMPLEX_SIZE;
-    }
-    else if (PyString_Check(o)) {
-        size = PyString_GET_SIZE(o);
-        ft_reverse_memcpy(buf, &size, FIXED_INT_SIZE);
-        memcpy(buf + FIXED_INT_SIZE, ((PyStringObject *)o)->ob_sval, size);
-        size += FIXED_INT_SIZE;
-    }
-    else if (PyObject_TypeCheck(o, ft_gv_labrad_units_WithUnit)) {
-        t = PyObject_GetAttrString(o, "_value");
-        if (PyObject_TypeCheck(o, ft_gv_labrad_units_Value)) {
-            x = PyFloat_AS_DOUBLE(t);
-            size = FIXED_FLOAT_SIZE;
-            ft_reverse_memcpy(buf, &x, size);
-        }
-        else if (PyObject_TypeCheck(o, ft_gv_labrad_units_Complex)) {
-            x = PyComplex_RealAsDouble(t);
-            ft_reverse_memcpy(buf, &x, FIXED_FLOAT_SIZE);
-            x = PyComplex_ImagAsDouble(t);
-            ft_reverse_memcpy(buf + FIXED_FLOAT_SIZE, &x, FIXED_FLOAT_SIZE);
-            size = FIXED_COMPLEX_SIZE;
-        }
-        else {
-            goto exception;
-        }
-        Py_DECREF(t);
-    }
-    else if (PyList_Check(o)) {
-        n = PyList_GET_SIZE(o);
-        ft_reverse_memcpy(buf, &n, FIXED_INT_SIZE);
-        size += FIXED_INT_SIZE;
-        for (i=0; i<n; i++) {
-            size += ft_write_reverse_to_buf(PyList_GET_ITEM(o, i), buf+size);
-        }
-    }
-    else if (PyTuple_Check(o)) {
-        n = PyTuple_GET_SIZE(o);
-        for (i=0; i<n; i++) {
-            size += ft_write_reverse_to_buf(PyTuple_GET_ITEM(o, i), buf+size);
-        }
-    }
-    else {
-        goto exception;
-    }
-
-    return size;
-    
-exception:
-
-    printf("Serious fasttypes.c bug, detected in ft_write_reverse_to_buf, likely located in ft_size.\n");
-    assert(0);
-
-    return EXCEPTION_RAISED;
+void ft_appropriate_memcpy(void *dest, void *src, int len) {
+    if (ft_gv_system_endianness == LITTLE) ft_reverse_memcpy(dest, src, len);
+    else memcpy(dest, src, len);
 }
 
 PyObject *ft_create_empty_PyStringObject(int size) {
@@ -685,22 +625,23 @@ PyObject *ft_flatten_no_parse(PyObject *o) {
         if (ft_verify_long_ints_nonnegative(o, str) == EXCEPTION_RAISED) goto exception;
     }
     
+    // Py_INCREF(Py_None);
+    // return Py_None;
+    
     tup = PyTuple_New(2);
     if (tup == NULL) goto exception;
     
-    so = (PyStringObject *)ft_create_empty_PyStringObject(size);
+    // so = (PyStringObject *)ft_create_empty_PyStringObject(size);
+    so = (PyStringObject *)PyString_FromStringAndSize(NULL, size);
     if (so == NULL) goto exception;
 
     buf = so->ob_sval;
-    if (ft_gv_system_endianness == BIG) {
-        ft_write_direct_to_buf(o, buf);
-    }
-    else {
-        ft_write_reverse_to_buf(o, buf);
-    }
+    // *** memory error likely in following line:
+    ft_write_to_buf(o, buf);
     PyTuple_SET_ITEM(tup, 0, (PyObject *)so);
     
-    so = (PyStringObject *)ft_create_empty_PyStringObject(len);
+    // so = (PyStringObject *)ft_create_empty_PyStringObject(len);
+    so = (PyStringObject *)PyString_FromStringAndSize(NULL, len);
     if (so == NULL) goto exception;
 
     buf = so->ob_sval;
@@ -722,6 +663,9 @@ exception:
 
 PyObject *ft_flatten(PyObject *self, PyObject *args) {
     PyObject *o;
+    
+    // Py_INCREF(Py_None);
+    // return Py_None;
     
     if (!ft_gv_initialized) {
         if (ft_initialize() == EXCEPTION_RAISED) goto exception;
@@ -756,57 +700,220 @@ exception:
 }
 */
 
-PyObject *ft_test(PyObject *self, PyObject *args) {
-    int i, n, flag;
-    PyObject *o, *t, *tc;
+PyObject *ft_build_Value(PyObject *o, char *t, int *ti_ptr) {
+    int n;
+    PyObject *s;
+    char *buf;
 
-    o = tc = NULL;
+    n = 3;
+    while (t[*ti_ptr + n] != ']') n++;
+    n -= 2;
+    s = PyString_FromStringAndSize(NULL, n);
+    // if (s == NULL) goto exception;
+    buf = ((PyStringObject *)s)->ob_sval;
+    memcpy(buf, t + *ti_ptr + 2, n);
+    
+    return PyObject_CallMethod(ft_gv_labrad_types, "Value", "OO", o, s);
+}
+
+// function assumes computer does not run out of memory so all constructed objects are non NULL
+PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, char *t, int *ti_ptr) {
+    int i, n, ti;
+    double x, y;
+    PyObject *o, *temp;
+    char *buf, c;
+
+    if (t[*ti_ptr] == '*') {
+        // printf("unflat list\n");
+        (*ti_ptr)++;
+        ft_appropriate_memcpy(&n, s + *si_ptr, FIXED_INT_SIZE);
+        *si_ptr += FIXED_INT_SIZE;
+        o = PyList_New(n);
+        for (i=0; i<n; i++) {
+            // printf("list i: %d\n", i);
+            PyList_SET_ITEM(o, i, ft_unflatten_no_parse(s, si_ptr, t, ti_ptr));
+        }
+    }
+    else if (t[*ti_ptr] == '(') {
+        // printf("unflat tup\n");
+        ti = *ti_ptr;
+        ti++;
+        ft_appropriate_memcpy(&n, s + *si_ptr, FIXED_INT_SIZE);
+        *si_ptr += FIXED_INT_SIZE;
+        o = PyTuple_New(n);
+        for (i=0; i<n; i++) {
+            // printf("list i: %d\n", i);
+            PyTuple_SET_ITEM(o, i, ft_unflatten_no_parse(s, si_ptr, t, &ti));
+            ti = ft_find_beginning_next_type_token(t, ti);
+        }
+        // *ti_ptr = ft_find_beginning_next_type_token(t, *ti_ptr);
+    }
+    else if (t[*ti_ptr] == 'i') {
+        ft_appropriate_memcpy(&n, s + *si_ptr, FIXED_INT_SIZE);
+        *si_ptr += FIXED_INT_SIZE;
+        o = PyInt_FromLong(n);
+    }
+    else if (t[*ti_ptr] == 'w') {
+        ft_appropriate_memcpy(&n, s + *si_ptr, FIXED_INT_SIZE);
+        *si_ptr += FIXED_INT_SIZE;
+        o = PyInt_FromLong(n);
+        if (PyObject_Compare(o, ft_gv_0) < 0) {
+            temp = PyNumber_Add(o, ft_gv_UINT_MAX);
+            Py_DECREF(o);
+            o = temp;
+            temp = PyNumber_Add(o, ft_gv_1);
+            Py_DECREF(o);
+            o = temp;
+        }
+    }
+    else if (t[*ti_ptr] == 'v') {
+        ft_appropriate_memcpy(&x, s + *si_ptr, FIXED_FLOAT_SIZE);
+        *si_ptr += FIXED_FLOAT_SIZE;
+        o = PyFloat_FromDouble(x);
+        if (t[*ti_ptr + 2] != ']') {
+            o = ft_build_Value(o, t, ti_ptr);
+        }
+    }
+    else if (t[*ti_ptr] == 'c') {
+        ft_appropriate_memcpy(&x, s + *si_ptr, FIXED_FLOAT_SIZE);
+        *si_ptr += FIXED_FLOAT_SIZE;
+        ft_appropriate_memcpy(&y, s + *si_ptr, FIXED_FLOAT_SIZE);
+        *si_ptr += FIXED_FLOAT_SIZE;
+        o = PyComplex_FromDoubles(x, y);
+        if (t[*ti_ptr + 2] != ']') {
+            o = ft_build_Value(o, t, ti_ptr);
+        }
+    }
+    else if (t[*ti_ptr] == 's') {
+        ft_appropriate_memcpy(&n, s + *si_ptr, FIXED_INT_SIZE);
+        *si_ptr += FIXED_INT_SIZE;
+        o = PyString_FromStringAndSize(NULL, n);
+        // if (o == NULL) goto exception;
+        buf = ((PyStringObject *)o)->ob_sval;
+        memcpy(buf, s + *si_ptr, n);
+        *si_ptr += n;
+    }
+    else if (t[*ti_ptr] == 'b') {
+        ft_appropriate_memcpy(&c, s + *si_ptr, FIXED_BOOL_SIZE);
+        *si_ptr += FIXED_BOOL_SIZE;
+        o = PyBool_FromLong(c);
+    }
+     
+    return o;
+}
+
+PyObject *ft_unflatten_partial_parse(PyObject *o) {
+    int si, ti;
+    PyStringObject *so, *to;
+    char *s, *t;
+    
+    so = (PyStringObject *)PyTuple_GET_ITEM(o, 0);
+    to = (PyStringObject *)PyTuple_GET_ITEM(o, 1);
+    
+    if (!PyString_Check(so) || !PyString_Check(to)) {
+         PyErr_SetString(PyExc_TypeError, "unflatten() takes a tuple (string, string).");
+         goto exception;
+    }
+    
+    s = so->ob_sval;
+    t = to->ob_sval;
+    
+    si = ti = 0;
+    
+    // PyObject_Print(so, stdout, Py_PRINT_RAW);
+    // PyObject_Print(to, stdout, Py_PRINT_RAW);
+    
+    return ft_unflatten_no_parse(s, &si, t, &ti);
+    
+exception:
+    
+    return NULL;
+}
+
+PyObject *ft_unflatten(PyObject *self, PyObject *args) {
+    PyObject *o;
     
     if (!ft_gv_initialized) {
         if (ft_initialize() == EXCEPTION_RAISED) goto exception;
     }
-
-    tc = PyImport_ImportModule("fasttypes_testcases");
+    
+    PyArg_ParseTuple(args, "O", &o);
     if (PyErr_Occurred() != NULL) goto exception;
     
-    o = PyObject_GetAttrString(tc, "passcases");
-    if (o == NULL || !PyList_Check(o)) goto exception;
+    if (!PyTuple_Check(o) || PyTuple_GET_SIZE(o) != 2) {
+         PyErr_SetString(PyExc_TypeError, "unflatten() takes a tuple (string, string).");
+         goto exception;
+    }
     
-    n = PyList_GET_SIZE(o);
+    return ft_unflatten_partial_parse(o);
+    
+exception:
+    
+    return NULL;
+}
+
+PyObject *ft_test(PyObject *self, PyObject *args) {
+    int i, n, flag;
+    PyObject *tc_mod, *tc_list, *tc_i, *tc_i_flat, *tc_i_unflat;
+
+    if (!ft_gv_initialized) {
+        if (ft_initialize() == EXCEPTION_RAISED) goto exception;
+    }
+
+    tc_mod = PyImport_ImportModule("fasttypes_testcases");
+    if (PyErr_Occurred() != NULL) goto exception;
+    
+    tc_list = PyObject_GetAttrString(tc_mod, "passcases");
+    if (tc_list == NULL || !PyList_Check(tc_list)) goto exception;
+    
+    n = PyList_GET_SIZE(tc_list);
     flag = TRUE;
     for (i=0; i<n; i++) {
+        tc_i = tc_i_flat = tc_i_unflat = NULL;
         printf("%d\n", i);
-        t = PyList_GET_ITEM(o, i);
-        PyObject_Print(t, stdout, Py_PRINT_RAW);
-        printf("\n");
-        t = ft_flatten_no_parse(t);
-        PyObject_Print(t, stdout, Py_PRINT_RAW);
-        printf("\n");
-        if (t == NULL) {
+        tc_i = PyList_GET_ITEM(tc_list, i);
+        if (tc_i != NULL) {
+            PyObject_Print(tc_i, stdout, Py_PRINT_RAW);
+            printf("\n");
+            tc_i_flat = ft_flatten_no_parse(tc_i);
+            if (tc_i_flat != NULL) {
+                PyObject_Print(tc_i_flat, stdout, Py_PRINT_RAW);
+                printf("\n");
+                tc_i_unflat = ft_unflatten_partial_parse(tc_i_flat);
+                if (tc_i_unflat != NULL) {
+                    PyObject_Print(tc_i_unflat, stdout, Py_PRINT_RAW);
+                    printf("\n");
+                }
+            }
+        }
+        
+        if (tc_i_flat == NULL || tc_i_unflat == NULL || PyObject_Compare(tc_i, tc_i_unflat) != 0) {
             printf("ERROR: pass case %d failed\n", i);
             flag = FALSE;
         }
-        else {
-            Py_DECREF(t);
-        }
         printf("\n");
+
+        if (tc_i_flat != NULL) Py_DECREF(tc_i_flat);
+        if (tc_i_unflat != NULL) Py_DECREF(tc_i_unflat);
     }
     
-    o = PyObject_GetAttrString(tc, "failcases");
-    if (o == NULL || !PyList_Check(o)) goto exception;
+    Py_DECREF(tc_list);
     
-    n = PyList_GET_SIZE(o);
+    tc_list = PyObject_GetAttrString(tc_mod, "failcases");
+    if (tc_list == NULL || !PyList_Check(tc_list)) goto exception;
+    
+    n = PyList_GET_SIZE(tc_list);
     flag = TRUE;
     for (i=0; i<n; i++) {
         printf("%d\n", i);
-        t = PyList_GET_ITEM(o, i);
-        PyObject_Print(t, stdout, Py_PRINT_RAW);
+        tc_i = PyList_GET_ITEM(tc_list, i);
+        PyObject_Print(tc_i, stdout, Py_PRINT_RAW);
         printf("\n");
-        t = ft_flatten_no_parse(t);
-        if (t != NULL) {
+        tc_i_flat = ft_flatten_no_parse(tc_i);
+        if (tc_i_flat != NULL) {
             printf("ERROR: fail case %d passed\n", i);
             flag = FALSE;
-            Py_DECREF(t);
+            Py_DECREF(tc_i_flat);
         }
         else {
             PyErr_Print();
@@ -816,23 +923,23 @@ PyObject *ft_test(PyObject *self, PyObject *args) {
     
     if (flag) printf("All test cases behaved as expected.\n");
     
-    Py_DECREF(tc);
-    Py_DECREF(o);
+    Py_DECREF(tc_list);
+    Py_DECREF(tc_mod);
+    
     Py_INCREF(Py_True);
     return Py_True;
     
 exception:
 
-    if (tc != NULL) Py_DECREF(tc);
-    
-    if (o != NULL) Py_DECREF(o);
+    if (tc_list != NULL) Py_DECREF(tc_list);
+    if (tc_mod != NULL) Py_DECREF(tc_mod);
 
     return NULL;
 }
 
 static PyMethodDef fasttypes_methods[] = {
     {"flatten", ft_flatten, METH_VARARGS, "flatten() doc string."},
-    // {"make_stuff", ft_make_stuff, METH_VARARGS, "make_stuff() doc string."},
+    {"unflatten", ft_unflatten, METH_VARARGS, "unflatten() doc string."},
     {"test", ft_test, METH_VARARGS, "test() doc string."},
     {NULL, NULL}
 };
