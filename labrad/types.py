@@ -1066,6 +1066,7 @@ class LRList(LRType):
         #uses ==, so our use of in here should be ok
         if L.dtype == 'bool': t = LRBool()
         elif L.dtype in ['>i4', '<i4']: t = LRInt()
+        elif L.dtype in ['>i8', '<i8']: t = LRInt()
         elif L.dtype in ['>u4', '<u4']: t = LRWord()
         elif L.dtype in ['>u8', '<u8']: t = LRWord()
         elif L.dtype in ['>f8', '<f8']: t = LRValue('')
@@ -1222,9 +1223,13 @@ class LRList(LRType):
             if wanted_dtype == 'u4':
                 if a.dtype in ['<i8', '>i8']:
                     a = a.astype(endianness + 'u4')
-            if a.dtype.itemsize > dtype(wanted_dtype).itemsize:
-                raise Exception("Narrowing type cast while flattening numpy array: dtype=%s, wanted_dtype=%s" % (a.dtype, dtype(wanted_dtype)))
-            a = a.astype(endianness + wanted_dtype)
+            wanted_dtype = dtype(endianness + wanted_dtype)
+            if a.dtype != wanted_dtype:
+                a_cast = a.astype(wanted_dtype)
+                # make sure values don't change in a narrowing cast
+                if a.dtype.itemsize > wanted_dtype.itemsize and (not np.all(a_cast == a)):
+                    raise Exception("Narrowing typecast loses information while flattening numpy array: dtype={0}, wanted_dtype={1}".format(a.dtype, wanted_dtype))
+                a = a_cast
         else:
             elems = imap(itemgetter(0), (flatten(i, endianness=endianness) for i in a.flat))
             return dims + ''.join(elems), self
