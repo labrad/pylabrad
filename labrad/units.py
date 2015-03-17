@@ -52,11 +52,13 @@ The version included with LabRAD has been slightly changed:
 
 """
 
+from fractions import Fraction
 from math import floor, pi
 
-from labrad import grammar
 import numpy as np
-from fractions import Fraction
+
+from labrad import grammar
+from labrad.util import cache
 
 # Dictionary containing numbers
 #
@@ -346,7 +348,7 @@ class WithUnit(object):
         of messed up: 1001*m != 1.001*km because the latter is not an
         exact number.  C'est la floating point.
         '''
-        return hash(self.inBaseUnits()._value)
+        return hash(self[self.unit.base_unit])
 
     def inUnitsOf(self, unit):
         """
@@ -369,6 +371,8 @@ class WithUnit(object):
         """
         if self.unit is None:
             return WithUnit(self._value, unit)
+        if self.unit == unit:
+            return self
         factor, offset = self.unit.conversionTupleTo(unit)
         return WithUnit((self._value + offset) * factor, unit)
 
@@ -381,22 +385,10 @@ class WithUnit(object):
         """
         if self.unit is None:
             return self
-        num = ''
-        denom = ''
-        for unit, power in (zip(_base_names, self.unit.powers) +
-                            self.unit.lex_names.items()):
-            if power != 1 and power != -1:
-                unit += '**' + str(abs(power))
-            if power < 0: denom += '/' + unit
-            elif power > 0: num += '*' + unit
-        if not len(num):
-            num = '1'
-        else:
-            num = num[1:] # strip leading '*'
-        name = num + denom
-        if name == '1':
-            name = ''
-        return WithUnit(self._value * self.unit.factor, name)
+        base_unit = self.unit.base_unit
+        if self.unit == base_unit:
+            return self
+        return self.inUnitsOf(base_unit)
 
     def isCompatible(self, unit):
         """
@@ -546,6 +538,7 @@ class Unit(object):
             # construct a named unit that is equal to a
             # previously-defined unit, times a factor
             name, factor, unit = args[:3]
+            factor = float(factor)
             if isinstance(unit, WithUnit):
                 unit, factor = unit.unit, factor * unit._value
             elif isinstance(unit, str):
@@ -668,6 +661,27 @@ class Unit(object):
             _unit_table[name] = self
         return name
 
+    @property
+    def base_unit(self):
+        if not hasattr(self, '_base_unit'):
+            num = ''
+            denom = ''
+            for unit, power in (zip(_base_names, self.powers) +
+                                self.lex_names.items()):
+                if power != 1 and power != -1:
+                    unit += '**' + str(abs(power))
+                if power < 0: denom += '/' + unit
+                elif power > 0: num += '*' + unit
+            if not len(num):
+                num = '1'
+            else:
+                num = num[1:] # strip leading '*'
+            name = num + denom
+            if name == '1':
+                name = ''
+            self._base_unit = Unit(name)
+        return self._base_unit
+
     def __repr__(self):
         return "<Unit '%s'>" % self.name
 
@@ -682,7 +696,9 @@ class Unit(object):
                 # might fail to convert other to Unit
                 pass
         elif isinstance(other, Unit):
-            return (self.powers == other.powers and
+            return (self.factor == other.factor and
+                    self.offset == other.offset and
+                    self.powers == other.powers and
                     self.lex_names == other.lex_names)
         return False
 
@@ -773,6 +789,7 @@ class Unit(object):
         other = Unit(other)
         return self.powers == other.powers and self.lex_names == other.lex_names
 
+    @cache.lru_cache()
     def conversionFactorTo(self, other):
         """
         @param other: another unit
@@ -791,6 +808,7 @@ class Unit(object):
                              'as a simple multiplicative factor') % (self, other))
         return float(self.factor / other.factor)
 
+    @cache.lru_cache()
     def conversionTupleTo(self, other): # added 1998/09/29 GPW
         """
         @param other: another unit
