@@ -550,12 +550,12 @@ class LRBool(LRType, Singleton):
         return bool(ord(s.get(1)))
 
     def __flatten__(self, b, endianness):
-        if not isinstance(b, bool):
+        if not isinstance(b, (bool, np.bool8)):
             raise FlatteningError(b, self)
         return chr(b), self
 
 registerType(bool, LRBool())
-
+registerType(np.bool8, LRBool())
 
 class LRInt(LRType, Singleton):
     """A signed 32-bit integer."""

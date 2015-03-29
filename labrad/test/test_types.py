@@ -186,7 +186,9 @@ class LabradTypesTests(unittest.TestCase):
             (ValueArray([1, 2], 'Hz'), ValueArray([1, 2], 'Hz'),
                 compareValueArrays),
             (ValueArray([1.0, 2], ''), np.array([1.0, 2]),
-                np.testing.assert_array_almost_equal)
+                np.testing.assert_array_almost_equal),
+            # Numpy scalar types
+            (np.bool8(True), True, self.assertEqual) 
         ]
         for input, expected, comparison_func in tests:
             unflat = T.unflatten(*T.flatten(input))
