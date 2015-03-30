@@ -28,6 +28,7 @@ and return types have been registered), we can do even better.
 
 from __future__ import absolute_import
 
+import collections
 import re
 import sys
 from struct import pack, unpack
@@ -291,6 +292,9 @@ def unflatten(s, t, endianness='>'):
         s = Buffer(s)
     return t.__unflatten__(s, endianness)
 
+
+FlatData = collections.namedtuple('FlatData', ['bytes', 'tag'])
+
 def flatten(obj, types=None, endianness='>'):
     """Flatten python data into labrad data.
 
@@ -320,11 +324,20 @@ def flatten(obj, types=None, endianness='>'):
     check the registry of flattening functions, to see whether one exists
     for the object type, or a superclass.
     """
+    if isinstance(obj, FlatData):
+        # if types were specified, make sure this data conforms to one of them
+        if types is not None:
+            if not isinstance(types, list):
+                types = [types]
+            t = parseTypeTag(obj.tag)
+            if not any(t <= parseTypeTag(tag) for tag in types):
+                raise FlatteningError(obj, t)
+        return obj
     if hasattr(obj, '__lrflatten__'):
         s, t = obj.__lrflatten__(endianness)
     else:
         s, t = _flatten_to(obj, types, endianness)
-    return s, t
+    return FlatData(s, t)
 
 def _flatten_to(obj, types, endianness):
     """

@@ -24,9 +24,9 @@ from twisted.python.components import registerAdapter
 
 from zope.interface import implements
 
-from labrad import constants as C, manager, protocol
+from labrad import constants as C, manager, protocol, types as T
 from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
-from labrad.support import indent, mangle, extractKey, MultiDict, PacketResponse, getPassword, hexdump
+from labrad.support import indent, mangle, extractKey, MultiDict, PacketRecord, PacketResponse, getPassword, hexdump
 
 
 class AsyncSettingWrapper(object):
@@ -53,7 +53,8 @@ class AsyncSettingWrapper(object):
             args = None
         elif len(args) == 1:
             args = args[0]
-        d = self._server._send([(self.ID, args, tag)], **kw)
+        flat = T.flatten(args, tag)
+        d = self._server._send([(self.ID, flat)], **kw)
         d.addCallback(lambda r: r[0][1])
         return d
 
@@ -130,7 +131,9 @@ class AsyncPacketWrapper(object):
                     args = None
                 elif len(args) == 1:
                     args = args[0]
-                self._packet.append((setting.ID, args, tag, key))
+                flat = T.flatten(args, tag)
+                rec = PacketRecord(ID=setting.ID, data=args, tag=tag, flat=flat, key=key)
+                self._packet.append(rec)
                 return self
             wrapped.name = setting.name
             method = MethodType(wrapped, None, cls)
@@ -159,7 +162,7 @@ class AsyncPacketWrapper(object):
     def send(self, **kw):
         """Send this packet to the server."""
         # drop keys from records before sending
-        records = [rec[:3] for rec in self._packet]
+        records = [(rec.ID, rec.flat) for rec in self._packet]
         d = self._server._send(records, **dict(self._kw, **kw))
         d.addCallback(PacketResponse, self._server, self._packet)
         return d
@@ -179,8 +182,9 @@ class AsyncPacketWrapper(object):
         all be updated.
         """
         for i, rec in enumerate(self._packet):
-            if key == rec[3]:
-                self._packet[i] = rec[0], value, rec[2], rec[3]
+            if key == rec.key:
+                flat = T.flatten(value, rec.tag)
+                self._packet[i] = rec._replace(data=value, flat=flat)
 
     def __delitem__(self, key):
         """Delete a setting call from this packet, indexed by key.
@@ -189,7 +193,7 @@ class AsyncPacketWrapper(object):
         all be deleted.
         """
         for i, rec in enumerate(self._packet):
-            if key == rec[3]:
+            if key == rec.key:
                 self._packet.pop(i)
 
     def _dataStr(self, data):
@@ -206,10 +210,15 @@ class AsyncPacketWrapper(object):
         else:
             return hexdump(data)
 
-    def _recordRepr(self, ID, data, types, key, short=False):
-        key_str = "" if key is None else " (key=%s)" % (key,)
-        prefix = '%s%s: ' % (self._server.settings[ID].name, key_str)
-        data_str = self._dataStr(str(data)) if short else self._dataRepr(str(data))
+    def _recordRepr(self, rec, short=False):
+        """Create a string representation of a packet record.
+
+        Includes the setting name and result key (if specified), as well as
+        a possibly truncated repr of the data for this setting.
+        """
+        key_str = "" if rec.key is None else " (key=%s)" % (rec.key,)
+        prefix = '%s%s: ' % (self._server.settings[rec.ID].name, key_str)
+        data_str = self._dataStr(str(rec.data)) if short else self._dataRepr(str(rec.data))
         data_str = data_str.replace('\n', '\n' + ' '*len(prefix))
         return prefix + data_str
 
@@ -217,7 +226,12 @@ class AsyncPacketWrapper(object):
         return self.__repr__(True)
 
     def __repr__(self, short=False):
-        data_str = '\n'.join(self._recordRepr(*rec, short=short) for rec in self._packet)
+        """Create a string representation of this packet.
+
+        Includes the server the packet is intended for, as well as all the
+        records that have been added to the packet.
+        """
+        data_str = '\n'.join(self._recordRepr(rec, short=short) for rec in self._packet)
         return unwrap("""\
             |Packet for server: '%s'
             |

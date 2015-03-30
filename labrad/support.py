@@ -4,7 +4,7 @@ Most of these used to be located in labrad.util but have been moved here
 to break the explicit dependency on twisted.
 """
 
-from collections import defaultdict
+import collections
 import getpass
 import os
 import socket
@@ -145,6 +145,9 @@ class PrettyMultiDict(MultiDict):
         return '\n'.join(sorted(self.keys()))
 
 
+PacketRecord = collections.namedtuple('PacketRecord', ['ID', 'data', 'tag', 'flat', 'key'])
+
+
 class PacketResponse(object):
     """Wrapper for response packets from LabRAD servers.
 
@@ -159,9 +162,9 @@ class PacketResponse(object):
     """
     def __init__(self, resp, server, packet):
         # collect all responses from each setting or key
-        temp = defaultdict(list)
+        temp = collections.defaultdict(list)
         for rec, (ID, data) in zip(packet, resp):
-            key = rec[3]
+            key = rec.key
             setting = server.settings[ID]
             name, pyName = setting.name, setting._py_name
             # if this record has a key, index by key only

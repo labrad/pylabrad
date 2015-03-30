@@ -326,5 +326,12 @@ class LabradTypesTests(unittest.TestCase):
             with self.assertRaises(T.FlatteningError):
                 T.flatten(n, t)
 
+    def testFlattenIsIdempotent(self):
+        flat = T.flatten(0x1, 'i')
+        self.assertEquals(T.flatten(flat), flat)
+        self.assertEquals(T.flatten(flat, 'i'), flat)
+        with self.assertRaises(T.FlatteningError):
+            T.flatten(flat, 'v')
+
 if __name__ == "__main__":
     unittest.main()
