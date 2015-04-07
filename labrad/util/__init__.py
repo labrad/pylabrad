@@ -14,11 +14,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import copy, re, textwrap
+import contextlib
 
 from twisted.internet import defer, reactor
+from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.threads import blockingCallFromThread
 from twisted.python import log, reflect, util
 
-from labrad import constants as C
+from labrad import constants as C, thread
 from labrad.support import getNodeName
 from labrad.util.unwrap import unwrap
 
@@ -342,6 +345,43 @@ def runServer(srv):
     #log.startLoggingWithObserver(observer.emit)
     reactor.connectTCP(config['host'], int(config['port']), srv)
     reactor.run()
+
+@contextlib.contextmanager
+def syncRunServer(srv, host=C.MANAGER_HOST, port=C.MANAGER_PORT, password=None):
+    """Run a labrad server of the specified class in a synchronous context.
+
+    Returns a context manager to be used with python's with statement that
+    will yield when the server has started and then shut the server down after
+    the context is exited.
+    """
+
+    if password is None:
+        password = C.PASSWORD
+
+    srv.password = password
+
+    @inlineCallbacks
+    def start_server():
+        connector = reactor.connectTCP(host, port, srv)
+        yield srv.onStartup()
+        returnValue(connector)
+
+    @inlineCallbacks
+    def stop_server():
+        yield srv.onShutdown()
+
+    thread.startReactor()
+    connector = blockingCallFromThread(reactor, start_server)
+    try:
+        yield
+    finally:
+        try:
+            connector.disconnect()
+            blockingCallFromThread(reactor, stop_server)
+        except Exception:
+            pass # don't care about exceptions here
+
+
 
 class MyLogObserver(log.FileLogObserver):
     timeFormat = '%Y/%m/%d %H:%M -'

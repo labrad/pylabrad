@@ -177,16 +177,18 @@ class HasDynamicAttrs(object):
                                     if p not in self.__attrs]
             for name, pyName, ID in additions:
                 if name in self.__cache:
-                    # pull from cache if possible, but
-                    # tell attribute to refresh itself
+                    # pull from cache if possible
                     s = self.__cache[name]
                     s.ID = ID # update attribute ID
-                    if hasattr(s, 'refresh'):
-                        s.refresh()
                 else:
                     s = self._wrapAttr(self, name, pyName, ID)
                 self.__cache[name] = s
                 self.__attrs[pyName, name, ID] = s
+
+            # refresh all attributes
+            for attr in self.__attrs.values():
+                if hasattr(attr, 'refresh'):
+                    attr.refresh()
 
             self._refreshed = True
         except Exception, e:
