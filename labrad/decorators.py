@@ -25,10 +25,8 @@ from functools import wraps
 from inspect import getargspec
 
 from twisted.internet.defer import inlineCallbacks
-from zope.interface import implements
 
 from labrad import types as T, util
-from labrad.interfaces import IRequestHandler, IMessageHandler
 
 def _isGenerator(f):
     """Check to see whether f is a generator.
@@ -44,7 +42,6 @@ def _product(lists):
     return [[h] + t for h in lists[0] for t in _product(lists[1:])]
 
 class Setting(object):
-    implements(IRequestHandler)
 
     def __init__(self, func):
         self.func = func
@@ -224,7 +221,6 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
 
 
 class MessageHandler(object):
-    implements(IMessageHandler)
 
     def __init__(self, func):
         self.func = func

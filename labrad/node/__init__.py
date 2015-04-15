@@ -69,10 +69,10 @@ import zipfile
 
 import labrad
 from labrad import util, types as T
-from labrad.server import ILabradServer, LabradServer, setting
+from labrad.server import LabradServer, setting
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 
-from twisted.application.service import IService, MultiService
+from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -82,16 +82,10 @@ from twisted.python import log, failure
 from twisted.python.components import registerAdapter
 from twisted.plugin import getPlugins
 
-from zope.interface import Interface, implements
-
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
-
-class IServerProcess(Interface):
-    pass
 
 class ServerProcess(ProcessProtocol):
     """A class to represent a running server instance."""
-    implements(IServerProcess)
     timeout = 20
     shutdownTimeout = 5
 
@@ -662,19 +656,6 @@ class NodeServer(LabradServer):
     def refreshServers(self):
         """Refresh the list of available servers."""
         servers = {}
-        # look for python plugins
-        for module in self.config.mods:
-            try:
-                __import__(module)
-                plugins = getPlugins(ILabradServer, sys.modules[module])
-                for plugin in plugins:
-                    s = createPythonServerCls(plugin)
-                    s.client = self.client
-                    if s.name not in servers:
-                        servers[s.name] = s
-            except:
-                print('Error while loading plugins from module "%s":' % module)
-                failure.Failure().printTraceback(elideFrameworkCode=1)
         # look for .ini files
         for dirname in self.config.dirs:
             for path, dirs, files in os.walk(dirname):

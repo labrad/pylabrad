@@ -24,20 +24,16 @@ import getpass
 from datetime import datetime
 from operator import attrgetter
 
-from twisted.application import service, internet
+from twisted.application import internet
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionDone
 from twisted.internet.protocol import ClientFactory
 from twisted.python import failure, log
-from twisted.python.components import registerAdapter
-from twisted.plugin import IPlugin
-from zope.interface import implements
 
-from labrad import util, constants as C, types as T
+from labrad import util, constants as C, types as T, wrappers
 from labrad.decorators import setting
 from labrad.protocol import LabradProtocol
-from labrad.interfaces import ILabradServer, IClientAsync
 
 class ServerProtocol(LabradProtocol):
     """Standard protocol for labrad servers.
@@ -208,8 +204,6 @@ class Context(object):
 class LabradServer(ClientFactory):
     """A generic LabRAD server."""
 
-    implements(IPlugin, ILabradServer)
-
     protocol = ServerProtocol
     sendTracebacks = True
     prioritizeWrites = False
@@ -360,7 +354,7 @@ class LabradServer(ClientFactory):
                                        self.description, self.notes)
             self.password = protocol.password
             self._cxn = protocol
-            self.client = IClientAsync(protocol)
+            self.client = wrappers.ClientAsync(protocol)
             yield self.client._init()
             yield self._initServer()
             self.started = True
@@ -586,7 +580,5 @@ class LabradService(internet.TCPClient):
         self.setName(server.name)
         self.onStartup = server.onStartup
         self.onShutdown = server.onShutdown
-
-registerAdapter(LabradService, ILabradServer, service.IService)
 
 
