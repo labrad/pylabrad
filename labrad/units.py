@@ -13,7 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
 # Physical quantities with units
 #
 # Written by Konrad Hinsen <hinsen@cnrs-orleans.fr>
@@ -52,7 +51,7 @@ The version included with LabRAD has been slightly changed:
 
 """
 
-from math import floor, pi
+import math
 
 from labrad import grammar
 import numpy as np
@@ -124,6 +123,8 @@ class NumberDict(dict):
         for key in self.keys():
             new[key] = self[key] / other
         return new
+
+    __truediv__ = __div__
 
 class WithUnit(object):
     """Mixin class for adding units to numeric types."""
@@ -310,6 +311,7 @@ class WithUnit(object):
         return WithUnit(other / self._value, pow(self.unit, -1))
 
     __rtruediv__ = __rdiv__
+
     def __pow__(self, other):
         if isinstance(other, (WithUnit, Unit)) and not other.isDimensionless():
             raise TypeError('Exponents must be dimensionless')
@@ -334,7 +336,7 @@ class WithUnit(object):
     def __neg__(self):
         return WithUnit(-self._value, self.unit)
 
-    def __nonzero__(self):
+    def __bool__(self):
         return self._value != 0
 
     def __hash__(self):
@@ -383,8 +385,8 @@ class WithUnit(object):
             return self
         num = ''
         denom = ''
-        for unit, power in (zip(_base_names, self.unit.powers) +
-                            self.unit.lex_names.items()):
+        for unit, power in (list(zip(_base_names, self.unit.powers)) +
+                            list(self.unit.lex_names.items())):
             if power != 1 and power != -1:
                 unit += '**' + str(abs(power))
             if power < 0: denom += '/' + unit
@@ -442,7 +444,7 @@ class Value(WithUnit):
 
 WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
-WithUnit._numericTypes[long] = Value
+WithUnit._numericTypes[int] = Value
 WithUnit._numericTypes[np.int32] = Value
 WithUnit._numericTypes[np.int64] = Value
 
@@ -468,7 +470,7 @@ class ValueArray(WithUnit):
             return super(ValueArray, cls).__new__(cls, data, unit)
 
         it = iter(data)
-        first = it.next()
+        first = next(it)
         unit = first.unit
         first = first[unit] # convert to float
         rest = [x[unit] for x in it]
@@ -719,6 +721,8 @@ class Unit(object):
                         self.lex_names - other.lex_names)
         return WithUnit(1.0 / other, self)
 
+    __truediv__ = __div__
+
     def __rdiv__(self, other):
         if other is None:
             if self.offset != 0:
@@ -738,6 +742,8 @@ class Unit(object):
                         other.lex_names - self.lex_names)
         return WithUnit(other, self**(-1))
 
+    __rtruediv__ = __rdiv__
+
     def __pow__(self, other):
         if self.offset != 0:
             raise TypeError("cannot exponentiate unit with non-zero offset: '%s'" % (self,))
@@ -749,7 +755,7 @@ class Unit(object):
                         self.lex_names * other)
         if isinstance(other, float):
             inv_exp = 1./other
-            rounded = int(floor(inv_exp+0.5))
+            rounded = int(math.floor(inv_exp+0.5))
             if abs(inv_exp - rounded) < 1.e-10:
                 return self.__pow__(Fraction(1, rounded))
         if isinstance(other, tuple):
@@ -926,7 +932,7 @@ class WithDimensionlessUnit(object):
         return self.unit.isCompatible(unit)
 
     def sqrt(self):
-        return self.__class__(sqrt(self._value))
+        return self.__class__(math.sqrt(self._value))
 
     # These are a whole bunch of operations to make sure that math
     # between WithDimensionlessUnits and float/complex return
@@ -978,7 +984,7 @@ class DimensionlessFloat(WithDimensionlessUnit, float):
 
 WithUnit._dimensionlessTypes[float] = DimensionlessFloat
 WithUnit._dimensionlessTypes[int] = DimensionlessFloat
-WithUnit._dimensionlessTypes[long] = DimensionlessFloat
+WithUnit._dimensionlessTypes[int] = DimensionlessFloat
 WithUnit._dimensionlessTypes[np.float64] = DimensionlessFloat
 WithUnit._dimensionlessTypes[np.int64] = DimensionlessFloat
 WithUnit._dimensionlessTypes[np.float32] = DimensionlessFloat
@@ -1180,7 +1186,7 @@ _addUnit('torr', 1./760., atm, 'torr = mm of mercury', '1/760 atm')
 # Angle units
 _help.append('Angle units:')
 
-_addUnit('deg', pi/180, 'rad', 'degrees', 'pi/180 rad')
+_addUnit('deg', math.pi/180, 'rad', 'degrees', 'pi/180 rad')
 
 # Temperature units
 _help.append('Temperature units:')
@@ -1192,28 +1198,28 @@ _addUnit('degF', 1.0, Unit({}, 5./9., K.powers, 459.67), 'degrees Fahrenheit')
 # Constants
 
 
-c       = 299792458.*m/s                   # speed of light
-ly      = 1.*c*y                           # light year
-mu0     = 4.e-7*pi*N/A**2                  # permeability of vacuum
-eps0    = 1/mu0/c**2                       # permittivity of vacuum
-G       = 6.67259e-11*m**3/kg/s**2         # gravitational constant
-hplanck = 6.62606957e-34*J*s               # Planck constant
-hbar    = hplanck/(2*pi)                   # Planck constant / 2pi
-e       = 1.60217733e-19*C                 # elementary charge
-me      = 9.1093897e-31*kg                 # electron mass
-mp      = 1.6726231e-27*kg                 # proton mass
-Nav     = 6.0221367e23/mol                 # Avogadro number
-k       = 1.380658e-23*J/K                 # Boltzmann constant
-wk      = 7*d                              # week
-yd      = 3*ft                             # yard
-nmi     = 1852.*m                          # Nautical mile
-Ang     = 1.e-10*m                         # Angstrom
-lyr     = c*y                              # light year
-Bohr    = 4*pi*eps0*hbar**2/me/e**2        # Bohr radius
-ha      = 10000*m**2                       # hectare
-b       = 1.e-28*m                         # barn
-Hartree = me*e**4/16/pi**2/eps0**2/hbar**2 # Wavenumbers/inverse cm
-rootHz  = sqrtHz = Hz**0.5                 # for power spectral density
+c       = 299792458.*m/s                        # speed of light
+ly      = 1.*c*y                                # light year
+mu0     = 4.e-7*math.pi*N/A**2                  # permeability of vacuum
+eps0    = 1/mu0/c**2                            # permittivity of vacuum
+G       = 6.67259e-11*m**3/kg/s**2              # gravitational constant
+hplanck = 6.62606957e-34*J*s                    # Planck constant
+hbar    = hplanck/(2*math.pi)                   # Planck constant / 2pi
+e       = 1.60217733e-19*C                      # elementary charge
+me      = 9.1093897e-31*kg                      # electron mass
+mp      = 1.6726231e-27*kg                      # proton mass
+Nav     = 6.0221367e23/mol                      # Avogadro number
+k       = 1.380658e-23*J/K                      # Boltzmann constant
+wk      = 7*d                                   # week
+yd      = 3*ft                                  # yard
+nmi     = 1852.*m                               # Nautical mile
+Ang     = 1.e-10*m                              # Angstrom
+lyr     = c*y                                   # light year
+Bohr    = 4*math.pi*eps0*hbar**2/me/e**2        # Bohr radius
+ha      = 10000*m**2                            # hectare
+b       = 1.e-28*m                              # barn
+Hartree = me*e**4/16/math.pi**2/eps0**2/hbar**2 # Wavenumbers/inverse cm
+rootHz  = sqrtHz = Hz**0.5                      # for power spectral density
 tsp     = 4.92892159375*ml   # teaspoon
 tbsp    = 3*tsp              # tablespoon
 floz    = 2*tbsp             # fluid ounce
@@ -1252,7 +1258,7 @@ def description():
             s += '%-8s  %-26s %s\n' % (prefix + name, comment, unit)
         else:
             # impossible
-            raise TypeError, 'wrong construction of _help list'
+            raise TypeError('wrong construction of _help list')
     return s
 
 # add the description of the units to the module's doc string:
@@ -1264,12 +1270,12 @@ if __name__ == '__main__':
 
     l = WithUnit(10., 'm')
     big_l = WithUnit(10., 'km')
-    print big_l + l
+    print(big_l + l)
     t = WithUnit(314159., 's')
 
     e = 2.7 * Hartree * Nav
-    print e.inUnitsOf('kcal/mol')
-    print e.inBaseUnits()
+    print(e.inUnitsOf('kcal/mol'))
+    print(e.inBaseUnits())
 
     freeze = 0 * Unit('degC')
-    print freeze['degF']
+    print(freeze['degF'])

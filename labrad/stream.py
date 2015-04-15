@@ -10,7 +10,7 @@ def packetStream(packetHandler, endianness='>'):
     Accepts a function packetHandler that will be called with four arguments
     whenever a packet is completed: source, context, request, records.
     """
-    buf = ''
+    buf = b''
     while True:
         # get packet header (20 bytes)
         while len(buf) < 20:
@@ -42,13 +42,14 @@ def unflattenRecords(data, endianness='>'):
     s = T.Buffer(data)
     while len(s):
         ID, tag, data = T.unflatten(s, RECORD_TYPE, endianness)
+        tag = tag.decode('utf-8')
         rec = ID, T.unflatten(data, tag, endianness)
         records.append(rec)
     return records
 
 def flattenPacket(target, context, request, records, endianness='>'):
     """Flatten a packet to the specified target."""
-    if isinstance(records, str):
+    if isinstance(records, bytes):
         data = records
     else:
         kw = {'endianness': endianness}
@@ -59,14 +60,14 @@ def flattenPacket(target, context, request, records, endianness='>'):
                 except T.FlatteningError as e:
                     e.err_idx = idx
                     raise
-        data = ''.join(genexp())
-        #data = ''.join(flattenRecord(*rec, **kw) for rec in records)
+        data = b''.join(genexp())
+        #data = b''.join(flattenRecord(*rec, **kw) for rec in records)
     return PACKET_TYPE.__flatten__((context, request, target, data),
         endianness)[0]
 
 def flattenRecords(records, endianness='>'):
     kw = {'endianness': endianness}
-    return ''.join(flattenRecord(*rec, **kw) for rec in records)
+    return b''.join(flattenRecord(*rec, **kw) for rec in records)
 
 def flattenRecord(ID, data, types=[], endianness='>'):
     """Flatten a piece of data into a record with datatype and property."""
@@ -75,5 +76,5 @@ def flattenRecord(ID, data, types=[], endianness='>'):
     except T.FlatteningError as e:
         e.msg = e.msg + "\nSetting ID %s." % (ID,)
         raise
-    return RECORD_TYPE.__flatten__((ID, str(t), str(s)), endianness)[0]
+    return RECORD_TYPE.__flatten__((ID, str(t), s), endianness)[0]
 

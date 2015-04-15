@@ -35,10 +35,10 @@ class TestServer(LabradServer):
         raise Exception()
 
     def serverConnected(self, data):
-        print 'connected:', data
+        print('connected:', data)
 
     def serverDisconnected(self, data):
-        print 'disconnected:', data
+        print('disconnected:', data)
 
     log = Signal(555, 'log', '(ts)')
 
@@ -75,8 +75,8 @@ class TestServer(LabradServer):
 
     @setting(41)
     def verbose_echo(self, c, data):
-        print type(data)
-        print repr(data)
+        print(type(data))
+        print(repr(data))
         return data
 
     @setting(5)

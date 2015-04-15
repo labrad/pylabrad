@@ -17,7 +17,7 @@ import numpy as np
 
 import sys
 import os
-import cPickle
+import pickle
 if __name__ == "__main__":
     sys.path.insert(0, os.path.abspath('../..'))
 from labrad import units
@@ -177,7 +177,7 @@ class LabradUnitsTests(unittest.TestCase):
         blank = units.Unit('')
 
         def round_trip(obj):
-            return cPickle.loads(cPickle.dumps(obj))
+            return pickle.loads(pickle.dumps(obj))
         self.assertEqual(round_trip(5*GHz), 5*GHz) # Value
         self.assertEqual(round_trip(GHz), GHz)     # Unit
         self.assertTrue((round_trip(np.arange(5)*ns) == np.arange(5)*ns).all()) # array

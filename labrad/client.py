@@ -161,11 +161,11 @@ class HasDynamicAttrs(object):
             # get current list of attributes
             attrs = self._getAttrs()
             if len(attrs):
-                names, IDs = zip(*attrs)
+                names, IDs = list(zip(*attrs))
             else:
                 names, IDs = [], []
             pyNames = [self._fixName(name) for name in names]
-            attrs = zip(names, pyNames, IDs)
+            attrs = list(zip(names, pyNames, IDs))
 
             # delete names of old attributes (but leave them in the cache)
             deletions = [pyName for pyName in self.__attrs if pyName not in pyNames]
@@ -189,9 +189,9 @@ class HasDynamicAttrs(object):
                 self.__attrs[pyName, name, ID] = s
 
             self._refreshed = True
-        except Exception, e:
-            print 'Error refreshing dynamic attributes:'
-            print e, repr(e)
+        except Exception as e:
+            print('Error refreshing dynamic attributes:')
+            print(e, repr(e))
 
     def _getAttrs(self):
         """Get the current list of attributes from labrad.

@@ -57,14 +57,14 @@ example.
 
 """
 
-from __future__ import with_statement
+
 
 import os
 import sys
 import socket
 from datetime import datetime
-from ConfigParser import SafeConfigParser
-import StringIO
+from configparser import SafeConfigParser
+import io
 import zipfile
 
 import labrad
@@ -106,8 +106,8 @@ class ServerProcess(ProcessProtocol):
         if self.args[0].lower() == 'java':
             # a bit of a hack to get java working
             if not env['JAVA']:
-                print "WARNING: cmdline=java, but no javapath defined for " +\
-                      "this node"
+                print("WARNING: cmdline=java, but no javapath defined for "
+                      "this node")
             else:
                 self.args[0] = env['JAVA']
         if not os.path.isabs(self.args[0]):
@@ -147,10 +147,10 @@ class ServerProcess(ProcessProtocol):
     def _start(self):
         if self.started:
             return
-        print "starting '%s'..." % self.name
-        print "path:", self.path
-        print "executable:", self.executable
-        print "args:", self.args
+        print("starting '%s'..." % self.name)
+        print("path:", self.path)
+        print("executable:", self.executable)
+        print("args:", self.args)
         self.starting = True
         self.startup = defer.Deferred()
         dispatcher.connect(self.serverConnected, 'serverConnected')
@@ -170,14 +170,14 @@ class ServerProcess(ProcessProtocol):
                 timeoutCall.cancel()
             try:
                 dispatcher.disconnect(self.serverConnected, 'serverConnected')
-            except Exception, e:
-                print 'Error while disconnecting signal:', e
+            except Exception as e:
+                print('Error while disconnecting signal:', e)
 
     @inlineCallbacks
     def _stop(self):
         if not self.started:
             return
-        print "stopping '%s'..." % self.name
+        print("stopping '%s'..." % self.name)
         self.stopping = True
         self.shutdown = defer.Deferred()
         self.emitMessage('server_stopping')
@@ -226,11 +226,11 @@ class ServerProcess(ProcessProtocol):
         call the appropriate deferred, depending on the current state.
         """
         if isinstance(reason.value, ProcessDone):
-            print "'%s': process closed cleanly." % self.name
+            print("'%s': process closed cleanly." % self.name)
         elif isinstance(reason.value, ProcessTerminated):
-            print "'%s': process terminated: %s" % (self.name, reason.value)
+            print("'%s': process terminated: %s" % (self.name, reason.value))
         else:
-            print "'%s': process ended: %s" % (self.name, reason)
+            print("'%s': process ended: %s" % (self.name, reason))
         self.started = False
         if self.starting:
             err = T.Error('Startup failed.', payload=self.output)
@@ -271,7 +271,7 @@ class ServerProcess(ProcessProtocol):
                 self.proc.signalProcess('KILL')
         except:
             msg = 'Error while trying to kill server process for "%s":'
-            print msg % self.name
+            print(msg % self.name)
             failure.Failure().printTraceback(elideFrameworkCode=1)
 
     def outReceived(self, data):
@@ -321,7 +321,7 @@ def createGenericServerCls(path, filename, conf):
         pass
 
     scp = SafeConfigParser()
-    scp.readfp(StringIO.StringIO(conf))
+    scp.readfp(io.StringIO(conf))
 
     # general information
     cls.name = scp.get('info', 'name', raw=True)
@@ -424,7 +424,7 @@ class Node(MultiService):
 
     def startConnection(self):
         """Attempt to start the node and connect to LabRAD."""
-        print 'Connecting to %s:%d...' % (self.host, self.port)
+        print('Connecting to %s:%d...' % (self.host, self.port))
         node = NodeServer(self.name, self.host, self.port)
         node.onStartup().addErrback(self._error)
         node.onShutdown().addCallbacks(self._disconnected, self._error)
@@ -432,11 +432,11 @@ class Node(MultiService):
         self.addService(self.cxn)
 
     def _disconnected(self, data):
-        print 'Node disconnected from manager.'
+        print('Node disconnected from manager.')
         return self._reconnect()
 
     def _error(self, failure):
-        print failure.getErrorMessage()
+        print(failure.getErrorMessage())
         return self._reconnect()
 
     def _reconnect(self):
@@ -450,7 +450,7 @@ class Node(MultiService):
             self.removeService(self.cxn)
             del self.cxn
         reactor.callLater(self.reconnectDelay, self.startConnection)
-        print 'Will try to reconnect in %d seconds...' % self.reconnectDelay
+        print('Will try to reconnect in %d seconds...' % self.reconnectDelay)
 
 class NodeConfig(object):
     """Load configuration from the registry and monitor it for changes."""
@@ -509,7 +509,7 @@ class NodeConfig(object):
     def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
         self.dirs, self.mods, self.extensions, self.java = config
-        print 'config updated:', self.dirs, self.mods, self.extensions, self.java
+        print('config updated:', self.dirs, self.mods, self.extensions, self.java)
         if triggerRefresh:
             self.parent.refreshServers()
 
@@ -529,9 +529,9 @@ class NodeConfig(object):
         p.get('extensions', '*s', key='exts')
         p.get('javapath', 's', True, '', key='java')
         ans = yield p.send()
-        dirs = filter(None, ans.dirs)
-        mods = filter(None, ans.mods)
-        exts = filter(None, ans.exts)
+        dirs = [d for d in ans.dirs if d]
+        mods = [m for m in ans.mods if m]
+        exts = [e for e in ans.exts if e]
         java = ans.java
         returnValue((dirs, mods, exts, java))
 
@@ -595,9 +595,9 @@ class NodeServer(LabradServer):
         def f(receiver, signal):
             try:
                 method(receiver, signal)
-            except Exception, e:
+            except Exception as e:
                 msg = 'Error while setting up message dispatching. receiver={0}, method={1}, signal={2}.'
-                print msg.format(receiver, attr, signal), e
+                print(msg.format(receiver, attr, signal), e)
         # set up messages to be relayed out over LabRAD
         messages = ['server_starting', 'server_started',
                     'server_stopping', 'server_stopped',
@@ -673,7 +673,7 @@ class NodeServer(LabradServer):
                     if s.name not in servers:
                         servers[s.name] = s
             except:
-                print 'Error while loading plugins from module "%s":' % module
+                print('Error while loading plugins from module "%s":' % module)
                 failure.Failure().printTraceback(elideFrameworkCode=1)
         # look for .ini files
         for dirname in self.config.dirs:
@@ -707,7 +707,7 @@ class NodeServer(LabradServer):
                             servers[s.name] = s
                     except:
                         fname = os.path.join(path, f)
-                        print 'Error while loading config file "%s":' % fname
+                        print('Error while loading config file "%s":' % fname)
                         failure.Failure().printTraceback(elideFrameworkCode=1)
         self.servers = servers
         # send a message with the current server list

@@ -250,7 +250,7 @@ class ManagedDeviceServer(LabradServer):
 
     @inlineCallbacks
     def handleDeviceMessage(self, device, server, address, isConnected=True):
-        print 'Device message:', device, server, address, isConnected
+        print('Device message:', device, server, address, isConnected)
         name = self.makeDeviceName(device, server, address)
         if isConnected: # add device
             if name in self.devices:
@@ -281,7 +281,7 @@ class ManagedDeviceServer(LabradServer):
         del self.devices[name]
         try:
             yield dev.shutdown()
-        except Exception, e:
+        except Exception as e:
             self.log('Error while shutting down device "%s": %s' % (name, e))
 
     @inlineCallbacks
@@ -295,7 +295,7 @@ class ManagedDeviceServer(LabradServer):
         if hasattr(self, 'deviceIdentFunc'):
             yield manager.register_ident_function(self.deviceIdentFunc)
         #Register ourself as a server who cares about devices
-        devs = yield manager.register_server(self.deviceWrappers.keys(), self.messageID)
+        devs = yield manager.register_server(list(self.deviceWrappers.keys()), self.messageID)
         # the devs list is authoritative any devices we have
         # that are _not_ on this list should be removed
         names = [self.makeDeviceName(*dev[:3]) for dev in devs]
@@ -418,7 +418,7 @@ class ManagedDeviceServer(LabradServer):
         disconnects and later reconnects under the same name.
         """
         IDs, names = self.deviceLists()
-        return zip(IDs, names)
+        return list(zip(IDs, names))
 
     @setting(2, 'Select Device',
                 key=[': Select first device',

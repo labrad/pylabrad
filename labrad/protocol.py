@@ -49,7 +49,7 @@ class LabradProtocol(protocol.Protocol):
         self.endianness = '>'
         # create a generator to assemble the packets
         self.packetStream = packetStream(self.packetReceived, self.endianness)
-        self.packetStream.next() # start the packet stream
+        next(self.packetStream) # start the packet stream
 
         self.onDisconnect = util.DeferredSignal()
 
@@ -135,7 +135,7 @@ class LabradProtocol(protocol.Protocol):
         if isinstance(server, str) or len(settingLookups):
             # need to do additional lookup here
             if len(settingLookups):
-                indices, names = zip(*settingLookups)
+                indices, names = list(zip(*settingLookups))
             else:
                 indices, names = [], []
             # send the actual lookup request
@@ -147,7 +147,7 @@ class LabradProtocol(protocol.Protocol):
                 self._serverCache[server] = serverID
             server = serverID
             settings = self._settingCache.setdefault(server, {})
-            settings.update(zip(names, IDs))
+            settings.update(list(zip(names, IDs)))
             # update the records for the packet
             for index, ID in zip(indices, IDs):
                 records[index] = (ID,) + tuple(records[index][1:])
@@ -257,7 +257,7 @@ class LabradProtocol(protocol.Protocol):
         Just prints out a (hopefully informative) message
         about any errors that may have occurred.
         """
-        print 'Unhandled error in message listener:', msgCtx, data, listener
+        print('Unhandled error in message listener:', msgCtx, data, listener)
         failure.printTraceback(elideFrameworkCode=1)
 
     # message handling
@@ -306,7 +306,7 @@ class LabradProtocol(protocol.Protocol):
         m.update(challenge)
         m.update(password)
         try:
-            resp = yield self.sendRequest(C.MANAGER_ID, [(0L, m.digest())])
+            resp = yield self.sendRequest(C.MANAGER_ID, [(0, m.digest(), 's')])
         except Exception:
             raise errors.LoginFailedError('Incorrect password.')
         self.password = C.PASSWORD = password # save password, since it worked
@@ -314,7 +314,7 @@ class LabradProtocol(protocol.Protocol):
 
         # send identification
         try:
-            resp = yield self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)])
+            resp = yield self.sendRequest(C.MANAGER_ID, [(0, (1,) + ident, 'w' + 's' * len(ident))])
         except Exception:
             raise errors.LoginFailedError('Bad identification.')
         self.ID = resp[0][1] # get assigned ID

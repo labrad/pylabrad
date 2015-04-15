@@ -109,9 +109,8 @@ class LabradTypesTests(unittest.TestCase):
             # simple types
             None,
             True, False,
-            1, -1, 2, -2, 2**31-1, -2**31,
-            1L, 2L, 3L, 4L, 0L, 0xFFFFFFFFL,
-            '', 'a', '\x00\x01\x02\x03',
+            1, 2, 3, 4, 0, 0xFFFFFFFF,
+            b'', b'a', b'\x00\x01\x02\x03',
             datetime.now(),
 
             # values
@@ -133,18 +132,18 @@ class LabradTypesTests(unittest.TestCase):
             np.array([1.1, 2.2, 3.3]),
 
             # clusters
-            (1, True, 'a'),
-            ((1, 2), ('a', False)),
+            (1, True, b'a'),
+            ((1, 2), (b'a', False)),
 
             # lists
             [],
             #[1, 2, 3, 4],
             #[1L, 2L, 3L, 4L],
             [[]],
-            [['a', 'bb', 'ccc'], ['dddd', 'eeeee', 'ffffff']],
+            [[b'a', b'bb', b'ccc'], [b'dddd', b'eeeee', b'ffffff']],
 
             # more complex stuff
-            [(1L, 'a'), (2L, 'b')],
+            [(1, b'a'), (2, b'b')],
         ]
         for data_in in tests:
             data_out = T.unflatten(*T.flatten(data_in))
@@ -171,7 +170,7 @@ class LabradTypesTests(unittest.TestCase):
             self.assertTrue(a.allclose(b))
 
         tests = [
-            ([1, 2, 3], np.array([1, 2, 3], dtype='int32'),
+            ([1, 2, 3], np.array([1, 2, 3], dtype='uint32'),
                 np.testing.assert_array_equal),
             ([1.1, 2.2, 3.3], np.array([1.1, 2.2, 3.3], dtype='float64'),
                 np.testing.assert_array_almost_equal),
@@ -244,7 +243,7 @@ class LabradTypesTests(unittest.TestCase):
         """Test conversion to specified allowed types."""
         passingTests = [
             # convert to default type
-            (1, [], 'i'),
+            (1, [], 'w'),
 
             # convert to first compatible type
             (1, ['s', 'w'], 'w'),
@@ -260,7 +259,7 @@ class LabradTypesTests(unittest.TestCase):
             # handle unknown pieces inside clusters and lists
             (['a', 'b'], ['*?'], '*s'),
             ((1, 2, 'a'), ['ww?'], 'wws'),
-            ((1, 1L), ['??'], 'iw'),
+            ((1, 1), ['??'], 'iw'),
         ]
         for data, hints, tag in passingTests:
             self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))

@@ -125,7 +125,7 @@ def timing(f, n=100, **kw):
     from datetime import datetime
 
     total = 0
-    for _ in xrange(n):
+    for _ in range(n):
         start = datetime.now()
         f(**kw)
         end = datetime.now()
@@ -196,7 +196,7 @@ def convertUnits(**unitdict):
             # convert positional arguments if they have a unit
             a = [convert(val, posdict.get(i, None)) for i, val in enumerate(a)]
             # convert named arguments if they have a unit
-            for arg, val in kw.iteritems():
+            for arg, val in kw.items():
                 if arg in unitdict:
                     kw[arg] = convert(val, unitdict[arg])
             # call the function with converted arguments
@@ -233,7 +233,7 @@ def maybeTimeout(deferred, timeout, timeoutResult):
     d = defer.DeferredList([deferred, td], fireOnOneCallback=True,
                                            fireOnOneErrback=True,
                                            consumeErrors=True)
-    d.addCallback(lambda (result, index): result)
+    d.addCallback(lambda result_index: result_index[0])
     return d
 
 class DeferredSignal(object):
@@ -305,9 +305,9 @@ def runServer(srv):
     config = ServerOptions()
     try:
         config.parseOptions()
-    except usage.UsageError, errortext:
-        print '%s: %s' % (sys.argv[0], errortext)
-        print '%s: Try --help for usage details.' % (sys.argv[0])
+    except usage.UsageError as errortext:
+        print('%s: %s' % (sys.argv[0], errortext))
+        print('%s: Try --help for usage details.' % (sys.argv[0]))
         sys.exit(1)
 
     def _ensureReactorStop():

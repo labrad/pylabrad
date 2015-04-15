@@ -30,8 +30,8 @@ class AsyncManager:
         return self.cxn.sendRequest(self.ID, packet, *args, **kw)
 
     @inlineCallbacks
-    def _getIDList(self, setting, data=None):
-        resp = yield self._send([(setting, data)])
+    def _getIDList(self, setting, data, tag):
+        resp = yield self._send([(setting, data, tag)])
         names = self._reorderIDList(resp[0][1])
         returnValue(names)
 
@@ -40,13 +40,13 @@ class AsyncManager:
 
     def getServersList(self):
         """Get a list of connected servers."""
-        return self._getIDList(C.SERVERS_LIST)
+        return self._getIDList(C.SERVERS_LIST, None, '_')
 
     @inlineCallbacks
     def getServerInfo(self, serverID):
         """Get information about a server."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
+        packet = [(C.HELP, serverID, 'w'),
+                  (C.SETTINGS_LIST, serverID, 'w')]
         resp = yield self._send(packet)
         descr, notes = resp[0][1]
         settings = self._reorderIDList(resp[1][1])
@@ -55,12 +55,12 @@ class AsyncManager:
     @inlineCallbacks
     def getServerInfoWithSettings(self, serverID):
         """Get information about a server, including all of its settings."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
+        packet = [(C.HELP, serverID, 'w'),
+                  (C.SETTINGS_LIST, serverID, 'w')]
         resp = yield self._send(packet)
         descr, notes = resp[0][1]
         settings = resp[1][1]
-        packet = [(C.HELP, (long(serverID), long(ID))) for ID, name in settings]
+        packet = [(C.HELP, (serverID, ID), 'ww') for ID, name in settings]
         resp = yield self._send(packet)
         settingList = []
         for s, r in zip(settings, resp):
@@ -71,12 +71,12 @@ class AsyncManager:
 
     def getSettingsList(self, serverID):
         """Get a list of settings for a server."""
-        return self._getIDList(C.SETTINGS_LIST, serverID)
+        return self._getIDList(C.SETTINGS_LIST, serverID, 'w')
 
     @inlineCallbacks
     def getSettingInfo(self, serverID, settingID):
         """Get information about a setting."""
-        packet = [(C.HELP, (long(serverID), long(settingID)))]
+        packet = [(C.HELP, (serverID, settingID), 'ww')]
         resp = yield self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         returnValue((description, accepts, returns, notes))
@@ -84,6 +84,6 @@ class AsyncManager:
     @inlineCallbacks
     def subscribeToNamedMessage(self, name, ID, enable=True):
         """Subscribe to or stop a named message."""
-        packet = [(C.MESSAGE_SUBSCRIBE, (name, long(ID), enable))]
+        packet = [(C.MESSAGE_SUBSCRIBE, (name, ID, enable), 'swb')]
         returnValue((yield self._send(packet)))
 

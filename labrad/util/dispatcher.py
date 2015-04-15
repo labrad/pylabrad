@@ -48,7 +48,7 @@ def connect(receiver, signal=Any, sender=Any, weak=True):
         receiver = safeRef(receiver)
     senderkey = id(sender)
     signals = {}
-    if connections.has_key(senderkey):
+    if senderkey in connections:
         signals = connections[senderkey]
     else:
         connections[senderkey] = signals
@@ -64,7 +64,7 @@ def connect(receiver, signal=Any, sender=Any, weak=True):
             except:
                 pass
     receivers = []
-    if signals.has_key(signal):
+    if signal in signals:
         receivers = signals[signal]
     else:
         signals[signal] = receivers
@@ -161,18 +161,18 @@ def _call(receiver, **kwds):
         receiver = receiver.__call__
     if hasattr(receiver, 'im_func'):
         # receiver is a method. Drop the first argument, usually 'self'.
-        fc = receiver.im_func.func_code
+        fc = receiver.__func__.__code__
         acceptable = fc.co_varnames[1:fc.co_argcount]
     elif hasattr(receiver, 'func_code'):
         # receiver is a function.
-        fc = receiver.func_code
+        fc = receiver.__code__
         acceptable = fc.co_varnames[0:fc.co_argcount]
     else:
         raise DispatcherError('Unknown receiver %s of type %s' % (receiver, type(receiver)))
     if not (fc.co_flags & 8):
         # fc does not have a **kwds type parameter, therefore
         # remove unacceptable arguments.
-        for arg in kwds.keys():
+        for arg in list(kwds.keys()):
             if arg not in acceptable:
                 del kwds[arg]
     return receiver(**kwds)
@@ -181,14 +181,14 @@ def _call(receiver, **kwds):
 def safeRef(object):
     """Return a *safe* weak reference to a callable object."""
     if hasattr(object, 'im_self'):
-        if object.im_self is not None:
+        if object.__self__ is not None:
             # Turn a bound method into a BoundMethodWeakref instance.
             # Keep track of these instances for lookup by disconnect().
-            selfkey = object.im_self
-            funckey = object.im_func
-            if not _boundMethods.has_key(selfkey):
+            selfkey = object.__self__
+            funckey = object.__func__
+            if selfkey not in _boundMethods:
                 _boundMethods[selfkey] = weakref.WeakKeyDictionary()
-            if not _boundMethods[selfkey].has_key(funckey):
+            if funckey not in _boundMethods[selfkey]:
                 _boundMethods[selfkey][funckey] = \
                 BoundMethodWeakref(boundMethod=object)
             return _boundMethods[selfkey][funckey]
@@ -205,8 +205,8 @@ class BoundMethodWeakref:
             """Set self.isDead to true when method or instance is destroyed."""
             self.isDead = 1
             _removeReceiver(receiver=self)
-        self.weakSelf = weakref.ref(boundMethod.im_self, remove)
-        self.weakFunc = weakref.ref(boundMethod.im_func, remove)
+        self.weakSelf = weakref.ref(boundMethod.__self__, remove)
+        self.weakFunc = weakref.ref(boundMethod.__func__, remove)
 
     def __repr__(self):
         """Return the closest representation."""
@@ -228,8 +228,8 @@ class BoundMethodWeakref:
 
 def _removeReceiver(receiver):
     """Remove receiver from connections."""
-    for senderkey in connections.keys():
-        for signal in connections[senderkey].keys():
+    for senderkey in list(connections.keys()):
+        for signal in list(connections[senderkey].keys()):
             receivers = connections[senderkey][signal]
             try:
                 receivers.remove(receiver)

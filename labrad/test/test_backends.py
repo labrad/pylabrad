@@ -27,8 +27,8 @@ class AsyncoreBackendTests(unittest.TestCase):
     def testRequestCancellation(self):
         cxn = backend.AsyncoreConnection()
         cxn.connect()
-        cxn.sendRequest(1, [(1L, None)]).wait()
-        future = cxn.sendRequest(1, [(1L, None)])
+        cxn.sendRequest(1, [(1, None, '_')]).wait()
+        future = cxn.sendRequest(1, [(1, None, '_')])
         self.assertTrue(cxn.loop.is_alive())
         cxn.disconnect()
         self.assertFalse(cxn.loop.is_alive())
@@ -36,24 +36,24 @@ class AsyncoreBackendTests(unittest.TestCase):
 
     def testConnectionDrop(self):
         badPacket = (
-            '\x00\x00\x00\x00\x00\x00\x00\x00' # context
-            '\x00\x00\x00\x01' # request
-            '\x00\x00\x00\x01' # target
-            '\x00\x00\x00\x08' # data length
-            '\x00\x00\x00\x00' # id
-            '\x00\x00\x00\x04' # tag string claims to have four bytes
+            b'\x00\x00\x00\x00\x00\x00\x00\x00' # context
+            b'\x00\x00\x00\x01' # request
+            b'\x00\x00\x00\x01' # target
+            b'\x00\x00\x00\x08' # data length
+            b'\x00\x00\x00\x00' # id
+            b'\x00\x00\x00\x04' # tag string claims to have four bytes
         )
 
         cxn = backend.AsyncoreConnection()
         cxn.connect()
         self.assertTrue(cxn.loop.is_alive())
-        cxn.sendRequest(1, [(1L, None)]).wait()
+        cxn.sendRequest(1, [(1, None, '_')]).wait()
         cxn.cxn.queue.put(badPacket)
         cxn.cxn.queue.put(badPacket) # this will cause the manager to drop us...
         # we send a request in a subfunction because the exception can be raised
         # either in the sendRequest call or in the wait call, depending on timing
         def doRequest():
-            cxn.sendRequest(1, [(1L, None)]).wait()
+            cxn.sendRequest(1, [(1, None, '_')]).wait()
         self.assertRaises(Exception, doRequest)
         self.assertRaises(Exception, doRequest)
 

@@ -13,7 +13,7 @@ def timeIt(f, *a, **kw):
     start = time.time()
     result = f(*a, **kw)
     end = time.time()
-    print f.__name__, '- elapsed:', end - start
+    print(f.__name__, '- elapsed:', end - start)
     return result
 
 def extractAverage(packets):

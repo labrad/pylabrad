@@ -173,11 +173,11 @@ class QTReactor(PosixReactorBase):
 
 
     def getReaders(self):
-        return self._reads.keys()
+        return list(self._reads.keys())
 
 
     def getWriters(self):
-        return self._writes.keys()
+        return list(self._writes.keys())
 
     def callLater(self, howlong, *args, **kargs):
         rval = super(QTReactor, self).callLater(howlong, *args, **kargs)

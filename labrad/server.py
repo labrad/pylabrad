@@ -55,7 +55,7 @@ class ServerProtocol(LabradProtocol):
         try:
             response = yield self.factory.handleRequest(source, context, records)
             self.sendPacket(source, context, -request, response)
-        except Exception, e:
+        except Exception as e:
             # this will only happen if there was a problem while sending,
             # which usually means a problem flattening the response into
             # a valid LabRAD packet
@@ -261,7 +261,7 @@ class LabradServer(ClientFactory):
                     setting = self.settings[ID]
                     result = yield setting.handleRequest(self, c.data, data)
                     response.append((ID, result, setting.returns))
-                except Exception, e:
+                except Exception as e:
                     response.append((ID, self._getTraceback(e)))
                     break
             c.check() # make sure this context hasn't expired
@@ -365,7 +365,7 @@ class LabradServer(ClientFactory):
             yield self._initServer()
             self.started = True
             self.onStartup.callback(self)
-        except Exception, e:
+        except Exception as e:
             self.disconnect(e)
 
     def _getPassword(self):
@@ -422,7 +422,7 @@ class LabradServer(ClientFactory):
         self.stopping = True
         try:
             yield self.stopServer()
-        except Exception, e:
+        except Exception as e:
             self._error = failure.Failure(e)
         finally:
             try:

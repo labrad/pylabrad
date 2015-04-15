@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import absolute_import
+
 
 import functools
 from types import MethodType
@@ -432,9 +432,9 @@ class ClientAsync(object):
             self._cxn.addListener(self._serverConnected, source=self._mgr.ID, ID=314159265, async=False)
             self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, async=False)
             yield self.refresh()
-        except Exception, e:
-            print 'error!'
-            print repr(e)
+        except Exception as e:
+            print('error!')
+            print(repr(e))
             raise
 
     @inlineCallbacks
@@ -443,9 +443,9 @@ class ClientAsync(object):
         ID, name = data
         try:
             yield self._addServer(name, ID)
-        except Exception, e:
-            print 'Error adding server %d, "%s":' % (ID, name)
-            print str(e)
+        except Exception as e:
+            print('Error adding server %d, "%s":' % (ID, name))
+            print(str(e))
 
     @inlineCallbacks
     def _serverDisconnected(self, _c, data):
@@ -453,9 +453,9 @@ class ClientAsync(object):
         ID, name = data
         try:
             yield self._delServer(name)
-        except Exception, e:
-            print 'Error removing server %d, "%s":' % (ID, name)
-            print str(e)
+        except Exception as e:
+            print('Error removing server %d, "%s":' % (ID, name))
+            print(str(e))
 
     def refresh(self):
         return self._refreshLock.run(self._refresh)
@@ -502,9 +502,9 @@ class ClientAsync(object):
             self._cache[name] = server
         try:
             yield server.refresh()
-        except Exception, e:
-            print 'Error while refreshing server "%s":' % name
-            print repr(e)
+        except Exception as e:
+            print('Error while refreshing server "%s":' % name)
+            print(repr(e))
         else:
             self.servers[name, server._py_name, ID] = server
             setattr(self, server._py_name, server)
@@ -515,9 +515,9 @@ class ClientAsync(object):
         server = self.servers[name]
         try:
             yield server.refresh()
-        except Exception, e:
-            print 'Error while refreshing server "%s":' % name
-            print repr(e)
+        except Exception as e:
+            print('Error while refreshing server "%s":' % name)
+            print(repr(e))
             yield self._delServer(name)
 
     def _delServer(self, name):

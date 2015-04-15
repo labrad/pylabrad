@@ -8,7 +8,7 @@ import hashlib
 import socket
 import sys
 import threading
-import Queue
+import queue
 
 from labrad import constants as C
 from labrad.errors import LoginFailedError
@@ -104,12 +104,12 @@ class AsyncoreConnection(BaseConnection):
             self.loop.start()
             try:
                 return self.login(password, self.name)
-            except Exception, e:
+            except Exception as e:
                 self.disconnect()
                 raise
         except LoginFailedError:
             raise
-        except Exception, e:
+        except Exception as e:
             raise LoginFailedError(e)
 
     def _disconnect(self):
@@ -126,16 +126,16 @@ class AsyncoreConnection(BaseConnection):
             password = getPassword()
         m = hashlib.md5()
         m.update(challenge)
-        m.update(password)
+        m.update(password.encode('utf-8'))
         try:
-            resp = self.sendRequest(C.MANAGER_ID, [(0L, m.digest())]).wait()
+            resp = self.sendRequest(C.MANAGER_ID, [(0, m.digest(), 's')]).wait()
         except Exception:
             raise LoginFailedError('Incorrect password.')
         self.loginMessage = resp[0][1] # get welcome message
 
         # send identification
         try:
-            resp = self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)]).wait()
+            resp = self.sendRequest(C.MANAGER_ID, [(0, (1,) + ident, 'w' + 's' * len(ident))]).wait()
         except Exception:
             raise LoginFailedError('Bad identification.')
         return resp[0][1] # get assigned ID
@@ -187,7 +187,7 @@ class AsyncoreConnection(BaseConnection):
         if isinstance(server, str) or len(settingLookups):
             # need to do additional lookup here
             if len(settingLookups):
-                indices, names = zip(*settingLookups)
+                indices, names = list(zip(*settingLookups))
             else:
                 indices, names = [], []
             # send the actual lookup request
@@ -233,26 +233,23 @@ class AsyncoreProtocol(asyncore.dispatcher):
         asyncore.dispatcher.__init__(self, socket, **kw)
 
         self.alive = True
-        self.lock = threading.Condition()
+        self.lock = threading.RLock()
         self.nextRequest = 1
         self.requests = {}
         self.pool = set()
-        self.queue = Queue.Queue()
-        self.buffer = ''
+        self.queue = queue.Queue()
+        self.buffer = b''
 
         # create a generator to assemble the packets
         self.stream = packetStream(self.handleResponse)
-        self.stream.next() # start the packet stream
+        next(self.stream) # start the packet stream
 
     def enqueue(self, target, context, flatrecs, future):
         """Called from another thread to enqueue a packet"""
-        self.lock.acquire()
-        try:
+        with self.lock:
             if not self.alive:
                 raise Exception('not connected')
             self.queue.put((target, context, flatrecs, future))
-        finally:
-            self.lock.release()
 
     def drop(self):
         self.queue.put(None)
@@ -264,14 +261,13 @@ class AsyncoreProtocol(asyncore.dispatcher):
         self.terminate(Exception('Connection lost'))
 
     def terminate(self, reason):
-        self.lock.acquire()
-        self.alive = False
-        self.lock.release()
+        with self.lock:
+            self.alive = False
         try:
             self.close()
         finally:
             self.flushCommands()
-            for d in self.requests.values():
+            for d in list(self.requests.values()):
                 d.errback(reason)
 
     def readable(self):
@@ -295,12 +291,12 @@ class AsyncoreProtocol(asyncore.dispatcher):
         while True:
             try:
                 command = self.queue.get_nowait()
-            except Queue.Empty:
+            except queue.Empty:
                 break
             if command is None:
                 self.terminate('Connection closed')
                 return False
-            elif isinstance(command, str):
+            elif isinstance(command, bytes):
                 # Hack to let us write raw data
                 # to test error handling
                 self.buffer += command
@@ -348,19 +344,16 @@ class AsyncoreProtocol(asyncore.dispatcher):
 class Failure(object):
     def __init__(self, error=None):
         if error is None:
-            self.exctype, self.value = sys.exc_info()[:2]
+            self.value = sys.exc_info()[1]
         else:
-            self.exctype, self.value = None, error
+            self.value = error
 
     def raiseException(self):
-        if self.exctype is None:
-            raise self.value
-        else:
-            raise self.exctype, self.value
+        raise self.value
 
 class Future(object):
 
-    ready = Queue.Queue()
+    ready = queue.Queue()
 
     def __init__(self):
         self.done = False
@@ -434,12 +427,12 @@ class ManagerService:
 
     def getServerInfo(self, serverID):
         """Get information about a server."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
+        packet = [(C.HELP, serverID, 'w'),
+                  (C.SETTINGS_LIST, serverID, 'w')]
         resp = self._send(packet)
         descr, notes = resp[0][1]
         settings = self._reorderIDList(resp[1][1])
-        return (descr, notes, settings)
+        return (descr.decode('utf-8'), notes.decode('utf-8'), settings)
 
     def getSettingsList(self, serverID):
         """Get list of settings for a server."""
@@ -447,10 +440,15 @@ class ManagerService:
 
     def getSettingInfo(self, serverID, settingID):
         """Get information about a setting."""
-        packet = [(C.HELP, (long(serverID), long(settingID)))]
+        packet = [(C.HELP, (serverID, settingID), 'ww')]
         resp = self._send(packet)
         description, accepts, returns, notes = resp[0][1]
-        return (description, accepts, returns, notes)
+        return (
+            description.decode('utf-8'),
+            [a.decode('utf-8') for a in accepts],
+            [r.decode('utf-8') for r in returns],
+            notes.decode('utf-8')
+        )
 
     def _send(self, packet, *args, **kw):
         """Send a request to the manager and wait for the result."""
@@ -462,6 +460,6 @@ class ManagerService:
         return names
 
     def _reorderIDList(self, L):
-        return [(name, ID) for ID, name in L]
+        return [(name.decode('utf-8'), ID) for ID, name in L]
 
 

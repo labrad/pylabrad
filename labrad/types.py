@@ -26,20 +26,19 @@ to a server setting or returning from a setting when the accepted
 and return types have been registered), we can do even better.
 """
 
-from __future__ import absolute_import
+
 
 import re
 import sys
 from struct import pack, unpack
 import time
-from types import InstanceType
 from datetime import timedelta, datetime as dt
-from itertools import chain, imap
-from operator import itemgetter
+from itertools import chain
 import functools
 
 import labrad.units as U
 from labrad.units import Value, Complex
+from functools import reduce
 
 try:
     import numpy as np
@@ -164,7 +163,7 @@ def parseTypeTag(s):
         else:
             return LRCluster(*types)
     except Exception:
-        print 'failed to parse:', s
+        print('failed to parse:', s)
         raise
 
 WHITESPACE = ' ,\t'
@@ -253,9 +252,6 @@ def getType(obj):
         return obj.__lrtype__()
 
     t = type(obj)
-    # handle classic classes
-    if t == InstanceType:
-        t = obj.__class__
 
     # check if we know this type
     if t in _types:
@@ -287,7 +283,7 @@ def unflatten(s, t, endianness='>'):
     """
     if isinstance(t, str):
         t = parseTypeTag(t)
-    if isinstance(s, str):
+    if isinstance(s, bytes):
         s = Buffer(s)
     return t.__unflatten__(s, endianness)
 
@@ -362,7 +358,7 @@ def _flatten_to(obj, types, endianness):
         if foundCompatibleType:
             try:
                 s, t = t.__flatten__(obj, endianness)
-            except Exception, e:
+            except Exception as e:
                 raise FlatteningError(obj, t)
         else:
             # Since we haven't found anything compatible, just try to
@@ -404,15 +400,13 @@ def reprLRData(s):
 
 # LabRAD type classes
 
-class LRType(object):
+class LRType(object, metaclass=RegisterParser):
     """Base class of all LabRAD type objects.
 
     These type classes manage parsing and creation of type tags,
     provide default unflatteners, and also provide methods to test
     type equality and compatibility.
     """
-
-    __metaclass__ = RegisterParser
 
     width = 0
     isFixedWidth = True
@@ -534,7 +528,7 @@ class LRNone(LRType, Singleton):
     def __flatten__(self, data, endianness):
         if data is not None:
             raise FlatteningError(data, self)
-        return '', self
+        return b'', self
 
 registerType(type(None), LRNone())
 # register LRNone parser for the empty string as well
@@ -552,7 +546,7 @@ class LRBool(LRType, Singleton):
     def __flatten__(self, b, endianness):
         if not isinstance(b, (bool, np.bool8)):
             raise FlatteningError(b, self)
-        return chr(b), self
+        return bytes([b]), self
 
 registerType(bool, LRBool())
 registerType(np.bool8, LRBool())
@@ -565,7 +559,7 @@ class LRInt(LRType, Singleton):
         return unpack(endianness + 'i', s.get(4))[0]
 
     def __flatten__(self, n, endianness):
-        if not isinstance(n, (int, long)):
+        if not isinstance(n, int):
             raise FlatteningError(n, self)
         if n >= 0x80000000 or n < -0x80000000:
             raise ValueError("out of range for type i: {0}".format(n))
@@ -581,16 +575,16 @@ class LRWord(LRType, Singleton):
     tag = 'w'
     width = 4
     def __unflatten__(self, s, endianness):
-        return long(unpack(endianness + 'I', s.get(4))[0])
+        return int(unpack(endianness + 'I', s.get(4))[0])
 
     def __flatten__(self, n, endianness):
-        if not isinstance(n, (int, long)):
+        if not isinstance(n, int):
             raise FlatteningError(n, self)
         if n > 0xFFFFFFFF or n < 0:
             raise ValueError("out of range for type w: {0}".format(n))
         return pack(endianness + 'I', n), self
 
-registerType(long, LRWord())
+registerType(int, LRWord())
 registerType(np.uint32, LRWord())
 registerType(np.uint64, LRWord())
 
@@ -610,11 +604,16 @@ class LRStr(LRType, Singleton):
         return s.get(n)
 
     def __flatten__(self, s, endianness):
-        if not isinstance(s, str):
+        if isinstance(s, bytes):
+            data = s
+        elif isinstance(s, str):
+            data = s.encode('utf-8')
+        else:
             raise FlatteningError(s, self)
-        return pack(endianness + 'I', len(s)) + s, self
+        return pack(endianness + 'I', len(data)) + data, self
 
 registerType(str, LRStr())
+registerType(bytes, LRStr())
 
 
 def timeOffset():
@@ -642,7 +641,7 @@ class LRTime(LRType, Singleton):
     def __flatten__(self, t, endianness):
         diff = t - timeOffset()
         secs = diff.days * (60 * 60 * 24) + diff.seconds
-        us = long(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
+        us = int(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
         return pack(endianness + 'QQ', secs, us), self
 
 registerType(dt, LRTime())
@@ -669,7 +668,7 @@ class LRValue(LRType):
 
     # Types which can be flattened by LRValue as 'v[]' via coercion to
     # float. See __flatten__.
-    CASTABLE_TYPES = [int, long]
+    CASTABLE_TYPES = [int, int]
 
     def __init__(self, unit=None):
         if isinstance(unit, U.Unit):
@@ -867,20 +866,20 @@ class LRCluster(LRType):
         if len(c) != len(self.items):
             raise FlatteningError('Cannot flatten %s to %s' % (c, self.items))
         if LRAny() in self.items:
-            strs = []
+            data = []
             items = []
             for t, elem in zip(self.items, c):
                 if t == LRAny():
                     s, t = flatten(elem, endianness=endianness)
-                    strs.append(s)
+                    data.append(s)
                     items.append(t)
                 else:
                     s, _ = t.__flatten__(elem, endianness) # _ -> t ?
-                    strs.append(s)
+                    data.append(s)
                     items.append(t)
             self.items = items # warning: type mutated here
-            return ''.join(strs), self
-        return ''.join(t.__flatten__(elem, endianness)[0] for t, elem in zip(self.items, c)), self
+            return b''.join(data), self
+        return b''.join(t.__flatten__(elem, endianness)[0] for t, elem in zip(self.items, c)), self
 
 registerTypeFunc(tuple, LRCluster.__lrtype__)
 
@@ -1012,7 +1011,7 @@ class LRList(LRType):
             width = size * elem.width
         else:
             newBuf = Buffer(s)
-            width = sum(elem.__width__(newBuf, endianness) for _ in xrange(size))
+            width = sum(elem.__width__(newBuf, endianness) for _ in range(size))
         s.skip(width)
         return 4*n + width
 
@@ -1124,9 +1123,9 @@ class LRList(LRType):
             return nestedList([], n-1)
         def unflattenNDlist(s, dims):
             if len(dims) == 1:
-                return [unflatten(s, self.elem, endianness) for _ in xrange(dims[0])]
+                return [unflatten(s, self.elem, endianness) for _ in range(dims[0])]
             else:
-                return [unflattenNDlist(s, dims[1:]) for _ in xrange(dims[0])]
+                return [unflattenNDlist(s, dims[1:]) for _ in range(dims[0])]
         return unflattenNDlist(s, dims)
 
     def __unflattenAsArray__(self, data, endianness):
@@ -1200,9 +1199,9 @@ class LRList(LRType):
             if len(ls) != lengths[n]:
                 raise Exception('List is not rectangular.')
             if n+1 == self.depth:
-                return ''.join(self.elem.__flatten__(e, endianness)[0] for e in ls)
+                return b''.join(self.elem.__flatten__(e, endianness)[0] for e in ls)
             else:
-                return ''.join(flattenNDlist(row, n+1) for row in ls)
+                return b''.join(flattenNDlist(row, n+1) for row in ls)
         flat = flattenNDlist(L)
         lengths = [l or 0 for l in lengths]
         return pack(endianness + ('i' * len(lengths)), *lengths) + flat, self
@@ -1231,8 +1230,8 @@ class LRList(LRType):
                     raise Exception("Narrowing typecast loses information while flattening numpy array: dtype={0}, wanted_dtype={1}".format(a.dtype, wanted_dtype))
                 a = a_cast
         else:
-            elems = imap(itemgetter(0), (flatten(i, endianness=endianness) for i in a.flat))
-            return dims + ''.join(elems), self
+            elems = (flatten(i, endianness=endianness)[0] for i in a.flat)
+            return dims + b''.join(elems), self
         return dims + a.tostring(), self
 
     def __flatten_ValueArray__(self, va, endianness):
@@ -1321,7 +1320,7 @@ class LRError(LRType):
         msg = getattr(E, 'msg', repr(E))
         payload = getattr(E, 'payload', None)
         t = LRCluster(LRInt(), LRStr(), self.payload)
-        s, t = flatten((int(code), str(msg), payload), t, endianness)
+        s, t = flatten((code, str(msg), payload), t, endianness)
         self.payload = t.items[2]
         return s, self
 
@@ -1420,9 +1419,9 @@ class LazyList(list):
         else:
             def unflattenND(dims):
                 if len(dims) == 1:
-                    return [unflatten(s, elem, self._endianness) for _ in xrange(dims[0])]
+                    return [unflatten(s, elem, self._endianness) for _ in range(dims[0])]
                 else:
-                    return [unflattenND(dims[1:]) for _ in xrange(dims[0])]
+                    return [unflattenND(dims[1:]) for _ in range(dims[0])]
             self.extend(unflattenND(dims))
         self._list = True
 
@@ -1452,7 +1451,7 @@ class LazyList(list):
         elif elem <= LRValue(): a = make('f8', 8)
         elif elem <= LRComplex(): a = make('c16', 16)
         else:
-            a = array([unflatten(s, elem, self._endianness) for _ in xrange(size)])
+            a = array([unflatten(s, elem, self._endianness) for _ in range(size)])
         a.shape = dims + a.shape[1:] # handle clusters as elements
         self._array = a
         return self._array
@@ -1461,10 +1460,10 @@ class LazyList(list):
 # attributes of the LazyList class will be wrapped so
 # that when called, the LazyList will be unflattened
 _listAttrs = [
-    '__add__', '__contains__', '__delitem__', '__delslice__', '__eq__', '__ge__',
-    '__getitem__', '__getslice__', '__gt__', '__iadd__', '__imul__',
+    '__add__', '__contains__', '__delitem__', '__eq__', '__ge__',
+    '__getitem__', '__gt__', '__iadd__', '__imul__',
     '__iter__', '__le__', '__len__', '__lt__', '__mul__', '__ne__', '__repr__',
-    '__reversed__', '__rmul__', '__setitem__', '__setslice__', '__str__',
+    '__reversed__', '__rmul__', '__setitem__', '__str__',
     'append', 'count', 'extend', 'index', 'insert', 'pop', 'remove',
     'reverse', 'sort']
 

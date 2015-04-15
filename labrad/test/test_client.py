@@ -3,7 +3,7 @@ import unittest
 import labrad
 from labrad import types as T
 
-TEST_STR = 'this is a test, this is only a test'
+TEST_STR = b'this is a test, this is only a test'
 
 class ClientTests(unittest.TestCase):
     def setUp(self):
@@ -22,7 +22,7 @@ class ClientTests(unittest.TestCase):
 
     def testConnection(self):
         servers = self.cxn.servers
-        self.assertTrue(len(servers.keys()) > 0)
+        self.assertTrue(len(list(servers.keys())) > 0)
         self.assertTrue('manager' in servers)
         self.assertTrue('python_test_server' in servers)
 
@@ -73,15 +73,15 @@ class ClientTests(unittest.TestCase):
 
         # test using keys to refer to parts of a packet
         pkt2 = pts.packet()
-        resp = pkt2.echo(1L, key='one')\
+        resp = pkt2.echo(1, key='one')\
                    .echo_delay(T.Value(0.1, 's'))\
-                   .delayed_echo('blah', key='two')\
+                   .delayed_echo(b'blah', key='two')\
                    .send()
         self.assertTrue(hasattr(resp, 'one'))
         self.assertTrue('one' in resp.settings)
         self.assertEqual(resp['one'], 1)
         self.assertFalse(hasattr(resp, 'echo_word'))
-        self.assertEqual(resp.two, 'blah')
+        self.assertEqual(resp.two, b'blah')
 
         # test packet mutation by key
         pkt2['two'] = TEST_STR
@@ -121,13 +121,13 @@ class ClientTests(unittest.TestCase):
         pts3 = cxn1.python_test_server()
         pts4 = pts2()
 
-        pts1.set('1', 1)
-        pts2.set('2', 2)
-        pts3.set('3', 3)
-        pts4.set('4', 4)
+        pts1.set(b'1', 1)
+        pts2.set(b'2', 2)
+        pts3.set(b'3', 3)
+        pts4.set(b'4', 4)
 
-        self.assertEqual(pts1.keys(), ['1'])
-        self.assertEqual(pts2.keys(), ['2'])
-        self.assertEqual(pts3.keys(), ['3'])
-        self.assertEqual(pts4.keys(), ['4'])
+        self.assertEqual(list(pts1.keys()), [b'1'])
+        self.assertEqual(list(pts2.keys()), [b'2'])
+        self.assertEqual(list(pts3.keys()), [b'3'])
+        self.assertEqual(list(pts4.keys()), [b'4'])
 

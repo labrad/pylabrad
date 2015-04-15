@@ -194,7 +194,7 @@ class DeviceServer(LabradServer):
             del self.devices[name]
             try:
                 yield dev.shutdown()
-            except Exception, e:
+            except Exception as e:
                 self.log('Error while shutting down device "%s": %s' % (name, e))
 
     def serverConnected(self, ID, name):
@@ -303,7 +303,7 @@ class DeviceServer(LabradServer):
     def list_devices(self, c):
         """List available devices."""
         IDs, names = self.deviceLists()
-        return zip(IDs, names)
+        return list(zip(IDs, names))
 
     @setting(2, 'Select Device',
                 key=[': Select first device',
