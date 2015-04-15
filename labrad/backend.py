@@ -360,9 +360,8 @@ class Failure(object):
 
 class Future(object):
 
-    ready = Queue.Queue()
-
     def __init__(self):
+        self.ready = Queue.Queue()
         self.done = False
         self.result = None
         self.callbacks = []
