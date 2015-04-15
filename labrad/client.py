@@ -190,8 +190,9 @@ class HasDynamicAttrs(object):
 
             self._refreshed = True
         except Exception as e:
-            print('Error refreshing dynamic attributes:')
-            print(e, repr(e))
+            raise
+            #print('Error refreshing dynamic attributes:')
+            #print(e, repr(e))
 
     def _getAttrs(self):
         """Get the current list of attributes from labrad.

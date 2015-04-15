@@ -14,7 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-
+import asyncio
 import functools
 from types import MethodType
 
@@ -22,7 +22,7 @@ from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from labrad import constants as C, manager, protocol
-from labrad.support import indent, mangle, extractKey, MultiDict, PacketResponse, getPassword, hexdump
+from labrad.support import indent, mangle, extractKey, MultiDict, PacketResponse, get_password, hexdump
 
 
 class AsyncSettingWrapper(object):
@@ -371,14 +371,15 @@ class AsyncServerWrapper(object):
         """Send packet to this server."""
         return self._cxn._send(self.ID, *args, **kw)
 
-@inlineCallbacks
-def getConnection(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client", password=None):
+@asyncio.coroutine
+def get_connection(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client", password=None):
     """Connect to LabRAD and return a deferred that fires the protocol object."""
-    p = yield protocol.factory.connectTCP(host, port, C.TIMEOUT)
+    reader, writer = yield from asyncio.open_connection(host=host, port=port)
+    p = yield from protocol.factory.connectTCP(host, port, C.TIMEOUT)
     if password is None:
-        password = getPassword()
-    yield p.loginClient(password, name)
-    returnValue(p)
+        password = get_password()
+    yield from p.loginClient(password, name)
+    return p
 
 @inlineCallbacks
 def connectAsync(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client", password=None):

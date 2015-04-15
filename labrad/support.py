@@ -15,7 +15,7 @@ from labrad import constants
 def getNodeName():
     return os.environ.get('LABRADNODE', socket.gethostname().lower())
 
-def getPassword():
+def get_password():
     """Get a password, either from the environment, or the command line."""
     if constants.PASSWORD is not None:
         pw = constants.PASSWORD

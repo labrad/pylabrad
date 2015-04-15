@@ -16,38 +16,43 @@
 """
 labrad.thread
 
-Methods to provide a blocking, threaded interface to the
-asynchronous twisted backend.
+Run an asyncio event loop in a thread. This one event loop will
+be shared by all synchronous labrad connections.
 """
 
+import asyncio
 import threading
 
-from twisted.internet import reactor, defer
-from twisted.python import threadable
-from twisted.python.failure import Failure
-
-threadable.init(1)
-
-class ReactorThread(threading.Thread):
+class AsyncioThread(threading.Thread):
     def __init__(self):
-        threading.Thread.__init__(self, name='ReactorThread')
+        threading.Thread.__init__(self, name='AsyncioThread')
         self.daemon = True
+        self.loop = None
+
     def run(self):
-        reactor.run(installSignalHandlers=0)
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
+        self.loop.close()
 
-_reactorThread = None
+    def close(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self.join()
 
-def startReactor():
+_asyncio_thread = None
+
+def start_asyncio():
     # check to see whether the reactor is already running
     # this ensures that when synchronous code is called from an asynchronous
     # program using deferToThread we don't try to restart the reactor
-    if reactor.running:
-        return
-    global _reactorThread
-    if not _reactorThread or not _reactorThread.isAlive():
-        _reactorThread = ReactorThread()
-        _reactorThread.start()
+    global _asyncio_thread
+    if _asyncio_thread is None:
+        _asyncio_thread = AsyncioThread()
+        _asyncio_thread.start()
 
-def stopReactor():
-    reactor.callFromThread(reactor.stop)
+def stop_asyncio():
+    global _asyncio_thread
+    if _asyncio_thread is not None:
+        _asyncio_thread.close()
+        _asyncio_thread = None
 
