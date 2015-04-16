@@ -19,8 +19,11 @@ labrad.client
 Contains a blocking client connection to labrad.
 """
 
-from labrad import constants as C
-from labrad.backend import ManagerService, Future
+import concurrent.futures
+
+from labrad import backend, constants as C
+from labrad.backend import ManagerService
+import labrad.futures
 from labrad.errors import Error
 from labrad.support import mangle, indent, PrettyMultiDict, PacketResponse, hexdump
 import traceback
@@ -60,8 +63,8 @@ class SettingWrapper(object):
             args = args[0]
         future = self._server._send([(self.ID, args, tag)], **kw)
         if wrap:
-            future.addCallback(lambda resp: resp[0][1])
-        return future.wait() if wait else future
+            future = labrad.futures.transform(future, lambda resp: resp[0][1])
+        return future.result() if wait else future
 
     # data to be loaded on demand
     @property
@@ -86,7 +89,7 @@ class SettingWrapper(object):
 
     def _refresh(self):
         if not self._refreshed:
-            info = self._mgr.getSettingInfo(self._server.ID, self.ID)
+            info = self._mgr.get_setting_info(self._server.ID, self.ID)
             self.__doc__, self._accepts, self._returns, self._notes = info
             self._refreshed = True
 
@@ -117,13 +120,13 @@ class DynamicAttrDict(PrettyMultiDict):
 
     def __getitem__(self, key):
         try:
-            return super(DynamicAttrDict, self).__getitem__(key)
+            return super().__getitem__(key)
         except KeyError:
             # force refresh and try again
             if self._parent:
                 self._parent.refresh(now=True)
             try:
-                return super(DynamicAttrDict, self).__getitem__(key)
+                return super().__getitem__(key)
             except KeyError:
                 raise NotFoundError(key)
 
@@ -245,7 +248,7 @@ class ServerWrapper(HasDynamicAttrs):
     _wrapAttr = SettingWrapper
 
     def _getAttrs(self):
-        info = self._mgr.getServerInfo(self.ID)
+        info = self._mgr.get_server_info(self.ID)
         doc, notes, self._slist = info
         self.__doc__ = doc + '\n' + notes
         return self._slist
@@ -310,12 +313,12 @@ class SyncPacketWrapper(HasDynamicAttrs):
         self._kw = kw
         self._response = []
         self._packet = [] # This is used to store data needed to create a packet response.
+
     def send(self, wait=True):
         resp = PacketResponse(self._response, self._server, self._packet)
         if not wait:
-            f = Future();
-            f.done = True
-            f.result = resp
+            f = concurrent.futures.Future()
+            f.set_result(resp)
             return f
         else:
             return resp
@@ -358,14 +361,16 @@ class PacketWrapper(HasDynamicAttrs):
         """Send this packet to the server."""
         records = [rec[:3] for rec in self._packet]
         future = self._server._send(records, **dict(self._kw, **kw))
-        future.addCallback(PacketResponse, self._server, self._packet)
+        def make_packet_response(resp):
+            return PacketResponse(resp, self._server, self._packet)
+        future = labrad.futures.transform(future, make_packet_response)
         if self._debug and wait:
             return self.debug_wait(future)
-        return future.wait() if wait else future
+        return future.result() if wait else future
 
     def debug_wait(self, future):
         try:
-            return future.wait()
+            return future.result()
         except Exception as e:
             if hasattr(e, 'err_idx'):
                 e.msg = e.msg + '\n' + "".join(traceback.format_list(self._debug_info[e.err_idx][0]))
@@ -463,7 +468,7 @@ class Client(HasDynamicAttrs):
     def _getAttrs(self):
         if not self.connected:
             return []
-        return self._mgr.getServersList()
+        return self._mgr.get_servers_list()
 
     _staticAttrs = ['servers', 'connect', 'disconnect', 'context']
     _wrapAttr = ServerWrapper
@@ -507,13 +512,13 @@ class Client(HasDynamicAttrs):
         """Send a packet over this connection."""
         if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
-        return self._backend.sendRequest(target, records, *args, **kw)
+        return self._backend.send_request(target, records, *args, **kw)
 
     def _sendMessage(self, target, records, *args, **kw):
         """Send a message over this connection."""
         if 'context' not in kw or kw['context'] is None:
             kw['context'] = self._ctx
-        return self._backend.sendMessage(target, records, *args, **kw)
+        return self._backend.send_message(target, records, *args, **kw)
 
     def __repr__(self):
         if self.connected:

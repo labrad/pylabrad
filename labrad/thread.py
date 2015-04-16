@@ -21,38 +21,64 @@ be shared by all synchronous labrad connections.
 """
 
 import asyncio
+from concurrent import futures
 import threading
 
-class AsyncioThread(threading.Thread):
+class AsyncioExecutor(futures.Executor):
+    """An executor that runs all submitted callables in an asyncio event loop.
+
+    Manages a single thread which runs an asyncio event loop. Submitted
+    tasks will be scheduled to run using the event loop's call_soon_threadsafe
+    method. If the submitted callable returns a coroutine or Task, it will
+    be run to completion inside the event loop and the final result returned.
+    """
+
+    _default = None
+
+    @classmethod
+    def get(cls):
+        if cls._default is None:
+            cls._default = AsyncioExecutor()
+        return cls._default
+
     def __init__(self):
-        threading.Thread.__init__(self, name='AsyncioThread')
-        self.daemon = True
-        self.loop = None
+        super().__init__()
+        loop_future = futures.Future()
+        self._thread = threading.Thread(target=self._run, args=(loop_future,), daemon=True)
+        self._thread.start()
+        self._loop = loop_future.result()
 
-    def run(self):
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()
-        self.loop.close()
+    def _run(self, loop_future):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop_future.set_result(loop)
+        try:
+            loop.run_forever()
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            raise
+        loop.close()
 
-    def close(self):
-        self.loop.call_soon_threadsafe(self.loop.stop)
-        self.join()
+    def submit(self, fn, *args, **kwargs):
+        f = futures.Future()
+        @asyncio.coroutine
+        def task():
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                f.set_exception(Exception('asyncio event loop closed'))
+            try:
+                result = yield from fn(*args, **kwargs)
+                f.set_result(result)
+            except Exception as e:
+                f.set_exception(e)
+        self._loop.call_soon_threadsafe(asyncio.async, task())
+        return f
 
-_asyncio_thread = None
+    submit.__doc__ = futures.Executor.submit.__doc__
 
-def start_asyncio():
-    # check to see whether the reactor is already running
-    # this ensures that when synchronous code is called from an asynchronous
-    # program using deferToThread we don't try to restart the reactor
-    global _asyncio_thread
-    if _asyncio_thread is None:
-        _asyncio_thread = AsyncioThread()
-        _asyncio_thread.start()
+    def shutdown(self, wait=True):
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join()
 
-def stop_asyncio():
-    global _asyncio_thread
-    if _asyncio_thread is not None:
-        _asyncio_thread.close()
-        _asyncio_thread = None
-
+    shutdown.__doc__ = futures.Executor.shutdown.__doc__

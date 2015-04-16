@@ -53,7 +53,7 @@ class ClientTests(unittest.TestCase):
 
         # single setting with delayed response
         resp = pts.echo(TEST_STR, wait=False)
-        resp = resp.wait()
+        resp = resp.result()
         self.assertEqual(resp, TEST_STR)
 
     def testCompoundPacket(self):
