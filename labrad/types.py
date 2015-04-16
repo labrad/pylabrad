@@ -57,11 +57,9 @@ class Singleton(object):
     instance is returned thereafter.
     """
     def __new__(cls, *a, **kw):
-        inst = getattr(cls, '_inst', None)
-        if inst is None:
-            inst = super(Singleton, cls).__new__(cls, *a, **kw)
-            cls._inst = inst
-        return inst
+        if not hasattr(cls, '_inst'):
+            cls._inst = super().__new__(cls, *a, **kw)
+        return cls._inst
 
 
 # a registry of parsing functions, keyed by type tag

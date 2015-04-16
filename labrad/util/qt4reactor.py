@@ -180,12 +180,12 @@ class QTReactor(PosixReactorBase):
         return list(self._writes.keys())
 
     def callLater(self, howlong, *args, **kargs):
-        rval = super(QTReactor, self).callLater(howlong, *args, **kargs)
+        rval = super().callLater(howlong, *args, **kargs)
         self.reactorInvocation()
         return rval
 
     def crash(self):
-        super(QTReactor, self).crash()
+        super().crash()
 
     def iterate(self, delay=0.0):
         t = self.running # not sure I entirely get the state of running

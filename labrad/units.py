@@ -147,7 +147,7 @@ class WithUnit(object):
         cls = cls._findClass(type(value), unit)
         if unit and unit.isDimensionless():
             return cls(value * unit.conversionFactorTo(''))
-        inst = super(WithUnit, cls).__new__(cls)
+        inst = super().__new__(cls)
         inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
         return inst
@@ -467,7 +467,7 @@ class ValueArray(WithUnit):
         unit=None can only be used if data is an iterable of items that already have units
         '''
         if unit is not None:
-            return super(ValueArray, cls).__new__(cls, data, unit)
+            return super().__new__(cls, data, unit)
 
         it = iter(data)
         first = next(it)
@@ -479,7 +479,7 @@ class ValueArray(WithUnit):
     def __getitem__(self, unit):
         if isinstance(unit, (str, Unit)):
             """Return value of physical quantity expressed in new units."""
-            return super(ValueArray, self).__getitem__(unit)
+            return super().__getitem__(unit)
         else:
             idx = unit
             return WithUnit(self._value[idx], self.unit)
@@ -556,7 +556,7 @@ class Unit(object):
                         unit.powers, unit.offset)
             return inst
         # construct a new unit
-        inst = super(Unit, cls).__new__(cls)
+        inst = super().__new__(cls)
         inst._init(*args, **kw)
         return inst
 
@@ -890,7 +890,7 @@ class WithDimensionlessUnit(object):
     """
     __unit = Unit('') # All instances are dimensionless
     def __new__(cls, value):
-        obj = super(WithDimensionlessUnit, cls).__new__(cls, value)
+        obj = super().__new__(cls, value)
         return obj
 
     def __reduce__(self):
@@ -914,7 +914,7 @@ class WithDimensionlessUnit(object):
         if isinstance(idx, (str, Unit)):
             return self._value * self.unit.conversionFactorTo(idx)
         else:
-            return super(WithDimensionlessUnit, self).__getitem__(idx)
+            return super().__getitem__(idx)
 
     def inUnitsOf(self, unit):
         if self.unit.conversionFactorTo(unit) != 1.0:
