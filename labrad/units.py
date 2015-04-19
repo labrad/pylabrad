@@ -130,6 +130,8 @@ class NumberDict(dict):
 class WithUnit(object):
     """Mixin class for adding units to numeric types."""
 
+    __array_priority__ = 15
+
     def __new__(cls, value, unit=None):
         # Convert inputs to make sense:
         # check for illegal None unit, unit string -> Unit, list -> array, check
@@ -146,11 +148,12 @@ class WithUnit(object):
         # (Value, Complex, ValueArray, or the Dimensionless versions of each
         # and construct a final object
         cls = cls._findClass(type(value), unit)
-        if unit and unit.isDimensionless():
+        if unit and unit.is_dimensionless:
             return cls(value * unit.conversionFactorTo(''))
         inst = super(WithUnit, cls).__new__(cls)
-        inst.__value = inst._numType(value) * 1.0 # For numpy: int to float
+        inst._value = inst._numType(value) * 1.0 # For numpy: int to float
         inst.unit = Unit(unit)
+        inst.is_dimensionless = inst.unit is None or inst.unit.is_dimensionless
         return inst
 
     def __reduce__(self):
@@ -167,20 +170,13 @@ class WithUnit(object):
         """
         # find class with units for this numeric type
         try:
-            if unit.isDimensionless():
+            if unit.is_dimensionless:
                 cls = cls._dimensionlessTypes[numType]
             else:
                 cls = cls._numericTypes[numType]
         except KeyError:
             raise TypeError('Cannot use units with instances of type %s' % (numType,))
         return cls
-
-    @property
-    def _value(self):
-        """
-        The underlying numeric value to which the units apply.  Can be float, complex, or array.
-        """
-        return self.__value
 
     @property
     def units(self):
@@ -206,7 +202,7 @@ class WithUnit(object):
             else:
                 factor = 1
             value = sign1 * self._value + sign2 * other._value * factor
-        elif self.isDimensionless():
+        elif self.is_dimensionless:
             value = sign1 * self._value + sign2 * other / self.unit.conversionFactorTo('')
         elif other == 0:
             value = sign1 * self._value
@@ -228,7 +224,7 @@ class WithUnit(object):
 
     def __eq__(self, other):
         if not isinstance(other, WithUnit):
-            if self.isDimensionless():
+            if self.is_dimensionless:
                 return self[''] == other
             if self.unit is None:
                 return self._value == other
@@ -312,8 +308,9 @@ class WithUnit(object):
         return WithUnit(other / self._value, pow(self.unit, -1))
 
     __rtruediv__ = __rdiv__
+
     def __pow__(self, other):
-        if isinstance(other, (WithUnit, Unit)) and not other.isDimensionless():
+        if isinstance(other, (WithUnit, Unit)) and not other.is_dimensionless:
             raise TypeError('Exponents must be dimensionless')
         if self.unit is None:
             return WithUnit(pow(self._value, float(other)), None)
@@ -321,7 +318,7 @@ class WithUnit(object):
                         pow(self.unit, other))
 
     def __rpow__(self, other):
-        if not self.isDimensionless():
+        if not self.is_dimensionless:
             raise TypeError('Exponents must be dimensionless')
         if self.unit is None:
             return pow(other, self._value)
@@ -348,7 +345,15 @@ class WithUnit(object):
         of messed up: 1001*m != 1.001*km because the latter is not an
         exact number.  C'est la floating point.
         '''
-        return hash(self[self.unit.base_unit])
+        if not hasattr(self, '_hash'):
+            self._hash = hash(self.base_value)
+        return self._hash
+
+    @property
+    def base_value(self):
+        if not hasattr(self, '_base_value'):
+            self._base_value = self[self.unit.base_unit]
+        return self._base_value
 
     def inUnitsOf(self, unit):
         """
@@ -403,9 +408,7 @@ class WithUnit(object):
         return self.unit.isCompatible(unit)
 
     def isDimensionless(self):
-        if self.unit is None:
-            return True
-        return self.unit.isDimensionless()
+        return self.is_dimensionless
 
     def sqrt(self):
         return pow(self, Fraction(1, 2))
@@ -418,11 +421,15 @@ class WithUnit(object):
 
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
-        x = self.inUnitsOf(unit)
-        if hasattr(x, '_value'):  # x can come back as a float if unit is dimensionless
-            return x._value
-        return x
-    __array_priority__ = 15
+        if unit == self.unit:
+            return self._value
+        factor, offset = self.unit.conversionTupleTo(unit)
+        return (self._value + offset) * factor
+
+#        x = self.inUnitsOf(unit)
+#        if hasattr(x, '_value'):  # x can come back as a float if unit is dimensionless
+#            return x._value
+#        return x
 
 class Value(WithUnit):
     _numType = float
@@ -515,6 +522,7 @@ class Unit(object):
     """
 
     __array_priority__ = 15
+
     def __new__(cls, *args, **kw):
         """Construct a new unit instance.
 
@@ -632,6 +640,10 @@ class Unit(object):
                 self.lex_names[lex_names] = Fraction(1)
         else:
             self.lex_names = lex_names
+        self.is_dimensionless = not any(self.powers) and not any(self.lex_names.values())
+        self.is_angle = (self.powers[7] == 1 and
+                        sum(self.powers) == 1 and
+                        not any(self.lex_names.values()))
 
     @property
     def name(self):
@@ -844,12 +856,10 @@ class Unit(object):
         return factor, offset
 
     def isDimensionless(self):
-        return not any(self.powers) and not any(self.lex_names.values())
+        return self.is_dimensionless
 
     def isAngle(self):
-        return (self.powers[7] == 1 and
-                sum(self.powers) == 1 and
-                not any(self.lex_names.values()))
+        return self.is_angle
 
 
 def convert(*args):
