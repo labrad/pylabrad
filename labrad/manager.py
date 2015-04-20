@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+import asyncio
 
 from labrad import constants as C
 
@@ -29,61 +29,72 @@ class AsyncManager:
         """Send a request to the manager."""
         return self.cxn.sendRequest(self.ID, packet, *args, **kw)
 
-    @inlineCallbacks
-    def _getIDList(self, setting, data, tag):
-        resp = yield self._send([(setting, data, tag)])
-        names = self._reorderIDList(resp[0][1])
-        returnValue(names)
+    @asyncio.coroutine
+    def _get_id_list(self, setting, data, tag):
+        resp = yield from self._send([(setting, data, tag)])
+        names = self._reorder_id_list(resp[0][1])
+        return names
 
-    def _reorderIDList(self, L):
-        return [(name, ID) for ID, name in L]
+    def _reorder_id_list(self, L):
+        return [(name.decode('utf-8'), ID) for ID, name in L]
 
-    def getServersList(self):
+    def get_servers_list(self):
         """Get a list of connected servers."""
-        return self._getIDList(C.SERVERS_LIST, None, '_')
+        return self._get_id_list(C.SERVERS_LIST, None, '_')
 
-    @inlineCallbacks
-    def getServerInfo(self, serverID):
+    @asyncio.coroutine
+    def get_server_info(self, serverID):
         """Get information about a server."""
         packet = [(C.HELP, serverID, 'w'),
                   (C.SETTINGS_LIST, serverID, 'w')]
-        resp = yield self._send(packet)
+        resp = yield from self._send(packet)
         descr, notes = resp[0][1]
         settings = self._reorderIDList(resp[1][1])
-        returnValue((descr, notes, settings))
+        return (descr.decode('utf-8'), notes.decode('utf-8'), settings)
 
-    @inlineCallbacks
-    def getServerInfoWithSettings(self, serverID):
+    @asyncio.coroutine
+    def get_server_info_with_settings(self, serverID):
         """Get information about a server, including all of its settings."""
         packet = [(C.HELP, serverID, 'w'),
                   (C.SETTINGS_LIST, serverID, 'w')]
-        resp = yield self._send(packet)
-        descr, notes = resp[0][1]
+        resp = yield from self._send(packet)
+        srv_descr, srv_notes = resp[0][1]
         settings = resp[1][1]
         packet = [(C.HELP, (serverID, ID), 'ww') for ID, name in settings]
-        resp = yield self._send(packet)
-        settingList = []
+        resp = yield from self._send(packet)
+        setting_list = []
         for s, r in zip(settings, resp):
             ID, name = s
             descr, accepts, returns, notes = r[1]
-            settingList.append((name, ID, (descr, accepts, returns, notes)))
-        returnValue((descr, notes, settingList))
+            setting_list.append((
+                name, ID, (
+                    descr.decode('utf-8'),
+                    [a.decode('utf-8') for a in accepts],
+                    [r.decode('utf-8') for r in returns],
+                    notes.decode('utf-8')
+                )
+            ))
+        return (srv_descr.decode('utf-8'), srv_notes.decode('utf-8'), setting_list)
 
-    def getSettingsList(self, serverID):
+    def get_settings_list(self, serverID):
         """Get a list of settings for a server."""
-        return self._getIDList(C.SETTINGS_LIST, serverID, 'w')
+        return self._get_id_list(C.SETTINGS_LIST, serverID, 'w')
 
-    @inlineCallbacks
-    def getSettingInfo(self, serverID, settingID):
+    @asyncio.coroutine
+    def get_setting_info(self, serverID, settingID):
         """Get information about a setting."""
         packet = [(C.HELP, (serverID, settingID), 'ww')]
-        resp = yield self._send(packet)
+        resp = yield from self._send(packet)
         description, accepts, returns, notes = resp[0][1]
-        returnValue((description, accepts, returns, notes))
+        return (
+            description.decode('utf-8'),
+            [a.decode('utf-8') for a in accepts],
+            [r.decode('utf-8') for r in returns],
+            notes.decode('utf-8')
+        )
 
-    @inlineCallbacks
-    def subscribeToNamedMessage(self, name, ID, enable=True):
+    def subscribe_to_named_message(self, name, ID, enable=True):
         """Subscribe to or stop a named message."""
         packet = [(C.MESSAGE_SUBSCRIBE, (name, ID, enable), 'swb')]
-        returnValue((yield self._send(packet)))
+        return self._send(packet)
 

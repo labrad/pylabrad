@@ -25,7 +25,7 @@ from labrad import constants as C, manager, protocol
 from labrad.support import indent, mangle, extractKey, MultiDict, PacketResponse, get_password, hexdump
 
 
-class AsyncSettingWrapper(object):
+class AsyncSettingWrapper():
     """Represents a setting on a remote LabRAD server."""
 
     def __init__(self, server, name, pyName, ID, info):
@@ -87,7 +87,7 @@ class AsyncSettingWrapper(object):
         self._num_listeners = max(self._num_listeners - 1, 0)
         return self.__call__(context=context, *disconnectargs, **disconnectkw)
 
-class SettingBinder(object):
+class SettingBinder():
     """A dictionary proxy that binds methods to an instance.
 
     This is used to emulate the old 'settings' attribute on a packet
@@ -101,7 +101,7 @@ class SettingBinder(object):
         inst = self._inst
         return inst._bind(inst.__class__.settings[key])
 
-class AsyncPacketWrapper(object):
+class AsyncPacketWrapper():
     """Represents a LabRAD packet to a server.
 
     One wrapper class is created for each server.  Settings can be added or
@@ -245,7 +245,7 @@ def makePacketWrapperClass(server):
     return CustomPacketWrapper
 
 
-class AsyncServerWrapper(object):
+class AsyncServerWrapper():
     """Represents a remote LabRAD server."""
 
     def __init__(self, cxn, name, pyName, ID):
@@ -267,7 +267,7 @@ class AsyncServerWrapper(object):
         """Update the list of available settings for this server."""
 
         # get info about this server and its settings
-        info = yield self._mgr.getServerInfoWithSettings(self.ID)
+        info = yield self._mgr.get_server_info_with_settings(self.ID)
         self.__doc__, self.notes, settings = info
         names = [s[0] for s in settings]
 
@@ -401,7 +401,7 @@ def runAsync(func, *args, **kw):
     reactor.callWhenRunning(runIt)
     reactor.run()
 
-class ClientAsync(object):
+class ClientAsync():
     """Adapt a LabRAD request protocol object to an asynchronous client."""
 
     def __init__(self, prot):
@@ -422,8 +422,8 @@ class ClientAsync(object):
         will be automatically detected, without needing a refresh.
         """
         try:
-            yield self._mgr.subscribeToNamedMessage('Server Connect', 314159265, True)
-            yield self._mgr.subscribeToNamedMessage('Server Disconnect', 314159266, True)
+            yield self._mgr.subscribe_to_named_message('Server Connect', 314159265, True)
+            yield self._mgr.subscribe_to_named_message('Server Disconnect', 314159266, True)
             self._cxn.addListener(self._serverConnected, source=self._mgr.ID, ID=314159265, async=False)
             self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, async=False)
             yield self.refresh()
@@ -460,7 +460,7 @@ class ClientAsync(object):
         """Update the list of available LabRAD servers."""
 
         # get a list of the currently-available servers
-        slist = yield self._mgr.getServersList()
+        slist = yield self._mgr.get_servers_list()
         names = [s[0] for s in slist]
 
         # determine what to add, update and delete to be current
