@@ -100,7 +100,7 @@ def _str2dict(strg):
     return dict([(c, 0) for c in strg])
     #~ return set([c for c in strg])
 
-class _Constants(object):
+class _Constants():
     pass
 
 alphas     = string.ascii_letters
@@ -189,7 +189,7 @@ class RecursiveGrammarException(Exception):
     def __str__(self):
         return "RecursiveGrammarException: %s" % self.parseElementTrace
 
-class _ParseResultsWithOffset(object):
+class _ParseResultsWithOffset():
     def __init__(self, p1, p2):
         self.tup = (p1, p2)
     def __getitem__(self, i):
@@ -197,7 +197,7 @@ class _ParseResultsWithOffset(object):
     def __repr__(self):
         return repr(self.tup)
 
-class ParseResults(object):
+class ParseResults():
     """Structured parse results, to provide multiple means of access to the parsed data:
        - as a list (len(results))
        - by list index (results[0], results[1], etc.)
@@ -574,7 +574,7 @@ def nullDebugAction(*args):
     """'Do-nothing' debug action, to suppress debugging output during parsing."""
     pass
 
-class ParserElement(object):
+class ParserElement():
     """Abstract base level parser element class."""
     DEFAULT_WHITE_CHARS = " \n\t\r"
 
@@ -2490,7 +2490,7 @@ class OneOrMore(ParseElementEnhance):
         ret.saveAsList = True
         return ret
 
-class _NullToken(object):
+class _NullToken():
     def __bool__(self):
         return False
     def __str__(self):
@@ -2745,7 +2745,7 @@ class Suppress(TokenConverter):
         return self
 
 
-class OnlyOnce(object):
+class OnlyOnce():
     """Wrapper for parse actions, to ensure they are only called once."""
     def __init__(self, methodCall):
         self.callable = ParserElement._normalizeParseActionArgs(methodCall)

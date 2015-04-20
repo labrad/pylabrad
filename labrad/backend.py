@@ -13,7 +13,7 @@ from labrad.support import getNodeName, get_password
 
 backends = {}
 
-class BaseConnection(object):
+class BaseConnection():
     def __init__(self, name=None):
         self.name = name or 'Python Client (%s)' % getNodeName()
         self.connected = False

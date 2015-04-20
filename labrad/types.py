@@ -49,7 +49,7 @@ except ImportError:
 
 # helper classes
 
-class Singleton(object):
+class Singleton():
     """Base class for singleton types.
 
     A singleton is a type with only one instance.  The first instance
@@ -80,8 +80,8 @@ class RegisterParser(type):
         return c
 
 
-class Buffer(object):
-    """Consume strings without memory reallocation to improve performance."""
+class Buffer():
+    """Consume strings or bytes without memory reallocation to improve performance."""
 
     def __init__(self, s):
         if isinstance(s, Buffer):

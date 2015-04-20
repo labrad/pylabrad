@@ -142,7 +142,7 @@ class PrettyMultiDict(MultiDict):
         return '\n'.join(sorted(self.keys()))
 
 
-class PacketResponse(object):
+class PacketResponse():
     """Wrapper for response packets from LabRAD servers.
 
     Attributes are added to access the records in this

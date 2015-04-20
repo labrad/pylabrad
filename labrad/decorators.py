@@ -41,7 +41,7 @@ def _product(lists):
     if not len(lists): return [[]]
     return [[h] + t for h in lists[0] for t in _product(lists[1:])]
 
-class Setting(object):
+class Setting():
 
     def __init__(self, func):
         self.func = func
@@ -220,7 +220,7 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
     return decorated
 
 
-class MessageHandler(object):
+class MessageHandler():
 
     def __init__(self, func):
         self.func = func

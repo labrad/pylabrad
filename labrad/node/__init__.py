@@ -446,7 +446,7 @@ class Node(MultiService):
         reactor.callLater(self.reconnectDelay, self.startConnection)
         print('Will try to reconnect in %d seconds...' % self.reconnectDelay)
 
-class NodeConfig(object):
+class NodeConfig():
     """Load configuration from the registry and monitor it for changes."""
     # TODO add to config: autostarting, refreshinterval, preferred start location
 

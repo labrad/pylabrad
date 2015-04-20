@@ -126,7 +126,7 @@ class NumberDict(dict):
 
     __truediv__ = __div__
 
-class WithUnit(object):
+class WithUnit():
     """Mixin class for adding units to numeric types."""
 
     def __new__(cls, value, unit=None):
@@ -516,7 +516,7 @@ WithUnit._numericTypes[np.complex128] = Complex
 #    WithUnit._numericTypes[list] = ValueArray
 
 
-class Unit(object):
+class Unit():
     """Unit of measurement
 
     A unit is defined by a name (possibly composite), a scaling factor,
@@ -861,7 +861,7 @@ def convert(*args):
 _unit_table = {'': Unit(NumberDict(), Fraction(1), [0]*9, 0)}
 
 
-class WithDimensionlessUnit(object):
+class WithDimensionlessUnit():
     """
     This is a funny class.  It is designed to be subclassed
     along float, complex, or ndarray.  It provides a simplified

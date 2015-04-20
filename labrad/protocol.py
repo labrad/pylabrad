@@ -316,7 +316,7 @@ class LabradProtocol(protocol.Protocol):
         self.ID = resp[0][1] # get assigned ID
 
 
-class MessageContext(object):
+class MessageContext():
     """Object to be passed as the first argument to message handlers."""
 
     def __init__(self, source, context, target):

@@ -38,7 +38,7 @@ def unwrap(s, after='|'):
         return line.split(after, 1)[-1]
     return '\n'.join(trim(line) for line in s.split('\n'))
 
-class SettingWrapper(object):
+class SettingWrapper():
     """Object to wrap a single setting on a single server.
 
     Information about the setting is loaded on demand and cached.
@@ -131,7 +131,7 @@ class DynamicAttrDict(PrettyMultiDict):
                 raise NotFoundError(key)
 
 
-class HasDynamicAttrs(object):
+class HasDynamicAttrs():
     """An object with attributes looked up dynamically on labrad."""
     def __init__(self):
         self.__attrs = None
