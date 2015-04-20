@@ -367,7 +367,7 @@ class WithUnit(object):
         return self.is_dimensionless
 
     def sqrt(self):
-        return pow(self, Fraction(1, 2))
+        return np.sqrt(self._value) * pow(self.unit, Fraction(1, 2))
 
     def __copy__(self):
         return self
@@ -668,20 +668,34 @@ class Unit(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    @cache.lru_cache()
+    def _mul_units(self, other):
+        if self.offset != 0 or other.offset != 0:
+            raise TypeError("cannot multiply units with non-zero offset: '%s', '%s'" % (self, other))
+        return Unit(self.names + other.names,
+                    self.factor * other.factor,
+                    [a + b for a, b in zip(self.powers, other.powers)],
+                    self.offset,
+                    self.lex_names + other.lex_names)
+
     def __mul__(self, other):
         if other is None:
             return self
         elif isinstance(other, Unit):
-            if self.offset != 0 or other.offset != 0:
-                raise TypeError("cannot multiply units with non-zero offset: '%s', '%s'" % (self, other))
-            return Unit(self.names + other.names,
-                        self.factor * other.factor,
-                        [a + b for a, b in zip(self.powers, other.powers)],
-                        self.offset,
-                        self.lex_names + other.lex_names)
+            return self._mul_units(other)
         return WithUnit(other, self)
 
     __rmul__ = __mul__
+
+    @cache.lru_cache()
+    def _div_units(self, other):
+        if self.offset != 0 or other.offset != 0:
+            raise TypeError("cannot divide units with non-zero offset: '%s', '%s'" % (self, other))
+        return Unit(self.names - other.names,
+                    self.factor / other.factor,
+                    [a - b for a, b in zip(self.powers, other.powers)],
+                    self.offset,
+                    self.lex_names - other.lex_names)
 
     def __div__(self, other):
         if other is None:
@@ -689,14 +703,18 @@ class Unit(object):
                 raise TypeError("cannot divide unit with non-zero offset: '%s'" % (self,))
             return self
         elif isinstance(other, Unit):
-            if self.offset != 0 or other.offset != 0:
-                raise TypeError("cannot divide units with non-zero offset: '%s', '%s'" % (self, other))
-            return Unit(self.names - other.names,
-                        self.factor / other.factor,
-                        [a - b for a, b in zip(self.powers, other.powers)],
-                        self.offset,
-                        self.lex_names - other.lex_names)
+            return self._div_units(other)
         return WithUnit(1.0 / other, self)
+
+    @cache.lru_cache()
+    def _rdiv_units(self, other):
+        if self.offset != 0 or other.offset != 0:
+            raise TypeError("cannot divide units with non-zero offset: '%s', '%s'" % (self, other))
+        return Unit(other.names - self.names,
+                    other.factor / self.factor,
+                    [a - b for a, b in zip(other.powers, self.powers)],
+                    self.offset,
+                    other.lex_names - self.lex_names)
 
     def __rdiv__(self, other):
         if other is None:
@@ -708,15 +726,10 @@ class Unit(object):
                         self.offset,
                         NumberDict() - self.lex_names)
         if isinstance(other, Unit):
-            if self.offset != 0 or other.offset != 0:
-                raise TypeError("cannot divide units with non-zero offset: '%s', '%s'" % (self, other))
-            return Unit(other.names - self.names,
-                        other.factor / self.factor,
-                        [a - b for a, b in zip(other.powers, self.powers)],
-                        self.offset,
-                        other.lex_names - self.lex_names)
+            return self._rdiv_units(other)
         return WithUnit(other, self**(-1))
 
+    @cache.lru_cache()
     def __pow__(self, other):
         if self.offset != 0:
             raise TypeError("cannot exponentiate unit with non-zero offset: '%s'" % (self,))
