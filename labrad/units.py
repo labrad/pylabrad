@@ -127,6 +127,7 @@ class NumberDict(dict):
             new[key] = self[key] / other
         return new
 
+
 class WithUnit(object):
     """Mixin class for adding units to numeric types."""
 
@@ -156,9 +157,6 @@ class WithUnit(object):
         inst.is_dimensionless = inst.unit is None or inst.unit.is_dimensionless
         return inst
 
-    def __reduce__(self):
-        return (WithUnit, (self._value, self.unit.name))
-
     _numericTypes = {}
     _dimensionlessTypes = {}
 
@@ -178,16 +176,25 @@ class WithUnit(object):
             raise TypeError('Cannot use units with instances of type %s' % (numType,))
         return cls
 
-    @property
-    def units(self):
-        """A string representation of the unit of this value."""
-        return self.unit.name
+    def __reduce__(self):
+        return (WithUnit, (self._value, self.unit.name))
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
 
     def __str__(self):
         return '%s %s' % (self._value, self.unit)
 
     def __repr__(self):
         return '%s(%r, %r)' % (self.__class__.__name__, self._value, self.unit.name)
+
+    @property
+    def units(self):
+        """A string representation of the unit of this value."""
+        return self.unit.name
 
     def _sum(self, other, sign1, sign2):
         if isinstance(other, WithUnit):
@@ -234,7 +241,6 @@ class WithUnit(object):
         to test for equality.
         '''
         return self._sum(other, 1, -1)
-        # return cmp(diff._value, 0)
 
     def __lt__(self, other):
         return self.__cmp__(other) < 0
@@ -320,6 +326,13 @@ class WithUnit(object):
             self._base_value = self[self.unit.base_unit]
         return self._base_value
 
+    def __getitem__(self, unit):
+        """Return value of physical quantity expressed in new units."""
+        if unit == self.unit:
+            return self._value
+        factor, offset = self.unit.conversionTupleTo(unit)
+        return (self._value + offset) * factor
+
     def inUnitsOf(self, unit):
         """
         Express the quantity in different units. If one unit is
@@ -339,10 +352,7 @@ class WithUnit(object):
         @raises TypeError: if any of the specified units are not compatible
         with the original unit
         """
-        if self.unit == unit:
-            return self
-        factor, offset = self.unit.conversionTupleTo(unit)
-        return WithUnit((self._value + offset) * factor, unit)
+        return self[unit] * unit
 
     # Contributed by Berthold Hoellmann
     def inBaseUnits(self):
@@ -369,24 +379,13 @@ class WithUnit(object):
     def sqrt(self):
         return np.sqrt(self._value) * pow(self.unit, Fraction(1, 2))
 
-    def __copy__(self):
-        return self
-
-    def __deepcopy__(self, memo):
-        return self
-
-    def __getitem__(self, unit):
-        """Return value of physical quantity expressed in new units."""
-        if unit == self.unit:
-            return self._value
-        factor, offset = self.unit.conversionTupleTo(unit)
-        return (self._value + offset) * factor
 
 class Value(WithUnit):
     _numType = float
 
     def __float__(self):
         return self['']
+
     def __iter__(self):
         raise TypeError("'Value' object is not iterable")
 
@@ -396,13 +395,16 @@ WithUnit._numericTypes[long] = Value
 WithUnit._numericTypes[np.int32] = Value
 WithUnit._numericTypes[np.int64] = Value
 
+
 class Complex(WithUnit):
     _numType = complex
 
     def __complex__(self):
         return self['']
+
     def __iter__(self):
         raise TypeError("'Complex' object is not iterable")
+
 WithUnit._numericTypes[complex] = Complex
 
 
@@ -424,6 +426,14 @@ class ValueArray(WithUnit):
         rest = [x[unit] for x in it]
         return WithUnit([first] + rest, unit)
 
+    def __copy__(self):
+        # Numpy arrays are not immutable so we have to
+        # make a real copy
+        return WithUnit(self._value.copy(), self.unit)
+
+    def __deepcopy__(self, memo):
+        return self.__copy__()
+
     def __getitem__(self, unit):
         if isinstance(unit, (str, Unit)):
             """Return value of physical quantity expressed in new units."""
@@ -432,19 +442,11 @@ class ValueArray(WithUnit):
             idx = unit
             return WithUnit(self._value[idx], self.unit)
 
-    def __len__(self):
-        return len(self._value)
-
     def __setitem__(self, key, value):
         self._value[key] = value.inUnitsOf(self.unit)._value
 
-    def __copy__(self):
-        # Numpy arrays are not immutable so we have to
-        # make a real copy
-        return WithUnit(self._value.copy(), self.unit)
-
-    def __deepcopy__(self, memo):
-        return self.__copy__()
+    def __len__(self):
+        return len(self._value)
 
     def allclose(self, other, *args, **kw):
         return np.allclose(self._value, other[self.unit], *args, **kw)
@@ -874,7 +876,10 @@ class WithDimensionlessUnit(object):
 
     This implements option 3
     """
+    __array_priority__ = 15
+
     __unit = Unit('') # All instances are dimensionless
+
     def __new__(cls, value):
         obj = super(WithDimensionlessUnit, cls).__new__(cls, value)
         return obj
@@ -885,9 +890,11 @@ class WithDimensionlessUnit(object):
     @property
     def unit(self):
         return self.__unit
+
     @property
     def _value(self):
         return self._numType(self)
+
     @property
     def units(self):
         return ''
@@ -918,7 +925,7 @@ class WithDimensionlessUnit(object):
         return self.unit.isCompatible(unit)
 
     def sqrt(self):
-        return self.__class__(sqrt(self._value))
+        return self.__class__(np.sqrt(self._value))
 
     # These are a whole bunch of operations to make sure that math
     # between WithDimensionlessUnits and float/complex return
@@ -928,43 +935,55 @@ class WithDimensionlessUnit(object):
     def __mul__(self, other):
         result = self._value * other
         return WithUnit(result, '')
+
     __rmul__ = __mul__
+
     def __add__(self, other):
         result = self._value + other
         return WithUnit(result, '')
+
     __radd__ = __add__
+
     def __div__(self, other):
         result = self._value / other
         return WithUnit(result, '')
+
     __truediv__ = __div__
 
     def __rdiv__(self, other):
         result = other / self._value
         return WithUnit(result, '')
+
     __rtruediv__ = __rdiv__
 
     def __floordiv__(self, other):
         result = self._value // other
         return WithUnit(result, '')
+
     def __rfloordiv__(self, other):
         result = other // self._value
         return WithUnit(result, '')
+
     def __sub__(self, other):
         result = self._value - other
         return WithUnit(result, '')
+
     def __rsub__(self, other):
         result = other - self._value
         return WithUnit(result, '')
+
     def __neg__(self):
         result = -self._value
         return WithUnit(result, '')
+
     def __abs__(self):
         result = abs(self._value)
         return WithUnit(result, '')
-    __array_priority__ = 15
+
 
 class DimensionlessFloat(WithDimensionlessUnit, float):
     _numType = float
+
     def __iter__(self):
         raise TypeError('DimensionlessFloat not iterable')
 
@@ -976,8 +995,10 @@ WithUnit._dimensionlessTypes[np.int64] = DimensionlessFloat
 WithUnit._dimensionlessTypes[np.float32] = DimensionlessFloat
 WithUnit._numericTypes[DimensionlessFloat] = Value
 
+
 class DimensionlessComplex(WithDimensionlessUnit, complex):
     _numType = complex
+
     def __iter__(self):
         raise TypeError('DimensionlessComplex not iterable')
 
@@ -985,12 +1006,16 @@ WithUnit._dimensionlessTypes[complex] = DimensionlessComplex
 WithUnit._dimensionlessTypes[np.complex128] = DimensionlessComplex
 WithUnit._numericTypes[DimensionlessComplex] = Complex
 
+
 class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
     _numType = staticmethod(np.asarray) # The is a 'copy constructor' used in ._value()
+
     def __new__(cls, value):
         return (np.array(value)*1.0).view(cls)
+
     def allclose(self, other, *args, **kw):
         return np.allclose(self, other, *args, **kw)
+
     def __array_wrap__(self, obj):
         '''
         This function is called at the end of uops and similar functions.
@@ -1007,6 +1032,7 @@ class DimensionlessArray(WithDimensionlessUnit, np.ndarray):
 WithUnit._dimensionlessTypes[np.ndarray] = DimensionlessArray
 WithUnit._dimensionlessTypes[list] = DimensionlessArray
 WithUnit._numericTypes[DimensionlessArray] = ValueArray
+
 
 # SI unit definitions
 def _addUnit(name, factor, unit, comment='', label='', prefixable=False):
