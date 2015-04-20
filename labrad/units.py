@@ -128,6 +128,24 @@ class NumberDict(dict):
         return new
 
 
+class Lazy(object):
+    """A method decorator to implement lazy properties.
+
+    A lazy property is computed on demand the first time it is accessed,
+    and the result of the computation is then stored in the object's instance
+    __dict__ so that subsequent access is just a dict lookup and incurs no
+    overhead from descriptor access.
+    """
+
+    def __init__(self, f):
+        self.f = f
+
+    def __get__(self, obj, objtype=None):
+        result = self.f(obj)
+        obj.__dict__[self.f.__name__] = result
+        return result
+
+
 class WithUnit(object):
     """Mixin class for adding units to numeric types."""
 
@@ -320,11 +338,9 @@ class WithUnit(object):
             self._hash = hash(self.base_value)
         return self._hash
 
-    @property
+    @Lazy
     def base_value(self):
-        if not hasattr(self, '_base_value'):
-            self._base_value = self[self.unit.base_unit]
-        return self._base_value
+        return self[self.unit.base_unit]
 
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
@@ -598,10 +614,8 @@ class Unit(object):
                         sum(self.powers) == 1 and
                         not any(self.lex_names.values()))
 
-    @property
+    @Lazy
     def name(self):
-        if hasattr(self, '_name'):
-            return self._name
         num = ''
         denom = ''
         full_dict = dict(self.names, **self.lex_names)
@@ -626,26 +640,24 @@ class Unit(object):
             _unit_table[name] = self
         return name
 
-    @property
+    @Lazy
     def base_unit(self):
-        if not hasattr(self, '_base_unit'):
-            num = ''
-            denom = ''
-            for unit, power in (zip(_base_names, self.powers) +
-                                self.lex_names.items()):
-                if power != 1 and power != -1:
-                    unit += '**' + str(abs(power))
-                if power < 0: denom += '/' + unit
-                elif power > 0: num += '*' + unit
-            if not len(num):
-                num = '1'
-            else:
-                num = num[1:] # strip leading '*'
-            name = num + denom
-            if name == '1':
-                name = ''
-            self._base_unit = Unit(name)
-        return self._base_unit
+        num = ''
+        denom = ''
+        for unit, power in (zip(_base_names, self.powers) +
+                            self.lex_names.items()):
+            if power != 1 and power != -1:
+                unit += '**' + str(abs(power))
+            if power < 0: denom += '/' + unit
+            elif power > 0: num += '*' + unit
+        if not len(num):
+            num = '1'
+        else:
+            num = num[1:] # strip leading '*'
+        name = num + denom
+        if name == '1':
+            name = ''
+        return Unit(name)
 
     def __repr__(self):
         return "<Unit '%s'>" % self.name
