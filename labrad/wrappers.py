@@ -16,13 +16,8 @@
 
 import asyncio
 import functools
-from types import MethodType
 
-from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks, returnValue
-
-from labrad import constants as C, manager, protocol
-from labrad.support import indent, mangle, extractKey, MultiDict, PacketResponse, get_password, hexdump
+from labrad import constants as C, manager, protocol, support
 
 
 class AsyncSettingWrapper():
@@ -42,18 +37,18 @@ class AsyncSettingWrapper():
         self.ID = ID
         self.__doc__, self.accepts, self.returns, self.notes = info
 
+    @asyncio.coroutine
     def __call__(self, *args, **kw):
         """Send a request to this setting."""
-        tag = extractKey(kw, 'tag', None) or self.accepts
+        tag = support.extractKey(kw, 'tag', None) or self.accepts
         if len(args) == 0:
             args = None
         elif len(args) == 1:
             args = args[0]
-        d = self._server._send([(self.ID, args, tag)], **kw)
-        d.addCallback(lambda r: r[0][1])
-        return d
+        resp = yield from self._server._send([(self.ID, args, tag)], **kw)
+        return resp[0][1]
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def connect(self, handler, context=(0, 0),
                 connectargs=(), connectkw={},
                 handlerargs=(), handlerkw={}):
@@ -64,12 +59,12 @@ class AsyncSettingWrapper():
         track of the number of handlers that have been added to
         this setting.
         """
-        self._prot.addListener(handler,
+        self._prot.add_listener(handler,
                                source=self._server.ID, context=context, ID=self.ID,
                                args=handlerargs, kw=handlerkw)
         self._num_listeners += 1
         try:
-            yield self.__call__(self.ID, context=context, *connectargs, **connectkw)
+            yield from self.__call__(self.ID, context=context, *connectargs, **connectkw)
         except Exception:
             self._prot.removeListener(handler,
                                       source=self._server.ID, context=context, ID=self.ID)
@@ -120,8 +115,8 @@ class AsyncPacketWrapper():
             method = cls._cache[setting.name]
         else:
             def wrapped(self, *args, **kw):
-                key = extractKey(kw, 'key', None)
-                tag = extractKey(kw, 'tag', None) or setting.accepts
+                key = support.extractKey(kw, 'key', None)
+                tag = support.extractKey(kw, 'tag', None) or setting.accepts
                 if len(args) == 0:
                     args = None
                 elif len(args) == 1:
@@ -129,7 +124,7 @@ class AsyncPacketWrapper():
                 self._packet.append((setting.ID, args, tag, key))
                 return self
             wrapped.name = setting.name
-            method = MethodType(wrapped, None, cls)
+            method = wrapped
         cls._cache[setting.name] = method
         cls.settings[setting.name, setting._py_name, setting.ID] = method
         setattr(cls, setting._py_name, method)
@@ -152,13 +147,13 @@ class AsyncPacketWrapper():
         self._kw = kw
         self.settings = SettingBinder(self)
 
+    @asyncio.coroutine
     def send(self, **kw):
         """Send this packet to the server."""
         # drop keys from records before sending
         records = [rec[:3] for rec in self._packet]
-        d = self._server._send(records, **dict(self._kw, **kw))
-        d.addCallback(PacketResponse, self._server, self._packet)
-        return d
+        resp = yield from self._server._send(records, **dict(self._kw, **kw))
+        return support.PacketResponse(resp, self._server, self._packet)
 
     def _bind(self, method):
         """Bind a method to this instance."""
@@ -200,7 +195,7 @@ class AsyncPacketWrapper():
         if all((ord(x) > 31 and ord(x) < 127) or x.isspace() for x in data): # Is string printable ascii
             return data
         else:
-            return hexdump(data)
+            return support.hexdump(data)
 
     def _recordRepr(self, ID, data, types, key, short=False):
         key_str = "" if key is None else " (key=%s)" % (key,)
@@ -218,7 +213,7 @@ class AsyncPacketWrapper():
             |Packet for server: '%s'
             |
             |Data:
-            |%s""") % (self._server.name, indent(data_str))
+            |%s""") % (self._server.name, support.indent(data_str))
 
     # TODO implement flattened versions of packet object to allow for packet forwarding
     # naively, this can be done just by converting to a tuple of setting/parameter tuples,
@@ -239,7 +234,7 @@ def unwrap(s, after='|'):
 def makePacketWrapperClass(server):
     """Make a new packet wrapper class for a particular server."""
     class CustomPacketWrapper(AsyncPacketWrapper):
-        settings = MultiDict()
+        settings = support.MultiDict()
         _server = server
         _cache = {}
     return CustomPacketWrapper
@@ -254,38 +249,36 @@ class AsyncServerWrapper():
         self.name = self._labrad_name = name
         self._py_name = pyName
         self.ID = ID
-        self.settings = MultiDict()
+        self.settings = support.MultiDict()
         self._cache = {}
         self._packetWrapperClass = makePacketWrapperClass(self)
-        self._refreshLock = defer.DeferredLock()
+        self._refreshLock = asyncio.Lock()
 
+    @asyncio.coroutine
     def refresh(self):
-        return self._refreshLock.run(self._refresh)
-
-    @inlineCallbacks
-    def _refresh(self):
         """Update the list of available settings for this server."""
+        with (yield from self._refreshLock):
+            # get info about this server and its settings
+            info = yield from self._mgr.get_server_info_with_settings(self.ID)
+            self.__doc__, self.notes, settings = info
+            names = [s[0] for s in settings]
 
-        # get info about this server and its settings
-        info = yield self._mgr.get_server_info_with_settings(self.ID)
-        self.__doc__, self.notes, settings = info
-        names = [s[0] for s in settings]
+            # determine what to add, update and delete to be current
+            for s in settings:
+                if s[0] not in self.settings:
+                    self._addSetting(*s)
+                else:
+                    self._refreshSetting(*s)
+            for n in self.settings:
+                if n not in names:
+                    self._delSetting(n)
 
-        # determine what to add, update and delete to be current
-        for s in settings:
-            if s[0] not in self.settings:
-                self._addSetting(*s)
-            else:
-                self._refreshSetting(*s)
-        for n in self.settings:
-            if n not in names:
-                self._delSetting(n)
 
     _staticAttrs = ['settings', 'refresh', 'context', 'packet',
-                    'sendMessage', 'addListener', 'removeListener']
+                    'send_message', 'add_listener', 'remove_listener']
 
     def _fixName(self, name):
-        pyName = mangle(name)
+        pyName = support.mangle(name)
         if pyName in self._staticAttrs:
             pyName = 'lr_' + pyName
         return pyName
@@ -341,22 +334,22 @@ class AsyncServerWrapper():
 
     def sendMessage(self, ID, *args, **kw):
         """Send a message to this server."""
-        tag = extractKey(kw, 'tag', [])
+        tag = support.extractKey(kw, 'tag', [])
         if len(args) == 0:
             args = None
         elif len(args) == 1:
             args = args[0]
         self._cxn._sendMessage(self.ID, [(ID, args, tag)], **kw)
 
-    def addListener(self, listener, **kw):
+    def add_listener(self, listener, **kw):
         """Add a listener for messages from this server."""
         kw['source'] = self.ID
-        self._cxn._addListener(listener, **kw)
+        self._cxn._add_listener(listener, **kw)
 
-    def removeListener(self, listener, **kw):
+    def remove_listener(self, listener, **kw):
         """Remove a listener for messages from this server."""
         kw['source'] = self.ID
-        self._cxn._removeListener(listener, **kw)
+        self._cxn._remove_listener(listener, **kw)
 
     def __call__(self):
         return self
@@ -377,44 +370,33 @@ def get_connection(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client
     reader, writer = yield from asyncio.open_connection(host=host, port=port)
     p = yield from protocol.factory.connectTCP(host, port, C.TIMEOUT)
     if password is None:
-        password = get_password()
+        password = support.get_password()
     yield from p.loginClient(password, name)
     return p
 
-@inlineCallbacks
+@asyncio.coroutine
 def connectAsync(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name="Python Client", password=None):
     """Connect to LabRAD and return a deferred that fires the client object."""
-    p = yield getConnection(host, port, name, password)
+    p = yield from get_connection(host, port, name, password)
     cxn = ClientAsync(p)
-    yield cxn._init()
+    yield from cxn._init()
     cxn.onDisconnect = p.onDisconnect
-    returnValue(cxn)
-
-def runAsync(func, *args, **kw):
-    from twisted.internet import reactor
-    @inlineCallbacks
-    def runIt():
-        try:
-            yield func(*args, **kw)
-        finally:
-            reactor.stop()
-    reactor.callWhenRunning(runIt)
-    reactor.run()
+    return cxn
 
 class ClientAsync():
     """Adapt a LabRAD request protocol object to an asynchronous client."""
 
     def __init__(self, prot):
-        self.servers = MultiDict()
+        self.servers = support.MultiDict()
         self._cache = {}
         self._cxn = prot
         self._mgr = manager.AsyncManager(self._cxn)
         self._next_context = 1
-        self._refreshLock = defer.DeferredLock()
+        self._refreshLock = asyncio.Lock()
 
     _staticAttrs = ['servers', 'refresh', 'context']
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def _init(self):
         """Refresh the cache of available servers and their settings.
 
@@ -422,64 +404,60 @@ class ClientAsync():
         will be automatically detected, without needing a refresh.
         """
         try:
-            yield self._mgr.subscribe_to_named_message('Server Connect', 314159265, True)
-            yield self._mgr.subscribe_to_named_message('Server Disconnect', 314159266, True)
-            self._cxn.addListener(self._serverConnected, source=self._mgr.ID, ID=314159265, async=False)
-            self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, async=False)
-            yield self.refresh()
+            yield from self._mgr.subscribe_to_named_message('Server Connect', 314159265, True)
+            yield from self._mgr.subscribe_to_named_message('Server Disconnect', 314159266, True)
+            #self._cxn.add_listener(self._serverConnected, source=self._mgr.ID, ID=314159265, async=False)
+            #self._cxn.add_listener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, async=False)
+            yield from self.refresh()
         except Exception as e:
             print('error!')
             print(repr(e))
             raise
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def _serverConnected(self, _c, data):
         """Add a wrapper when a server connects."""
         ID, name = data
         try:
-            yield self._addServer(name, ID)
+            yield from self._addServer(name, ID)
         except Exception as e:
             print('Error adding server %d, "%s":' % (ID, name))
             print(str(e))
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def _serverDisconnected(self, _c, data):
         """Remove the wrapper when a server disconnects."""
         ID, name = data
         try:
-            yield self._delServer(name)
+            yield from self._delServer(name)
         except Exception as e:
             print('Error removing server %d, "%s":' % (ID, name))
             print(str(e))
 
+    @asyncio.coroutine
     def refresh(self):
-        return self._refreshLock.run(self._refresh)
-
-    @inlineCallbacks
-    def _refresh(self):
         """Update the list of available LabRAD servers."""
+        with (yield from self._refreshLock):
+            # get a list of the currently-available servers
+            slist = yield from self._mgr.get_servers_list()
+            names = [s[0] for s in slist]
 
-        # get a list of the currently-available servers
-        slist = yield self._mgr.get_servers_list()
-        names = [s[0] for s in slist]
+            # determine what to add, update and delete to be current
+            additions = [s for s in slist if s[0] not in self.servers]
+            refreshes = [n for n in self.servers if n in names]
+            deletions = [n for n in self.servers if n not in names]
 
-        # determine what to add, update and delete to be current
-        additions = [s for s in slist if s[0] not in self.servers]
-        refreshes = [n for n in self.servers if n in names]
-        deletions = [n for n in self.servers if n not in names]
-
-        actions = ([self._addServer(*s) for s in additions] +
-                   [self._refreshServer(n) for n in refreshes] +
-                   [self._delServer(n) for n in deletions])
-        yield defer.DeferredList(actions, fireOnOneErrback=True)
+            for s in additions: yield from self._addServer(*s)
+            for n in refreshes: yield from self._refreshServer(n)
+            for n in deletions: yield from self._delServer(n)
 
     def _fixName(self, name):
-        pyName = mangle(name)
+        pyName = support.mangle(name)
         if pyName in self._staticAttrs:
             pyName = 'lr_' + pyName
         return pyName
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def _addServer(self, name, ID):
         """Create a wrapper for a new server and add it to the list.
 
@@ -496,7 +474,7 @@ class ClientAsync():
             server = AsyncServerWrapper(self, name, pyName, ID)
             self._cache[name] = server
         try:
-            yield server.refresh()
+            yield from server.refresh()
         except Exception as e:
             print('Error while refreshing server "%s":' % name)
             print(repr(e))
@@ -504,17 +482,18 @@ class ClientAsync():
             self.servers[name, server._py_name, ID] = server
             setattr(self, server._py_name, server)
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def _refreshServer(self, name):
         """Trigger a refresh on a server wrapper."""
         server = self.servers[name]
         try:
-            yield server.refresh()
+            yield from server.refresh()
         except Exception as e:
             print('Error while refreshing server "%s":' % name)
             print(repr(e))
-            yield self._delServer(name)
+            yield from self._delServer(name)
 
+    @asyncio.coroutine
     def _delServer(self, name):
         """Remove a server wrapper.
 
@@ -525,7 +504,6 @@ class ClientAsync():
             server = self.servers[name]
             del self.servers[name]
             delattr(self, server._py_name)
-        return defer.succeed(None)
 
     def context(self):
         """Create a new communication context for this connection."""
@@ -538,25 +516,25 @@ class ClientAsync():
 
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
-        return self._cxn.sendRequest(target, records, *args, **kw)
+        return self._cxn.send_request(target, records, *args, **kw)
 
     def _sendMessage(self, target, records, *args, **kw):
         """Send a message over this connection."""
-        return self._cxn.sendMessage(target, records, *args, **kw)
+        return self._cxn.send_message(target, records, *args, **kw)
 
     def disconnect(self):
         self._cxn.disconnect()
 
     @property
-    def _addListener(self):
-        return self._cxn.addListener
+    def _add_listener(self):
+        return self._cxn.add_listener
 
     @property
-    def _removeListener(self):
-        return self._cxn.removeListener
+    def _remove_listener(self):
+        return self._cxn.remove_listener
 
+@asyncio.coroutine
 def wrapAsync(cls, *args, **kw):
     obj = cls(*args, **kw)
-    d = obj.refresh()
-    d.addCallback(lambda _: obj)
-    return d
+    yield from obj.refresh()
+    return obj

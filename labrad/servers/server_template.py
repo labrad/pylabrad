@@ -78,11 +78,8 @@ class ServerTemplate(LabradServer):
         """This function will be called when a server disconnects from LabRAD."""
 
 
-# create an instance of our server class
-__server__ = ServerTemplate()
-
 # this is some boilerplate code to run the
 # server when this module is executed
 if __name__ == '__main__':
     from labrad import util
-    util.runServer(__server__)
+    util.run_server(ServerTemplate())

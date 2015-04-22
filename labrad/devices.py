@@ -19,6 +19,8 @@ labrad.devices
 Superclass of generic device servers.
 """
 
+import asyncio
+
 from labrad import errors
 from labrad.server import LabradServer, setting
 from labrad.errors import Error
@@ -122,6 +124,7 @@ class DeviceServer(LabradServer):
         """
         return []
 
+    @asyncio.coroutine
     def refreshDeviceList(self):
         """Refresh the list of available devices.
 
@@ -130,7 +133,8 @@ class DeviceServer(LabradServer):
         clients that have selected devices in context will still
         be able to refer to them after the refresh.
         """
-        return self._refreshLock.run(self._doRefresh)
+        with (yield from self._refreshLock):
+            return self._doRefresh()
 
     def chooseDeviceWrapper(self, *args, **kw):
         """

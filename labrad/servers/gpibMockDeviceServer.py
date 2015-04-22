@@ -62,8 +62,6 @@ class GpibMockDeviceServer(GPIBManagedServer):
                       'MOCK 1B': Mock1BDevice
                       }
 
-__server__ = GpibMockDeviceServer()
-
 if __name__ == '__main__':
     from labrad import util
-    util.runServer(__server__)
+    util.run_server(GpibMockDeviceServer())

@@ -21,73 +21,151 @@ as well as the protocol for connecting to the Manager and
 authenticating.
 """
 
+import asyncio
 import hashlib
 
-from twisted.internet import reactor, protocol, defer
-from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python import failure, log
-
-from labrad import constants as C, errors, util
-from labrad.stream import packetStream, flattenPacket
+from labrad import constants as C, errors, stream, types as T
 
 
-class LabradProtocol(protocol.Protocol):
-    """Receive and send labrad packets."""
+class AsyncioConnection:
 
-    def __init__(self):
-        self.disconnected = False
-        self._nextRequest = 1
+    def __init__(self, reader, writer, delegate):
+        self.reader = reader
+        self.writer = writer
+        self.delegate = delegate
+        self._next_request = 1
         self.pool = set()
         self.requests = {}
-        self.listeners = {}
-        self._messageLock = defer.DeferredLock()
-        self.clearCache()
         self.endianness = '>'
-        # create a generator to assemble the packets
-        self.packetStream = packetStream(self.packetReceived, self.endianness)
-        next(self.packetStream) # start the packet stream
+        self._server_cache = {}
+        self._setting_cache = {}
+        self._message_lock = asyncio.Lock()
 
-        self.onDisconnect = util.DeferredSignal()
+    # login protocol
+    def login_client(self, password, name):
+        """Log in as a client."""
+        return self._do_login(password, (1, name,), 'ws')
 
-    # network events
-    def connectionMade(self):
-        # set the SO_KEEPALIVE option on all connections
-        self.transport.setTcpNoDelay(True)
-        self.transport.setTcpKeepAlive(True)
+    def login_server(self, password, name, descr, notes):
+        """Log in as a server."""
+        return self._do_login(password, (1, name, descr, notes), 'wsss')
 
-    def connectionLost(self, reason):
-        """Called when the network connection is lost.
+    @asyncio.coroutine
+    def _do_login(self, password, ident, ident_t):
+        self.connected = True
 
-        This can be due to the disconnect() method being
-        called, or because of some network error.
-        """
-        self.disconnected = True
-        for d in self.requests.values():
-            d.errback(Exception('Connection lost.'))
-        if reason == protocol.connectionDone:
-            self.onDisconnect.callback(None)
+        # start the read loop to listen for incoming packets
+        asyncio.async(self.read_loop())
+
+        # send login packet
+        resp = yield from self.send_request(C.MANAGER_ID, [])
+        challenge = resp[0][1] # get password challenge
+
+        # send password response
+        m = hashlib.md5()
+        m.update(challenge)
+        m.update(password.encode('utf-8'))
+        try:
+            resp = yield from self.send_request(C.MANAGER_ID, [(0, m.digest(), 's')])
+        except Exception:
+            raise errors.LoginFailedError('Incorrect password.')
+        self.password = C.PASSWORD = password # save password, since it worked
+        self.loginMessage = resp[0][1] # get welcome message
+
+        # send identification
+        try:
+            resp = yield from self.send_request(C.MANAGER_ID, [(0, ident, ident_t)])
+        except Exception:
+            raise errors.LoginFailedError('Bad identification.')
+        self.ID = resp[0][1] # get assigned ID
+
+    @asyncio.coroutine
+    def read_loop(self):
+        try:
+            while True:
+                # get packet header (20 bytes)
+                hdr = yield from self.reader.readexactly(20)
+                context, request, source, length = T.unflatten(hdr, '(ww)iww', endianness='>')
+
+                # get packet data
+                data = yield from self.reader.readexactly(length)
+
+                # unflatten the data
+                records = stream.unflattenRecords(data, endianness='>')
+
+                # handle packet asynchronously
+                if request > 0:
+                    asyncio.async(self.handle_request(source, context, request, records))
+                elif request < 0:
+                    asyncio.async(self.handle_response(source, context, request, records))
+                else:
+                    asyncio.async(self.handle_message(source, context, records))
+
+        except Exception as e:
+            # fail any pending requests
+            self.connected = False
+            for f in self.requests.values():
+                f.set_exception(e)
+            self.requests.clear()
+            self.writer.close()
+
+    @asyncio.coroutine
+    def handle_request(self, source, context, request, records):
+        """Process incoming request."""
+        try:
+            response = yield from self.delegate.handle_request(source, context, records)
+            yield from self.send_packet(source, context, -request, response)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # this will only happen if there was a problem while sending,
+            # which usually means a problem flattening the response into
+            # a valid LabRAD packet
+            yield from self.send_packet(source, context, -request, [(0, e)])
+
+    @asyncio.coroutine
+    def handle_response(self, source, context, request, records):
+        """Process incoming response."""
+        if -request in self.requests: # reply has request number negated
+            d = self.requests[-request]
+            errors = [r[1] for r in records if isinstance(r[1], Exception)]
+            if errors:
+                # fail on the first error
+                d.set_exception(errors[0])
+            else:
+                d.set_result(records)
         else:
-            self.onDisconnect.errback(reason)
+            # probably a response for a request that has already
+            # timed out.  If not, something bad has happened.
+            print('Invalid response:', source, context, request, records)
 
-    def disconnect(self):
-        """Close down the connection to LabRAD."""
-        self.disconnected = True
-        self.transport.loseConnection()
+    @asyncio.coroutine
+    def handle_message(self, source, context, records):
+        """Process incoming messages."""
+        with (yield from self._message_lock):
+            self._dispatch_message(source, context, records)
 
-    # sending
-    def sendPacket(self, target, context, request, records):
-        """Send a raw packet to the specified target."""
-        raw = flattenPacket(target, context, request, records, endianness=self.endianness)
-        self.transport.write(raw)
+    @asyncio.coroutine
+    def close(self):
+        self.writer.close()
 
-    @inlineCallbacks
-    def sendMessage(self, target, records, context=(0, 0)):
+    def _dispatch_message(self, *a, **kw):
+        pass
+
+    def add_listener(self, *a, **kw):
+        pass
+
+    def remove_listener(self, *a, **kw):
+        pass
+
+    @asyncio.coroutine
+    def send_message(self, target, records, context=(0, 0)):
         """Send a message to the specified target."""
-        target, records = yield self._lookupNames(target, records)
-        self.sendPacket(target, context, 0, records)
+        target, records = yield from self._lookup_names(target, records)
+        yield from self.send_packet(target, context, 0, records)
 
-    @inlineCallbacks
-    def sendRequest(self, target, records, context=(0, 0), timeout=None):
+    @asyncio.coroutine
+    def send_request(self, target, records, context=(0, 0), timeout=None):
         """Send a request to the given target server.
 
         Returns a deferred that will fire the resulting data packet when
@@ -98,12 +176,12 @@ class LabradProtocol(protocol.Protocol):
         Lookup results are cached to avoid lookup overhead on subsequent
         requests to the same server or settings.
         """
-        target, records = yield self._lookupNames(target, records)
-        resp = yield self._sendRequestNoLookup(target, records, context, timeout)
-        returnValue(resp)
+        target, records = yield from self._lookup_names(target, records)
+        resp = yield from self._send_request_no_lookup(target, records, context, timeout)
+        return resp
 
-    @inlineCallbacks
-    def _lookupNames(self, server, records):
+    @asyncio.coroutine
+    def _lookup_names(self, server, records):
         """Translate server and setting names into IDs.
 
         We first attempt to look up these names in the local cache.
@@ -114,206 +192,75 @@ class LabradProtocol(protocol.Protocol):
         records = list(records)
 
         # try to lookup server in cache
-        if isinstance(server, str) and server in self._serverCache:
-            server = self._serverCache[server]
+        if isinstance(server, str) and server in self._server_cache:
+            server = self._server_cache[server]
 
         # try to lookup settings in cache
-        if server in self._settingCache:
-            settings = self._settingCache[server]
+        if server in self._setting_cache:
+            settings = self._setting_cache[server]
             for i, rec in enumerate(records):
                 name = rec[0]
                 if isinstance(name, str) and name in settings:
                     records[i] = (settings[name],) + tuple(rec[1:])
 
         # check to see whether there is still anything to look up
-        settingLookups = [(i, rec[0]) for i, rec in enumerate(records)
-                                      if isinstance(rec[0], str)]
-        if isinstance(server, str) or len(settingLookups):
+        setting_lookups = [(i, rec[0])
+                           for i, rec in enumerate(records)
+                           if isinstance(rec[0], str)]
+        if isinstance(server, str) or len(setting_lookups):
             # need to do additional lookup here
-            if len(settingLookups):
-                indices, names = list(zip(*settingLookups))
+            if len(setting_lookups):
+                indices, names = list(zip(*setting_lookups))
             else:
                 indices, names = [], []
             # send the actual lookup request
             recs = [(C.LOOKUP, (server, names), ['w*s', 's*s'])]
-            resp = yield self._sendRequestNoLookup(C.MANAGER_ID, recs)
+            resp = yield from self._send_request_no_lookup(C.MANAGER_ID, recs)
             serverID, IDs = resp[0][1]
             # cache the results
             if isinstance(server, str):
-                self._serverCache[server] = serverID
+                self._server_cache[server] = serverID
             server = serverID
-            settings = self._settingCache.setdefault(server, {})
+            settings = self._setting_cache.setdefault(server, {})
             settings.update(list(zip(names, IDs)))
             # update the records for the packet
             for index, ID in zip(indices, IDs):
                 records[index] = (ID,) + tuple(records[index][1:])
 
-        returnValue((server, records))
+        return (server, records)
 
-    def clearCache(self):
+    def clear_cache(self):
         """Clear the cache of looked-up server and settings IDs."""
-        self._serverCache = {}
-        self._settingCache = {}
+        self._server_cache = {}
+        self._setting_cache = {}
 
-    def _sendRequestNoLookup(self, target, records, context=(0, 0), timeout=None):
+    @asyncio.coroutine
+    def _send_request_no_lookup(self, target, records, context=(0, 0), timeout=None):
         """Send a request without doing any lookups of server or setting IDs."""
-        if self.disconnected:
-            raise Exception('Already disconnected.')
+        if not self.connected:
+            raise Exception('Not connected.')
         if len(self.pool):
             n = self.pool.pop()
         else:
-            n = self._nextRequest
-            self._nextRequest += 1
+            n = self._next_request
+            self._next_request += 1
 
-        self.requests[n] = d = defer.Deferred()
-        if timeout is not None:
-            timeoutCall = reactor.callLater(timeout, d.errback,
-                                            errors.RequestTimeoutError())
-            d.addBoth(self._cancelTimeout, timeoutCall)
-        d.addBoth(self._finishRequest, n)
-        self.sendPacket(target, context, n, records)
-        return d
-
-    def _cancelTimeout(self, result, timeoutCall):
-        """Cancel a pending request timeout call."""
-        if timeoutCall.active():
-            timeoutCall.cancel()
-        return result
-
-    def _finishRequest(self, result, n):
-        """Finish a request."""
-        del self.requests[n]
-        self.pool.add(n) # reuse request numbers
-        return result
-
-    # receiving
-    def dataReceived(self, data):
-        self.packetStream.send(data)
-
-    def packetReceived(self, source, context, request, records):
-        """Process incoming packet."""
-        if request > 0:
-            self.requestReceived(source, context, request, records)
-        elif request < 0:
-            self.responseReceived(source, context, request, records)
-        else:
-            self.messageReceived(source, context, records)
-
-    def requestReceived(self, source, context, request, records):
-        """Process incoming request."""
-
-    def responseReceived(self, source, context, request, records):
-        """Process incoming response."""
-        if -request in self.requests: # reply has request number negated
-            d = self.requests[-request]
-            errors = [r[1] for r in records if isinstance(r[1], Exception)]
-            if errors:
-                # fail on the first error
-                d.errback(errors[0])
-            else:
-                d.callback(records)
-        else:
-            # probably a response for a request that has already
-            # timed out.  If not, something bad has happened.
-            log.msg('Invalid response: %s, %s, %s, %s' % \
-                    (source, context, request, records))
-
-    def messageReceived(self, source, context, records):
-        """Process incoming messages."""
-        self._messageLock.run(self._dispatchMessage, source, context, records)
-
-    @inlineCallbacks
-    def _dispatchMessage(self, source, context, records):
-        """Dispatch a message to all matching listeners."""
-        for ID, data in records:
-            msgCtx = MessageContext(source, context, ID)
-            keys = ((s, c, i) for s in (source, None)
-                              for c in (context, None)
-                              for i in (ID, None)
-                              if (s, c, i) in self.listeners)
-            for key in keys:
-                for listener, async in self.listeners[key]:
-                    func, args, kw = listener
-                    try:
-                        d = func(msgCtx, data, *args, **kw)
-                        if not isinstance(d, defer.Deferred):
-                            continue
-                        if async:
-                            d.addErrback(self._handleListenerError,
-                                         msgCtx, data, listener)
-                        else:
-                            yield d
-                    except Exception:
-                        self._handleListenerError(
-                            failure.Failure(), msgCtx, data, listener)
-
-    def _handleListenerError(self, failure, msgCtx, data, listener):
-        """Catch errors in message listeners.
-
-        Just prints out a (hopefully informative) message
-        about any errors that may have occurred.
-        """
-        print('Unhandled error in message listener:', msgCtx, data, listener)
-        failure.printTraceback(elideFrameworkCode=1)
-
-    # message handling
-    def addListener(self, listener, source=None, context=None, ID=None, async=True, args=(), kw={}):
-        """Add a listener for messages with the specified attributes.
-
-        When a message with the specified source, context and ID is received,
-        listener will be called with the message data, along with the args and
-        keyword args specified here.  async determines how message listeners
-        that return deferreds are to be handled.  If async is True, the message
-        dispatcher will not wait for the deferred returned by a listener to fire.
-        However, if async is False, the dispatcher will wait for this deferred
-        before firing any more messages.
-        """
-        key = (source, context, ID)
-        listeners = self.listeners.setdefault(key, [])
-        listeners.append(((listener, args, kw), async))
-
-    def removeListener(self, listener, source=None, context=None, ID=None):
-        """Remove a listener for messages."""
-        key = (source, context, ID)
-        listeners = [l for l in self.listeners[key] if l[0][0] != listener]
-        if len(listeners):
-            self.listeners[key] = listeners
-        else:
-            del self.listeners[key]
-
-    # login protocol
-    def loginClient(self, password, name):
-        """Log in as a client."""
-        return self._doLogin(password, name)
-
-    def loginServer(self, password, name, descr, notes):
-        """Log in as a server."""
-        return self._doLogin(password, name, descr, notes)
-
-    @inlineCallbacks
-    def _doLogin(self, password, *ident):
-        """Implements the LabRAD login protocol."""
-        # send login packet
-        resp = yield self.sendRequest(C.MANAGER_ID, [])
-        challenge = resp[0][1] # get password challenge
-
-        # send password response
-        m = hashlib.md5()
-        m.update(challenge)
-        m.update(password)
+        self.requests[n] = f = asyncio.Future()
         try:
-            resp = yield self.sendRequest(C.MANAGER_ID, [(0, m.digest(), 's')])
-        except Exception:
-            raise errors.LoginFailedError('Incorrect password.')
-        self.password = C.PASSWORD = password # save password, since it worked
-        self.loginMessage = resp[0][1] # get welcome message
+            yield from self.send_packet(target, context, n, records)
+            result = yield from asyncio.wait_for(f, timeout=timeout)
+            return result
+        finally:
+            del self.requests[n]
+            self.pool.add(n) # reuse request numbers
+        return f.result()
 
-        # send identification
-        try:
-            resp = yield self.sendRequest(C.MANAGER_ID, [(0, (1,) + ident, 'w' + 's' * len(ident))])
-        except Exception:
-            raise errors.LoginFailedError('Bad identification.')
-        self.ID = resp[0][1] # get assigned ID
+    @asyncio.coroutine
+    def send_packet(self, target, context, request, records):
+        """Send a raw packet to the specified target."""
+        raw = stream.flattenPacket(target, context, request, records, endianness=self.endianness)
+        self.writer.write(raw)
+        yield from self.writer.drain()
 
 
 class MessageContext():
@@ -326,6 +273,3 @@ class MessageContext():
 
     def __repr__(self):
         return 'MessageContext(source=%s, ID=%s, target=%s)' % (self.source, self.ID, self.target)
-
-# factory for churning out LabRAD connections
-factory = protocol.ClientCreator(reactor, LabradProtocol)

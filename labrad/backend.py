@@ -60,8 +60,7 @@ class AsyncioConnection(BaseConnection):
         self.endianness = '>'
         self._server_cache = {}
         self._setting_cache = {}
-        result = self.submit(self._connect_async, self.host, self.port, self.name, password).result()
-        print('result:', result)
+        self.submit(self._connect_async, self.host, self.port, self.name, password).result()
         return self.ID
 
     @asyncio.coroutine
@@ -145,9 +144,11 @@ class AsyncioConnection(BaseConnection):
             print('Invalid response: {}, {}, {}, {}'.format(
                   source, context, request, records))
 
+    @asyncio.coroutine
     def message_received(self, source, context, records):
         """Process incoming messages."""
-        self._messageLock.run(self._dispatch_message, source, context, records)
+        with (yield from self._message_lock):
+            self._dispatch_message(source, context, records)
 
     def _disconnect(self):
         self.submit(self._disconnect_async).result()
@@ -256,9 +257,8 @@ class AsyncioConnection(BaseConnection):
         self.requests[n] = f = asyncio.Future()
         try:
             yield from self._send_packet(target, context, n, records)
-            done, _pending = yield from asyncio.wait([f], timeout=timeout)
-            if not done:
-                raise errors.RequestTimeoutError()
+            result = yield from asyncio.wait_for(f, timeout=timeout)
+            return result
         finally:
             del self.requests[n]
             self.pool.add(n) # reuse request numbers

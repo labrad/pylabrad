@@ -491,7 +491,7 @@ class NodeConfig():
         self._update(config, False)
 
         # setup messages when registry changes
-        self._reg.addListener(self._handleMessage, context=self._ctx)
+        self._reg.add_listener(self._handleMessage, context=self._ctx)
         p = self._packet()
         p.notify_on_change(2345, True)
         yield p.send()

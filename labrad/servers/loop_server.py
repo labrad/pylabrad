@@ -75,7 +75,5 @@ class LoopServer(LabradServer):
         return self.delayTime
 
 
-__server__ = LoopServer()
-
 if __name__ == '__main__':
-    util.runServer(__server__)
+    util.run_server(LoopServer())

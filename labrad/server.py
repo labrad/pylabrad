@@ -20,44 +20,15 @@ Base classes for building asynchronous, context- and request- aware
 servers with labrad.
 """
 
+import asyncio
 import getpass
 from datetime import datetime
 from operator import attrgetter
 
-from twisted.application import internet
-from twisted.internet import defer, reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet.error import ConnectionDone
-from twisted.internet.protocol import ClientFactory
-from twisted.python import failure, log
-
 from labrad import util, constants as C, types as T, wrappers
 from labrad.decorators import setting
-from labrad.protocol import LabradProtocol
 
-class ServerProtocol(LabradProtocol):
-    """Standard protocol for labrad servers.
-
-    Most of the server-specific customization goes in the factory,
-    not this protocol class.
-    """
-    def connectionMade(self):
-        LabradProtocol.connectionMade(self)
-        self.factory._connectionMade(self)
-
-    @inlineCallbacks
-    def requestReceived(self, source, context, request, records):
-        """Handle incoming requests."""
-        try:
-            response = yield self.factory.handleRequest(source, context, records)
-            self.sendPacket(source, context, -request, response)
-        except Exception as e:
-            # this will only happen if there was a problem while sending,
-            # which usually means a problem flattening the response into
-            # a valid LabRAD packet
-            self.sendPacket(source, context, -request, [(0, e)])
-
-class Signal(object):
+class Signal():
     """A Signal object is a simple publish/subscribe messaging primitive.
 
     Servers expose signals as settings that clients or other servers can
@@ -167,7 +138,7 @@ class Signal(object):
         return self._handler_func
 
 
-class Context(object):
+class Context():
     """Serialize requests in a context and handle context expiration.
 
     One Context object is created for each request context seen by a
@@ -179,7 +150,7 @@ class Context(object):
     """
 
     def __init__(self):
-        self.lock = defer.DeferredLock()
+        self.lock = asyncio.Lock()
         self.expired = False
 
     def acquire(self):
@@ -201,12 +172,10 @@ class Context(object):
         self.expired = True
 
 
-class LabradServer(ClientFactory):
+class LabradServer:
     """A generic LabRAD server."""
 
-    protocol = ServerProtocol
     sendTracebacks = True
-    prioritizeWrites = False
 
     def __init__(self):
         self.description, self.notes = util.parseSettingDoc(self.__doc__)
@@ -221,9 +190,10 @@ class LabradServer(ClientFactory):
         self.signals = []
         self.contexts = {}
 
+
     # request handling
-    @inlineCallbacks
-    def handleRequest(self, source, context, records):
+    @asyncio.coroutine
+    def handle_request(self, source, context, records):
         """Handle an incoming request.
 
         If this is a new context, we create a context object and a lock
@@ -234,34 +204,30 @@ class LabradServer(ClientFactory):
         c = self.contexts.get(context, None)
         if c is None:
             c = self.contexts[context] = Context()
-            yield c.acquire() # make sure we're the first in line
-            c.data = yield self.newContext(context)
-            yield self.initContext(c.data)
+            yield from c.lock.acquire() # make sure we're the first in line
+            c.data = yield from self.newContext(context)
+            yield from self.initContext(c.data)
         else:
-            yield c.acquire() # wait for previous requests in this context to finish
+            yield from c.lock.acquire() # wait for previous requests in this context to finish
 
-        if self.prioritizeWrites:
-            # yield here so that pending writes will be sent in preference to processing
-            # new requests.  This can help in cases where server settings do long-running
-            # computations that block, though we are still limited fundamentally by
-            # the completely single-threaded way twisted operates
-            yield util.wakeupCall(0.0)
         response = []
         try:
-            yield self.startRequest(c.data, source)
+            yield from self.startRequest(c.data, source)
             for ID, data in records:
                 c.check() # make sure this context hasn't expired
                 try:
                     setting = self.settings[ID]
-                    result = yield setting.handleRequest(self, c.data, data)
+                    result = yield from setting.handle_request(self, c.data, data)
                     response.append((ID, result, setting.returns))
                 except Exception as e:
+                    import traceback
+                    traceback.print_exc()
                     response.append((ID, self._getTraceback(e)))
                     break
             c.check() # make sure this context hasn't expired
         finally:
-            reactor.callLater(0, c.release)
-        returnValue(response)
+            c.lock.release()
+        return response
 
     def _getTraceback(self, e):
         """Turn an exception into a LabRAD error packet.
@@ -270,21 +236,19 @@ class LabradServer(ClientFactory):
         on the value of self.sendTracebacks.
         """
         code = getattr(e, 'code', 0)
-        if self.sendTracebacks:
-            f = failure.Failure()
-            tb = f.getTraceback(elideFrameworkCode=True)
-            msg = 'Remote %s' % tb
-        else:
-            msg = e.__class__.__name__ + ': ' + getattr(e, 'msg', str(e))
-        msg = '[%s] %s' % (self.name, msg)
+        #if self.sendTracebacks:
+        #    f = failure.Failure()
+        #    tb = f.getTraceback(elideFrameworkCode=True)
+        #    msg = 'Remote {}'.format(tb)
+        msg = e.__class__.__name__ + ': ' + getattr(e, 'msg', str(e))
+        msg = '[{}] {}'.format(self.name, msg)
         return T.Error(msg, code)
 
     # registering setting and signal handlers
     def _findSettingHandlers(self):
         """Find all settings defined for this server."""
-        # this is an ad-hoc test; we really should check for the IRequestHandler interface
         members = [getattr(self, name) for name in dir(self)]
-        handlers = [m for m in members if hasattr(m, 'handleRequest')]
+        handlers = [m for m in members if getattr(m, 'is_setting', False)]
         return sorted(handlers, key=attrgetter('ID'))
 
     def _checkSettingConflicts(self, s):
@@ -342,24 +306,29 @@ class LabradServer(ClientFactory):
 
     # Network events
     # these methods are called by network events from twisted
-    @inlineCallbacks
-    def _connectionMade(self, protocol):
+    @asyncio.coroutine
+    def start(self, protocol):
         """Login as a server after connecting to LabRAD."""
         try:
-            addr = protocol.transport.getPeer()
-            log.msg('connected to %s:%s' % (addr.host, addr.port))
-            self.mgr_host, self.mgr_port = addr.host, addr.port
+            #print()
+            #addr = protocol.transport.getPeer()
+            #print('connected to {}:{}'.format(addr.host, addr.port))
+            #self.mgr_host, self.mgr_port = addr.host, addr.port
             name = getattr(self, 'instanceName', self.name)
-            yield protocol.loginServer(self._getPassword(), name,
-                                       self.description, self.notes)
+            print("logging in with name:", name)
+            yield from protocol.login_server(self._getPassword(), name,
+                                             self.description, self.notes)
             self.password = protocol.password
             self._cxn = protocol
             self.client = wrappers.ClientAsync(protocol)
-            yield self.client._init()
-            yield self._initServer()
+            yield from self.client._init()
+            yield from self._initServer()
             self.started = True
-            self.onStartup.callback(self)
+            self.onStartup.set_result(self)
         except Exception as e:
+            print("error during startup:", e)
+            import traceback
+            traceback.print_exc()
             self.disconnect(e)
 
     def _getPassword(self):
@@ -371,14 +340,14 @@ class LabradServer(ClientFactory):
             pw = getpass.getpass('Enter LabRAD password: ')
         return pw
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def _initServer(self):
         """Called after we've authenticated with the LabRAD manager.
 
         Here we register the settings and signals found on this server
         and set up message handlers for messages coming from the manager.
         """
-        log.msg('%s starting...' % self.name)
+        print('{} starting...'.format(self.name))
         # register handlers for settings and signals
         mgr = self.client.manager
         p = mgr.packet()
@@ -387,37 +356,37 @@ class LabradServer(ClientFactory):
                 self.addSignal(s, p)
             else:
                 self.addSetting(s, p)
-        yield p.send()
+        yield from p.send()
 
         # do server-specific initialization
-        yield self.initServer()
+        yield from self.initServer()
 
         # make sure we shut down gracefully when reactor quits or a remote message is fired
-        self._shutdownID = reactor.addSystemEventTrigger('before', 'shutdown', self._stopServer)
-        self._cxn.addListener(self._stopServer, ID=987654321)
+        #self._shutdownID = reactor.addSystemEventTrigger('before', 'shutdown', self._stopServer)
+        self._cxn.add_listener(self._stopServer, ID=987654321)
 
         # sign up for notifications from the manager
-        yield mgr.subscribe_to_named_message('Server Connect', 55443322, True)
-        yield mgr.subscribe_to_named_message('Server Disconnect', 66554433, True)
-        self._cxn.addListener(self._serverConnected, source=mgr.ID, ID=55443322, async=False)
-        self._cxn.addListener(self._serverDisconnected, source=mgr.ID, ID=66554433, async=False)
+        yield from mgr.subscribe_to_named_message('Server Connect', 55443322, True)
+        yield from mgr.subscribe_to_named_message('Server Disconnect', 66554433, True)
+        self._cxn.add_listener(self._serverConnected, source=mgr.ID, ID=55443322, async=False)
+        self._cxn.add_listener(self._serverDisconnected, source=mgr.ID, ID=66554433, async=False)
 
-        #yield mgr.notify_on_connect.connect(self._serverConnected)
-        #yield mgr.notify_on_disconnect.connect(self._serverDisconnected)
-        yield mgr.s__notify_on_context_expiration.connect(
+        #yield from mgr.notify_on_connect.connect(self._serverConnected)
+        #yield from mgr.notify_on_disconnect.connect(self._serverDisconnected)
+        yield from mgr.s__notify_on_context_expiration.connect(
                   self._contextExpired, connectargs=(True,))
 
         # let the rest of the world know we're ready
-        yield mgr.s__start_serving()
-        log.msg('%s now serving' % self.name)
+        yield from mgr.s__start_serving()
+        print('{} now serving'.format(self.name))
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def _stopServer(self, *ignored):
         self.stopping = True
         try:
-            yield self.stopServer()
+            yield from self.stopServer()
         except Exception as e:
-            self._error = failure.Failure(e)
+            self._error = e
         finally:
             try:
                 self._cxn.disconnect()
@@ -425,12 +394,12 @@ class LabradServer(ClientFactory):
                 pass
             # remove the event trigger, so we don't get
             # called again if the reactor shuts down later
-            if hasattr(self, '_shutdownID'):
-                reactor.removeSystemEventTrigger(self._shutdownID)
+            #if hasattr(self, '_shutdownID'):
+            #    reactor.removeSystemEventTrigger(self._shutdownID)
 
     def clientConnectionFailed(self, connector, reason):
         """Called when we fail to establish a network to LabRAD."""
-        self.onStartup.errback(reason)
+        self.onStartup.set_exception(reason)
 
     def clientConnectionLost(self, connector, reason):
         """Called when the network connection to LabRAD is lost.
@@ -440,12 +409,12 @@ class LabradServer(ClientFactory):
         """
         reason = getattr(self, '_error', reason)
         if not self.started:
-            self.onStartup.errback(reason)
+            self.onStartup.set_exception(reason)
         else:
-            if self.stopping and reason.check(ConnectionDone):
-                self.onShutdown.callback()
+            if self.stopping: # and reason.check(ConnectionDone):
+                self.onShutdown.set_result(None)
             else:
-                self.onShutdown.errback(reason)
+                self.onShutdown.set_exception(reason)
 
     def disconnect(self, error=None):
         """Disconnect this server from LabRAD.
@@ -454,8 +423,6 @@ class LabradServer(ClientFactory):
         to get a deferred that will fire when the shutdown is done.
         """
         if error is not None:
-            if not isinstance(error, failure.Failure):
-                error = failure.Failure(error)
             self._error = error
         self._stopServer()
 
@@ -532,19 +499,24 @@ class LabradServer(ClientFactory):
             self.expireContext(c.data)
 
     # these methods may be overridden
+
+    @asyncio.coroutine
     def newContext(self, ID):
         """Create a new context object."""
         c = util.ContextDict()
         c.ID = ID
         return c
 
+    @asyncio.coroutine
     def initContext(self, c):
         """Initialize a new context object."""
 
+    @asyncio.coroutine
     def startRequest(self, c, source):
         """Start a request from source in the given context."""
         c.source = source
 
+    @asyncio.coroutine
     def expireContext(self, c):
         """Expire Context.
 
@@ -571,14 +543,5 @@ class LabradServer(ClientFactory):
 
     def log(self, *messages):
         self.onLog((datetime.now(), messages))
-
-
-class LabradService(internet.TCPClient):
-    def __init__(self, server):
-        internet.TCPClient.__init__(self, server.host, server.port, server)
-        self.server = server
-        self.setName(server.name)
-        self.onStartup = server.onStartup
-        self.onShutdown = server.onShutdown
 
 

@@ -13,10 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import copy, re, textwrap
-
-from twisted.internet import defer, reactor
-from twisted.python import log, reflect, util
+import argparse
+import asyncio
+import copy
+import datetime
+import os
+import re
+import sys
+import textwrap
+import time
 
 from labrad import constants as C
 from labrad.support import getNodeName
@@ -111,7 +116,6 @@ def interpEnvironmentVars(string, env=None):
     this raises a KeyError.
     """
     if env is None:
-        import os
         env = os.environ
     for label in findEnvironmentVars(string):
         tag = '%' + label + '%'
@@ -122,13 +126,11 @@ def timedeltaToSeconds(td):
     return td.seconds + td.microseconds / 1.0e6
 
 def timing(f, n=100, **kw):
-    from datetime import datetime
-
     total = 0
     for _ in range(n):
-        start = datetime.now()
+        start = datetime.datetime.now()
         f(**kw)
-        end = datetime.now()
+        end = datetime.datetime.now()
         delta = end - start
         total += timedeltaToSeconds(delta)
     avg = total / float(n)
@@ -208,162 +210,80 @@ def convertUnits(**unitdict):
 
 
 
-# deferred helpers
+# asyncio helpers
 
-def wakeupCall(delay, args=None):
-    """Return a deferred that will be called back
-    after a specified delay.
-    """
-    d = defer.Deferred()
-    reactor.callLater(delay, d.callback, args)
-    return d
-
-def firstToFire(n=2):
-    heads = [defer.Deferred() for _ in range(n)]
-    first = defer.DeferredList(heads, fireOnOneCallback=True,
-                                      fireOnOneErrback=True,
-                                      consumeErrors=True)
-    first.addCallback(lambda result: result[0])
-    return first, heads
-
-def maybeTimeout(deferred, timeout, timeoutResult):
-    """Takes a deferred and returns a new deferred that might timeout."""
-    td = defer.Deferred()
-    reactor.callLater(timeout, td.callback, timeoutResult)
-    d = defer.DeferredList([deferred, td], fireOnOneCallback=True,
-                                           fireOnOneErrback=True,
-                                           consumeErrors=True)
-    d.addCallback(lambda result_index: result_index[0])
-    return d
-
-class DeferredSignal(object):
+class DeferredSignal():
     """An object that can create multiple deferreds on demand.
 
     When the signal is fired, all created deferreds will be fired
     or have their errback method called, as appropriate.
     """
     def __init__(self):
-        self.waiters = []
-        self.listeners = []
-        self.fired = None
+        self.fired = asyncio.Event()
 
-    def callback(self, data=None):
-        self._fire(True, data)
+    def set_result(self, result=None):
+        if self.fired.is_set():
+            raise Exception('signal already fired')
+        self.success = True
+        self.result = result
+        self.fired.set()
 
-    def errback(self, reason=None):
-        self._fire(False, reason)
+    def set_exception(self, exception=None):
+        if self.fired.is_set():
+            raise Exception('signal already fired')
+        self.success = False
+        self.exception = exception
+        self.fired.set()
 
-    def _fire(self, success, data):
-        self.fired = success, data
-        waiters = self.waiters
-        self.waiters = []
-        for d in waiters:
-            if success:
-                d.callback(data)
-            else:
-                d.errback(data)
-        if success:
-            for func in self.listeners:
-                func(data)
-
+    @asyncio.coroutine
     def __call__(self):
-        if self.fired:
-            success, data = self.fired
-            if success:
-                return defer.succeed(data)
-            else:
-                return defer.fail(data)
+        yield from self.fired.wait()
+        if self.success:
+            return self.result
         else:
-            d = defer.Deferred()
-            self.waiters.append(d)
-            return d
-
-    def connect(self, listener):
-        if listener not in self.listeners:
-            self.listeners.append(listener)
-
-    def disconnect(self, listener):
-        self.listeners.remove(listener)
-
+            raise self.exception
 
 # run labrad server
 
-def runServer(srv):
+def run_server(srv):
     """Run a server of the specified class."""
+    import labrad.protocol
 
-    import os, sys, time
-    from twisted.internet import reactor
-    from twisted.python import usage
+    parser = argparse.ArgumentParser(description='Run the {} server'.format(srv.name))
+    parser.add_argument('--name', default=srv.name, help='Server name.')
+    parser.add_argument('--node', default=getNodeName(), help='Node name.')
+    parser.add_argument('--port', default=C.MANAGER_PORT, help='Manager port.')
+    parser.add_argument('--host', default=C.MANAGER_HOST, help='Manager location.')
+    parser.add_argument('--password', default=C.PASSWORD, help='Login password.')
+    config = parser.parse_args()
 
-    class ServerOptions(usage.Options):
-        optParameters = [['name', 'n', srv.name, 'Server name.'],
-                         ['node', 'd', getNodeName(), 'Node name.'],
-                         ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
-                         ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
-                         ['password', 'w', C.PASSWORD, 'Login password.']]
-
-    config = ServerOptions()
-    try:
-        config.parseOptions()
-    except usage.UsageError as errortext:
-        print('%s: %s' % (sys.argv[0], errortext))
-        print('%s: Try --help for usage details.' % (sys.argv[0]))
-        sys.exit(1)
-
-    def _ensureReactorStop():
-        try:
-            reactor.stop()
-        except RuntimeError:
-            pass
-
-    def _disconnect(data):
-        log.msg('Disconnected cleanly.')
-        _ensureReactorStop()
-
-    def _error(failure):
-        log.msg('There was an error: ' + failure.getErrorMessage())
-        _ensureReactorStop()
-
-    srv.onStartup().addErrback(_error)
-    srv.onShutdown().addCallbacks(_disconnect, _error)
-
-    if config['name']:
-        srv.name = config['name']
+    if config.name:
+        srv.name = config.name
     env = dict(os.environ)
-    env['LABRADNODE'] = config['node']
+    env['LABRADNODE'] = config.node
     srv.name = interpEnvironmentVars(srv.name, env)
     if hasattr(srv, 'instanceName'):
         srv.instanceName = interpEnvironmentVars(srv.instanceName, env)
 
-    srv.password = config['password']
+    srv.password = config.password
 
-    log.startLogging(sys.stdout)
-    #observer = MyLogObserver(sys.stdout)
-    #log.startLoggingWithObserver(observer.emit)
-    reactor.connectTCP(config['host'], int(config['port']), srv)
-    reactor.run()
+    @asyncio.coroutine
+    def run(loop):
+        try:
+            reader, writer = yield from asyncio.open_connection(host=config.host, port=config.port)
+            cxn = labrad.protocol.AsyncioConnection(reader, writer, srv)
+            try:
+                yield from srv.start(cxn)
+                yield from srv.onStartup()
+                yield from srv.onShutdown()
+                print('Disconnected cleanly.')
+            except Exception as e:
+                print('There was an error', e)
+                cxn.close()
+        finally:
+            loop.stop()
 
-class MyLogObserver(log.FileLogObserver):
-    timeFormat = '%Y/%m/%d %H:%M -'
-
-    def emit(self, eventDict):
-        edm = eventDict['message']
-        if not edm:
-            if eventDict['isError'] and 'failure' in eventDict:
-                text = ((eventDict.get('why') or 'Unhandled Error')
-                        + '\n' + eventDict['failure'].getTraceback())
-            elif 'format' in eventDict:
-                text = self._safeFormat(eventDict['format'], eventDict)
-            else:
-                # we don't know how to log this
-                return
-        else:
-            text = ' '.join(map(reflect.safe_str, edm))
-
-        timeStr = self.formatTime(eventDict['time'])
-        fmtDict = {'text': text.replace("\n", "\n\t")}
-        msgStr = self._safeFormat("%(text)s\n", fmtDict)
-
-        util.untilConcludes(self.write, timeStr + " " + msgStr)
-        util.untilConcludes(self.flush)  # Hoorj!
-
+    loop = asyncio.get_event_loop()
+    loop.create_task(run(loop))
+    loop.run_forever()
+    loop.close()

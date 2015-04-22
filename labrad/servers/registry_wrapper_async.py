@@ -89,9 +89,9 @@ class RegistryWrapperAsync(SafeIterDict):
         #def print_(*args):
         #    print 'message:', args
         #    #print self._cxn._cxn.listeners
-        #self._cxn._cxn.addListener(print_)
+        #self._cxn._cxn.add_listener(print_)
         if listen:
-            func = self._cxn._cxn.addListener
+            func = self._cxn._cxn.add_listener
         else:
             func = self._cxn._cxn.removeListener
         source = self._cxn.registry.ID # doesn't seem to work

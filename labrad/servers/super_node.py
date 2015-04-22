@@ -77,8 +77,6 @@ class SuperNode(DeviceServer):
         dev = self.selectedDevice(c)
         return dev.local_servers()
 
-__server__ = SuperNode()
-
 if __name__ == '__main__':
     from labrad import util
-    util.runServer(__server__)
+    util.run_server(SuperNode())

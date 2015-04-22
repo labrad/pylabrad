@@ -19,12 +19,9 @@ labrad.decorators
 Decorators that help in creating LabRAD servers.
 """
 
-
-
-from functools import wraps
-from inspect import getargspec
-
-from twisted.internet.defer import inlineCallbacks
+import asyncio
+import functools
+import inspect
 
 from labrad import types as T, util
 
@@ -50,7 +47,7 @@ class Setting():
         return (self.ID, self.name, self.description,
                 self.accepts, self.returns, self.notes)
 
-    def handleRequest(self, c, data):
+    def handle_request(self, c, data):
         return self.func(c, data)
 
 def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
@@ -63,12 +60,11 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
     strings of allowed types.
     """
     def decorated(f):
-        args, varargs, varkw, defaults = getargspec(f)
+        args, varargs, varkw, defaults = inspect.getargspec(f)
         args = args[lr_num_params:]
 
-        # handle generators as inlineCallbacks
-        if _isGenerator(f):
-            f = inlineCallbacks(f)
+        # wrap the function in a coroutine
+        f = asyncio.coroutine(f)
 
         # make sure that defined params are actually accepted by the function.
         # having extra params would not affect the running, but it is
@@ -88,8 +84,8 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
             accepts_s = [''] # only accept notifier
             accepts_t = [T.parseTypeTag(s) for s in accepts_s]
 
-            @wraps(f)
-            def handleRequest(self, c, data):
+            @functools.wraps(f)
+            def handle_request(self, c, data):
                 return f(self, c)
 
         elif Nparams == 1:
@@ -105,15 +101,15 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                                      % (args[0], defaults[0]))
                     accepts_t.append(T.LRNone())
 
-                @wraps(f)
-                def handleRequest(self, c, data):
+                @functools.wraps(f)
+                def handle_request(self, c, data):
                     if data is None:
                         return f(self, c)
                     return f(self, c, data)
 
             else:
                 # nothing special to do here
-                handleRequest = f
+                handle_request = f
 
         else:
             # sanity checks to make sure that we'll be able to
@@ -185,8 +181,8 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     accepts_s.append(': defaults [%s]' % defstr)
                     accepts_t.append(T.LRNone())
 
-                @wraps(f)
-                def handleRequest(self, c, data):
+                @functools.wraps(f)
+                def handle_request(self, c, data):
                     if isinstance(data, tuple):
                         return f(self, c, *data)
                     elif data is None:
@@ -194,8 +190,8 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     else:
                         return f(self, c, data)
             else:
-                @wraps(f)
-                def handleRequest(self, c, data):
+                @functools.wraps(f)
+                def handle_request(self, c, data):
                     if isinstance(data, tuple):
                         return f(self, c, *data)
                     else:
@@ -205,8 +201,8 @@ def setting(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         f.name = lr_name or f.__name__
         f.accepts = accepts_s
         f.returns = [returns] if isinstance(returns, str) else returns
-        f.isSetting = True
-        f.handleRequest = handleRequest
+        f.is_setting = True
+        f.handle_request = handle_request
 
         # this is the data that will be sent to the manager to
         # register this setting to be remotely callable
@@ -242,12 +238,12 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
     strings of allowed types.
     """
     def decorated(f):
-        args, varargs, varkw, defaults = getargspec(f)
+        args, varargs, varkw, defaults = inspect.getargspec(f)
         args = args[lr_num_params:]
 
-        # handle generators as inlineCallbacks
+        # handle generators as coroutines
         if _isGenerator(f):
-            f = inlineCallbacks(f)
+            f = asyncio.coroutine(f)
 
         # make sure that defined params are actually accepted by the function.
         # having extra params would not affect the running, but it is
@@ -267,8 +263,8 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
             accepts_s = [''] # only accept notifier
             accepts_t = [T.parseTypeTag(s) for s in accepts_s]
 
-            @wraps(f)
-            def handleRequest(self, c, data):
+            @functools.wraps(f)
+            def handle_request(self, c, data):
                 return f(self, c)
 
         elif Nparams == 1:
@@ -284,15 +280,15 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                                      % (args[0], defaults[0]))
                     accepts_t.append(T.LRNone())
 
-                @wraps(f)
-                def handleRequest(self, c, data):
+                @functools.wraps(f)
+                def handle_request(self, c, data):
                     if data is None:
                         return f(self, c)
                     return f(self, c, data)
 
             else:
                 # nothing special to do here
-                handleRequest = f
+                handle_request = f
 
         else:
             # sanity checks to make sure that we'll be able to
@@ -364,8 +360,8 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     accepts_s.append(': defaults [%s]' % defstr)
                     accepts_t.append(T.LRNone())
 
-                @wraps(f)
-                def handleRequest(self, c, data):
+                @funtcools.wraps(f)
+                def handle_request(self, c, data):
                     if isinstance(data, tuple):
                         return f(self, c, *data)
                     elif data is None:
@@ -373,8 +369,8 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                     else:
                         return f(self, c, data)
             else:
-                @wraps(f)
-                def handleRequest(self, c, data):
+                @functools.wraps(f)
+                def handle_request(self, c, data):
                     if isinstance(data, tuple):
                         return f(self, c, *data)
                     else:
@@ -384,8 +380,8 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         f.name = lr_name or f.__name__
         f.accepts = accepts_s
         f.returns = returns
-        f.isSetting = True
-        f.handleRequest = handleRequest
+        f.is_setting = True
+        f.handle_request = handle_request
 
         # this is the data that will be sent to the manager to
         # register this setting to be remotely callable

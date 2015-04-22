@@ -27,7 +27,7 @@ class AsyncManager:
 
     def _send(self, packet, *args, **kw):
         """Send a request to the manager."""
-        return self.cxn.sendRequest(self.ID, packet, *args, **kw)
+        return self.cxn.send_request(self.ID, packet, *args, **kw)
 
     @asyncio.coroutine
     def _get_id_list(self, setting, data, tag):
@@ -49,7 +49,7 @@ class AsyncManager:
                   (C.SETTINGS_LIST, serverID, 'w')]
         resp = yield from self._send(packet)
         descr, notes = resp[0][1]
-        settings = self._reorderIDList(resp[1][1])
+        settings = self._reorder_id_list(resp[1][1])
         return (descr.decode('utf-8'), notes.decode('utf-8'), settings)
 
     @asyncio.coroutine
@@ -59,12 +59,11 @@ class AsyncManager:
                   (C.SETTINGS_LIST, serverID, 'w')]
         resp = yield from self._send(packet)
         srv_descr, srv_notes = resp[0][1]
-        settings = resp[1][1]
-        packet = [(C.HELP, (serverID, ID), 'ww') for ID, name in settings]
+        settings = self._reorder_id_list(resp[1][1])
+        packet = [(C.HELP, (serverID, ID), 'ww') for name, ID in settings]
         resp = yield from self._send(packet)
         setting_list = []
-        for s, r in zip(settings, resp):
-            ID, name = s
+        for (name, ID), r in zip(settings, resp):
             descr, accepts, returns, notes = r[1]
             setting_list.append((
                 name, ID, (

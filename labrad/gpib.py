@@ -234,7 +234,7 @@ class ManagedDeviceServer(LabradServer):
         self._next_guid = 0
         # register a message handler for connect/disconnect messages
         handler = lambda c, data: self.handleDeviceMessage(*data)
-        self._cxn.addListener(handler, ID=self.messageID)
+        self._cxn.add_listener(handler, ID=self.messageID)
         if self.deviceManager in self.client.servers:
             yield self.connectToDeviceManager()
 

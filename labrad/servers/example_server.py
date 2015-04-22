@@ -13,13 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import asyncio
+
 from labrad import types as T, util
 from labrad.server import LabradServer, setting
 from labrad.units import m, s
 from labrad.util import hydrant
-
-from twisted.internet import defer, reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
 
 
 class TestServer(LabradServer):
@@ -33,13 +32,13 @@ class TestServer(LabradServer):
     testMode = True
     shutdownMessage = 987654321
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def initServer(self):
         yield None
         #from registry_wrapper_async import RegistryWrapperAsync
         #self.regWrapper = yield RegistryWrapperAsync.create(self.client, ['', 'Servers', 'Python Test Server'])
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def stopServer(self):
         print('before yield')
         yield None
@@ -54,10 +53,10 @@ class TestServer(LabradServer):
         print('server disconnected:', ID, name)
         self.checkServerWrappers(name)
 
-    @inlineCallbacks
+    @asyncio.coroutine
     def checkServerWrappers(self, name):
         """Check that server wrappers are up to date with the manager."""
-        mgrServers = yield self.client.manager.servers()
+        mgrServers = yield from self.client.manager.servers()
         mgrServers = set(s[1] for s in mgrServers)
         cxnServers = set(self.client.servers.keys())
         if cxnServers == mgrServers:
@@ -67,6 +66,7 @@ class TestServer(LabradServer):
             print('  servers that should be disconnected:', list(cxnServers - mgrServers))
             print('  servers that have not been connected:', list(mgrServers - cxnServers))
 
+    @asyncio.coroutine
     def initContext(self, c):
         c['delay'] = 1*s
         c['dict'] = {}
@@ -74,15 +74,14 @@ class TestServer(LabradServer):
     @setting(2, "Delayed Echo", data='?')
     def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""
-        yield util.wakeupCall(c['delay'][s])
-        returnValue(data)
+        yield from asyncio.sleep(c['delay'][s])
+        return data
 
     @setting(3, "Delayed Echo Deferred", data='?')
     def delayed_echo_deferred(self, c, data):
         """Echo a packet after a specified delay."""
-        d = defer.Deferred()
-        reactor.callLater(c['delay'][s], d.callback, data)
-        return d
+        yield from asyncio.sleep(c['delay'][s])
+        return data
 
     @setting(4, "Echo Delay", delay='v[s]', returns='v[s]')
     def echo_delay(self, c, delay=None):
@@ -122,24 +121,20 @@ class TestServer(LabradServer):
     def exc_in_deferred(self, c, data):
         """Returns a deferred that fires an exception."""
         self.log('Exception in deferred.')
-        d = defer.Deferred()
-        d.addCallback(owie)
-        reactor.callLater(c['delay'][s], d.callback, None)
-        return d
+        yield from asyncio.sleep(c['delay'][s])
+        owie()
 
     @setting(8, "Exc in Errback", data='?')
     def exc_in_errback(self, c, data):
         """Returns a deferred whose errback will be called."""
         self.log('Exception from an errback.')
-        d = defer.Deferred()
-        reactor.callLater(1, d.errback, Exception('Raised by errback.'))
-        return d
+        raise Exception('Raised by errback.')
 
     @setting(9, "Exc in inlineCallback", data='?')
     def exc_in_inlinecallback(self, c, data):
         """Raises an exception in an inlineCallback."""
         self.log('Exception from an inlineCallback.')
-        yield util.wakeupCall(c['delay'][s])
+        yield asyncio.sleep(c['delay'][s])
         raise Exception('Raised in inlineCallback.')
 
     @setting(10, "Bad Return Type", data='?', returns='s')
@@ -176,7 +171,5 @@ class TestServer(LabradServer):
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')
 
-__server__ = TestServer()
-
 if __name__ == '__main__':
-    util.runServer(__server__)
+    util.run_server(TestServer())
