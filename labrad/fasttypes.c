@@ -244,11 +244,10 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         ft_free_cobj(cobj_type);
         cobj_type = ft_create_cobj_type(cobj);
         ft_free_cobj(cobj_tag);
+	cobj_tag = NULL;
     }
-    if (lobj != NULL) Py_DECREF(lobj);
-    ft_free_cobj(cobj);
     PyErr_SetString(PyExc_TypeError, "unsupported python object");
-    return NULL;
+    goto exception;
 
 exception:
     
