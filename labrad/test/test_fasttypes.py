@@ -8,6 +8,15 @@ def test_int():
     assert ft.flatten(4, 'i') == ('\x00\x00\x00\x04', 'i')
 def test_str():
     assert ft.flatten('abcd', 's') == ('\x00\x00\x00\x04abcd', 's')
+def test_simple():
+    assert ft.flatten(None) == ('', '_')
+    assert ft.flatten(True) == ('\x01', 'b')
+    assert ft.flatten(False) == ('\x00', 'b')
+    for x in [1, -1, 2, -2, 2**31-1, -2**31,
+              '', 'a', '\x00\x01\x02\x03']:
+        assert ft.flatten(x)[0] == T.flatten(x)[0]
+        assert ft.flatten(x)[1] == str(T.flatten(x)[1])
+
 def test_wrong_type(): # Figure out the right exceptions to use here
     with pytest.raises(Exception):
         ft.flatten('abcd', 'i')
