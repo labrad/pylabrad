@@ -244,8 +244,9 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         ft_free_cobj(cobj_type);
         cobj_type = ft_create_cobj_type(cobj);
         ft_free_cobj(cobj_tag);
-	cobj_tag = NULL;
+        cobj_tag = NULL;
     }
+    
     PyErr_SetString(PyExc_TypeError, "Python object does not match any provided type tag");
     goto exception;
 
@@ -313,7 +314,7 @@ exception:
 }
 
 COBJ *ft_allocate_memory_for_cobj() {
-    return (COBJ *)malloc(sizeof(COBJ));
+    return (COBJ *)calloc(1, sizeof(COBJ));
 }
 
 COBJ *ft_create_empty_cobj() {
@@ -681,7 +682,7 @@ COBJ *ft_create_cobj_type(COBJ *cobj) {
     unsigned int ui;
     COBJ *cobj_type;
     
-    cobj_type = calloc(1, sizeof(COBJ));
+    cobj_type = ft_allocate_memory_for_cobj();
     
     if (cobj == NULL) {
         PyErr_SetString(PyExc_TypeError, "NULL has no type");
@@ -1180,12 +1181,14 @@ COBJ *ft_convert_ndarray_to_list(COBJ *cobj) {
                 }
             }
             cobj->n = (unsigned int)cobj->dim_arr[0];
+            free(cobj->dim_arr);
             return cobj;
         }
         else {
             cobj->cobj_arr[0] = calloc(1, sizeof(COBJ));
             cobj->cobj_arr[0]->type = cobj->subtype;
             cobj->cobj_arr[0]->istype = TRUE;
+            free(cobj->dim_arr);
             return cobj;
         }
     }
@@ -1211,6 +1214,8 @@ COBJ *ft_convert_ndarray_to_list(COBJ *cobj) {
         cobj->n = 1;
         tcobj->type = cobj->subtype;
     }
+    
+    free(cobj->dim_arr);
     
     return cobj;
     
@@ -2125,7 +2130,7 @@ exception:
 
 PyObject *ft_unflatten_partial_parse(PyObject *o) {
     int si;
-    PyObject *so, *to;
+    PyObject *so, *to, *robj;
     char *s;
     COBJ *cobj_type;
     
@@ -2144,7 +2149,10 @@ PyObject *ft_unflatten_partial_parse(PyObject *o) {
     
     // PyObject_Print(so, stdout, Py_PRINT_RAW);
     
-    return ft_unflatten_no_parse(s, &si, cobj_type);
+    robj = ft_unflatten_no_parse(s, &si, cobj_type);
+    ft_free_cobj(cobj_type);
+    
+    return robj;
     
 exception:
     
@@ -2299,8 +2307,10 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
 
 PyObject *ft_test(PyObject *self, PyObject *args) {
     int i, n;
-    PyObject *tc_mod=0, *tc_list=0, *tc_i;
+    PyObject *tc_mod, *tc_list, *tc_i;
     COBJ *cobj, *cobj_type;
+    
+    tc_mod = tc_list = NULL;
 
     if (!ft_gv_initialized) {
         if (ft_initialize() == EXCEPTION_RAISED) goto exception;
