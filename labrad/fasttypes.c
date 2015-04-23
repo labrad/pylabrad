@@ -246,7 +246,7 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         ft_free_cobj(cobj_tag);
 	cobj_tag = NULL;
     }
-    PyErr_SetString(PyExc_TypeError, "unsupported python object");
+    PyErr_SetString(PyExc_TypeError, "Python object does not match any provided type tag");
     goto exception;
 
 exception:
