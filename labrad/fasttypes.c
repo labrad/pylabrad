@@ -20,8 +20,8 @@ tobj : temporary Python object
 #define FALSE 0
 #define SUCCESS 1
 #define EXCEPTION_RAISED -1
-#define BIG_ENDIAN ">"
-#define LITTLE_ENDIAN "<"
+#define LR_BIG_ENDIAN ">"
+#define LR_LITTLE_ENDIAN "<"
 
 #define LABRAD_BOOL_SIZE 1
 #define LABRAD_INT_SIZE 4
@@ -108,8 +108,8 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds);
 
 // functions to create an internal C representation (COBJ) of supported Python objects
 COBJ *ft_create_cobj_from_pyobj(PyObject *obj);
-    COBJ *ft_allocate_memory_for_cobj();
-    COBJ *ft_create_empty_cobj();
+    COBJ *ft_allocate_memory_for_cobj(void);
+    COBJ *ft_create_empty_cobj(void);
     COBJ *ft_create_cobj_from_pybool(PyObject *obj);
     COBJ *ft_create_cobj_from_pyint_or_pylong(PyObject *obj);
     COBJ *ft_create_cobj_from_pyfloat(PyObject *obj);
@@ -151,9 +151,9 @@ COBJ *ft_create_cobj_tag_from_pystring(PyObject *tt);
     COBJ *ft_create_cobj_tag_from_char_buf(char *buf, int *iptr, int n);
 
 // functions to initialize the global variables
-int ft_initialize();
-    int ft_system_supported();
-    void ft_detect_system_endianness();
+int ft_initialize(void);
+    int ft_system_supported(void);
+    void ft_detect_system_endianness(void);
     int ft_set_send_endianness(PyObject *endianness);
 
 // function to print a cobj
@@ -174,16 +174,16 @@ PyObject *ft_flatten_cobj(COBJ *cobj, COBJ *cobj_type);
 // C equivalent of labrad.types.unflatten, called in similar manner, although type tags must be strings
 PyObject *ft_unflatten(PyObject *self, PyObject *args);
     PyObject *ft_unflatten_partial_parse(PyObject *o);
-    PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type);
+    PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type);
 
 // currently immature test function
 PyObject *ft_test(PyObject *self, PyObject *args);
 
 PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
     int i, n;
-    PyObject *obj, *types, *endianness, *sobj, *lobj, *tobj, *robj;
+    PyObject *obj, *types, *endianness, *sobj, *lobj=0, *tobj, *robj;
     char *kwlist[] = {"obj", "types", "endianness", NULL};
-    COBJ *cobj, *cobj_type, *cobj_tag;
+    COBJ *cobj=0, *cobj_type=0, *cobj_tag=0;
     
     if (!ft_gv_initialized) {
         if (ft_initialize() == EXCEPTION_RAISED) goto exception;
@@ -1633,8 +1633,8 @@ void ft_detect_system_endianness() {
 int ft_set_send_endianness(PyObject *endianness) {
     PyObject *big_endian, *little_endian;
     
-    big_endian = PyString_FromString(BIG_ENDIAN);
-    little_endian = PyString_FromString(LITTLE_ENDIAN);
+    big_endian = PyString_FromString(LR_BIG_ENDIAN);
+    little_endian = PyString_FromString(LR_LITTLE_ENDIAN);
     
     if (!PyString_Check(endianness)) {
         PyErr_SetString(PyExc_TypeError, "endianness must be '>' or '<'");
@@ -1775,8 +1775,8 @@ void ft_print_cobj(COBJ *cobj) {
     if (!cobj->istype) {
         switch (cobj->type) {
             case TIME:
-                printf("secs: %ld\n", cobj->secs);
-                printf("usecs: %ld\n", cobj->usecs);
+                printf("secs: %lld\n", cobj->secs);
+                printf("usecs: %lld\n", cobj->usecs);
         }
     }
     
@@ -2148,7 +2148,7 @@ exception:
     return NULL;
 }
 
-PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
+PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
     int i, n, ni, N, pos;
     unsigned int ui;
     double x, y;
@@ -2157,11 +2157,11 @@ PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
     PyArrayObject *aobj;
 
     if (cobj_type->type == LIST) {
-        ft_appropriate_memcpy(&n, s + *si_ptr, LABRAD_INT_SIZE);
-        *si_ptr += LABRAD_INT_SIZE;
+        ft_appropriate_memcpy(&n, s + *size_ptr, LABRAD_INT_SIZE);
+        *size_ptr += LABRAD_INT_SIZE;
         obj = PyList_New(n);
         for (i=0; i<n; i++) {
-            PyList_SET_ITEM(obj, i, ft_unflatten_no_parse(s, si_ptr, cobj_type->cobj_arr[0]));
+            PyList_SET_ITEM(obj, i, ft_unflatten_no_parse(s, size_ptr, cobj_type->cobj_arr[0]));
         }
     }
     else if (cobj_type->type == NDARRAY || cobj_type->type == NDARRAY_SU) {
@@ -2170,10 +2170,10 @@ PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
         tobj = PyTuple_New(n);
         N = 1;
         for (i=0; i<n; i++) {
-            ft_appropriate_memcpy(&ni, s + *si_ptr, LABRAD_INT_SIZE);
+            ft_appropriate_memcpy(&ni, s + *size_ptr, LABRAD_INT_SIZE);
             PyTuple_SET_ITEM(tobj, i, PyInt_FromLong(ni));
             N *= ni;
-            *si_ptr += LABRAD_INT_SIZE;
+            *size_ptr += LABRAD_INT_SIZE;
         }
         // printf("N: %d\n", N);
         // ft_print_subtype(cobj_type);
@@ -2181,16 +2181,16 @@ PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
         if (cobj_type->subtype == BOOL) {
             obj = PyObject_CallMethod(ft_gv_numpy, "empty", "Os", tobj, "bool_");
             aobj = (PyArrayObject *)obj;
-            memcpy(aobj->data, s + *si_ptr, N*LABRAD_BOOL_SIZE);
+            memcpy(aobj->data, s + *size_ptr, N*LABRAD_BOOL_SIZE);
         }
         else if (cobj_type->subtype == INT32) {
             obj = PyObject_CallMethod(ft_gv_numpy, "empty", "Os", tobj, "int32");
             aobj = (PyArrayObject *)obj;
             pos = 0;
             for (i=0; i<N; i++) {
-                ft_appropriate_memcpy(aobj->data + pos, s + *si_ptr, LABRAD_INT_SIZE);
+                ft_appropriate_memcpy(aobj->data + pos, s + *size_ptr, LABRAD_INT_SIZE);
                 pos += LABRAD_INT_SIZE;
-                *si_ptr += LABRAD_INT_SIZE;
+                *size_ptr += LABRAD_INT_SIZE;
             }
         }
         else if (cobj_type->subtype == UINT32) {
@@ -2198,9 +2198,9 @@ PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
             aobj = (PyArrayObject *)obj;
             pos = 0;
             for (i=0; i<N; i++) {
-                ft_appropriate_memcpy(aobj->data + pos, s + *si_ptr, LABRAD_INT_SIZE);
+                ft_appropriate_memcpy(aobj->data + pos, s + *size_ptr, LABRAD_INT_SIZE);
                 pos += LABRAD_INT_SIZE;
-                *si_ptr += LABRAD_INT_SIZE;
+                *size_ptr += LABRAD_INT_SIZE;
             }
         }
         else if (cobj_type->subtype == FLOAT64 || cobj_type->subtype == FLOAT64_SU) {
@@ -2211,16 +2211,16 @@ PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
             aobj = (PyArrayObject *)obj;
             pos = 0;
             for (i=0; i<N; i++) {
-                // ft_appropriate_memcpy(&x, s + *si_ptr, LABRAD_FLOAT_SIZE);
-                // printf("aobj->data[%d]: %g, p: %p, s[i]: %g, p: %p\n", i, *((double *)(aobj->data + pos)), ((double *)(aobj->data + pos)), x, s + *si_ptr);
+                // ft_appropriate_memcpy(&x, s + *size_ptr, LABRAD_FLOAT_SIZE);
+                // printf("aobj->data[%d]: %g, p: %p, s[i]: %g, p: %p\n", i, *((double *)(aobj->data + pos)), ((double *)(aobj->data + pos)), x, s + *size_ptr);
                 // pos += LABRAD_FLOAT_SIZE;
-                // ft_appropriate_memcpy(&x, s + *si_ptr, LABRAD_FLOAT_SIZE);
+                // ft_appropriate_memcpy(&x, s + *size_ptr, LABRAD_FLOAT_SIZE);
                 // printf("string value: %g, ", x);
                 // printf("data before: %g, ", *((double *)(aobj->data + pos)));
-                ft_appropriate_memcpy(aobj->data + pos, s + *si_ptr, LABRAD_FLOAT_SIZE);
+                ft_appropriate_memcpy(aobj->data + pos, s + *size_ptr, LABRAD_FLOAT_SIZE);
                 // printf("data after: %g\n", *((double *)(aobj->data + pos)));
                 pos += LABRAD_FLOAT_SIZE;
-                *si_ptr += LABRAD_FLOAT_SIZE;
+                *size_ptr += LABRAD_FLOAT_SIZE;
             }
             // printf("%d\n", __LINE__);
         }
@@ -2229,9 +2229,9 @@ PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
             aobj = (PyArrayObject *)obj;
             pos = 0;
             for (i=0; i<2*N; i++) {
-                ft_appropriate_memcpy(aobj->data + pos, s + *si_ptr, LABRAD_FLOAT_SIZE);
+                ft_appropriate_memcpy(aobj->data + pos, s + *size_ptr, LABRAD_FLOAT_SIZE);
                 pos += LABRAD_FLOAT_SIZE;
-                *si_ptr += LABRAD_FLOAT_SIZE;
+                *size_ptr += LABRAD_FLOAT_SIZE;
             }
         }
         
@@ -2242,52 +2242,52 @@ PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
         }
     }
     else if (cobj_type->type == CLUSTER) {
-        ft_appropriate_memcpy(&n, s + *si_ptr, LABRAD_INT_SIZE);
-        *si_ptr += LABRAD_INT_SIZE;
+        ft_appropriate_memcpy(&n, s + *size_ptr, LABRAD_INT_SIZE);
+        *size_ptr += LABRAD_INT_SIZE;
         obj = PyTuple_New(n);
         for (i=0; i<n; i++) {
-            PyTuple_SET_ITEM(obj, i, ft_unflatten_no_parse(s, si_ptr, cobj_type->cobj_arr[i]));
+            PyTuple_SET_ITEM(obj, i, ft_unflatten_no_parse(s, size_ptr, cobj_type->cobj_arr[i]));
         }
     }
     else if (cobj_type->type == INT32) {
-        ft_appropriate_memcpy(&n, s + *si_ptr, LABRAD_INT_SIZE);
-        *si_ptr += LABRAD_INT_SIZE;
+        ft_appropriate_memcpy(&n, s + *size_ptr, LABRAD_INT_SIZE);
+        *size_ptr += LABRAD_INT_SIZE;
         obj = PyInt_FromLong(n);
     }
     else if (cobj_type->type == UINT32) {
-        ft_appropriate_memcpy(&ui, s + *si_ptr, LABRAD_INT_SIZE);
-        *si_ptr += LABRAD_INT_SIZE;
+        ft_appropriate_memcpy(&ui, s + *size_ptr, LABRAD_INT_SIZE);
+        *size_ptr += LABRAD_INT_SIZE;
         obj = PyLong_FromUnsignedLong(ui);
     }
     else if (cobj_type->type == FLOAT64 || cobj_type->type == FLOAT64_SU) {
-        ft_appropriate_memcpy(&x, s + *si_ptr, LABRAD_FLOAT_SIZE);
-        *si_ptr += LABRAD_FLOAT_SIZE;
+        ft_appropriate_memcpy(&x, s + *size_ptr, LABRAD_FLOAT_SIZE);
+        *size_ptr += LABRAD_FLOAT_SIZE;
         obj = PyFloat_FromDouble(x);
         if (cobj_type->type == FLOAT64_SU && strcmp(cobj_type->str, "*") != 0) {
             obj = PyObject_CallMethod(ft_gv_labrad_types, "Value", "Os", obj, cobj_type->str);
         }
     }
     else if (cobj_type->type == COMPLEX128 || cobj_type->type == COMPLEX128_SU) {
-        ft_appropriate_memcpy(&x, s + *si_ptr, LABRAD_FLOAT_SIZE);
-        *si_ptr += LABRAD_FLOAT_SIZE;
-        ft_appropriate_memcpy(&y, s + *si_ptr, LABRAD_FLOAT_SIZE);
-        *si_ptr += LABRAD_FLOAT_SIZE;
+        ft_appropriate_memcpy(&x, s + *size_ptr, LABRAD_FLOAT_SIZE);
+        *size_ptr += LABRAD_FLOAT_SIZE;
+        ft_appropriate_memcpy(&y, s + *size_ptr, LABRAD_FLOAT_SIZE);
+        *size_ptr += LABRAD_FLOAT_SIZE;
         obj = PyComplex_FromDoubles(x, y);
         if (cobj_type->type == COMPLEX128_SU && strcmp(cobj_type->str, "*") != 0) {
             obj = PyObject_CallMethod(ft_gv_labrad_types, "Value", "Os", obj, cobj_type->str);
         }
     }
     else if (cobj_type->type == STRING) {
-        ft_appropriate_memcpy(&n, s + *si_ptr, LABRAD_INT_SIZE);
-        *si_ptr += LABRAD_INT_SIZE;
+        ft_appropriate_memcpy(&n, s + *size_ptr, LABRAD_INT_SIZE);
+        *size_ptr += LABRAD_INT_SIZE;
         obj = PyString_FromStringAndSize(NULL, n);
         buf = ((PyStringObject *)obj)->ob_sval;
-        memcpy(buf, s + *si_ptr, n);
-        *si_ptr += n;
+        memcpy(buf, s + *size_ptr, n);
+        *size_ptr += n;
     }
     else if (cobj_type->type == BOOL) {
-        ft_appropriate_memcpy(&c, s + *si_ptr, LABRAD_BOOL_SIZE);
-        *si_ptr += LABRAD_BOOL_SIZE;
+        ft_appropriate_memcpy(&c, s + *size_ptr, LABRAD_BOOL_SIZE);
+        *size_ptr += LABRAD_BOOL_SIZE;
         obj = PyBool_FromLong(c);
     }
      
@@ -2296,7 +2296,7 @@ PyObject *ft_unflatten_no_parse(char *s, int *si_ptr, COBJ *cobj_type) {
 
 PyObject *ft_test(PyObject *self, PyObject *args) {
     int i, n;
-    PyObject *tc_mod, *tc_list, *tc_i;
+    PyObject *tc_mod=0, *tc_list=0, *tc_i;
     COBJ *cobj, *cobj_type;
 
     if (!ft_gv_initialized) {
