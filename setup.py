@@ -15,9 +15,11 @@ Operating System :: OS Independent
 Programming Language :: Python
 Topic :: Scientific/Engineering"""
 
-from distutils.core import setup
+from distutils.core import setup, Extension
 
 doclines = __doc__.split('\n')
+
+module1 = Extension('labrad.fasttypes', sources = ['labrad/fasttypes.c'])
 
 setup(
     name = 'pylabrad',
@@ -26,7 +28,7 @@ setup(
     author_email = 'maffoo@users.sourceforge.net',
     license = 'http://www.gnu.org/licenses/gpl-2.0.html',
     platforms = ['ANY'],
-    
+    ext_modules = [module1],
     url = 'http://sourceforge.net/projects/pylabrad/',
     download_url = '',
     
