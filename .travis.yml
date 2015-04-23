@@ -11,7 +11,9 @@ before_script:
   - wget https://bintray.com/artifact/download/maffoo/generic/scalabrad-0.2-SNAPSHOT.tar.gz -O /tmp/scalabrad-0.2-SNAPSHOT.tar.gz
   - tar -xvf /tmp/scalabrad-0.2-SNAPSHOT.tar.gz
   - export PATH=$PATH:$PWD/scalabrad-0.2-SNAPSHOT/bin/
-script: scripts/test/test.sh
+  - mkdir test
+  - cd test
+script: ../scripts/test/test.sh
 after_success:
   - coveralls
 
