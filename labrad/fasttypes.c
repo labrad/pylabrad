@@ -2353,8 +2353,8 @@ exception:
 }
 
 static PyMethodDef fasttypes_methods[] = {
-    {"flatten", (PyCFunction)ft_flatten, METH_VARARGS | METH_KEYWORDS, "flatten() doc string."},
-    {"unflatten", ft_unflatten, METH_VARARGS, "unflatten() doc string."},
+    {"flatten", (PyCFunction)ft_flatten, METH_VARARGS | METH_KEYWORDS, "flatten(obj, endianness='>') returns (data, typetag)."},
+    {"unflatten", ft_unflatten, METH_VARARGS, "unflatten((data, typetag)) returns the unflattened data."},
     {"test", ft_test, METH_VARARGS, "test() doc string."},
     {NULL, NULL}
 };
