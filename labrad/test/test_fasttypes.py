@@ -1,5 +1,6 @@
 import pytest
 import labrad.units as U
+import numpy as np
 import labrad.fasttypes as ft
 import labrad.types as T
 
@@ -22,15 +23,47 @@ def test_wrong_type(): # Figure out the right exceptions to use here
         ft.flatten('abcd', 'i')
     with pytest.raises(Exception):
         ft.flatten(4, 's')
+def test_multiple_types():
+    assert ft.flatten(32, ['s', 'i', 'v[]'])[1] == 'i'
 def test_list():
     assert all(T.unflatten(*ft.flatten([1,2,3])) == [1,2,3])
     (data, tt) = T.flatten([1,2,3])
     data, tt = str(data), str(tt)
     assert all(ft.unflatten((data, tt)) == [1,2,3])
     assert len(ft.flatten(['a', 'bc', 'def'])[0])==22
+def test_cluster_data():
+    data = ('abc', 1)
+    assert ft.flatten(data)[0] == T.flatten(data)[0]
+def test_cluster_tag():
+    assert ft.flatten((1, 'abc', 3.2))[1] == '(isv[])'
 def test_list_w_tag():
     assert str(ft.flatten(['a', 'bc', 'def'])[1])=='*s'
     assert ft.flatten([1,2,3]) == ft.flatten([1,2,3], '*i')
+def test_values():
+    assert ft.flatten(3.2)[1] == 'v[]'
+    assert ft.flatten(3.2*U.ns)[1] == 'v[ns]'
+    assert ft.flatten(3+4j)[1] == 'c[]'
+    assert ft.flatten(4j*U.V)[1] == 'c[V]'
+def test_float_list():
+    assert ft.flatten([1.0, 2.0, 3.0])[1] == '*v[]'
+def test_float_list_tt():
+    assert ft.flatten([1.0, 2.0, 3.0], '*v[]')[1] == '*v[]'
+def test_ndarray():
+    assert ft.flatten(np.arange(3)*1.5)[1] == '*1v[]'
+def test_ndarray_tt():
+    assert ft.flatten(np.arange(3)*1.5, '*v[]')[1] == '*v[]'
+def test_value_array():
+    assert ft.flatten(np.arange(10)*U.ns)[1] == '*v[ns]'
+def test_value_array_tt():
+    assert ft.flatten(np.arange(10)*U.ns, '*v[ns]') == '*v[ns]'
+def test_cluster_list():
+    assert ft.flatten([('foo', 123), ('bar', 42)])[1] == '*(si)'
+def test_illegal_typetag():
+    with pytest.raises(SyntaxError):
+        ft.flatten(1, 'q')
+def test_illegal_listtag():
+    with pytest.raises(SyntaxError):
+        ft.flatten(1, '*q')
 
 if __name__ == '__main__':
     pytest.main(['-v', __file__])
