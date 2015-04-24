@@ -49,13 +49,13 @@ def test_float_list():
 def test_float_list_tt():
     assert ft.flatten([1.0, 2.0, 3.0], '*v[]')[1] == '*v[]'
 def test_ndarray():
-    assert ft.flatten(np.arange(3)*1.5)[1] == '*1v[]'
+    assert ft.flatten(np.arange(3)*1.5)[1] == '*v[]'
 def test_ndarray_tt():
     assert ft.flatten(np.arange(3)*1.5, '*v[]')[1] == '*v[]'
 def test_value_array():
     assert ft.flatten(np.arange(10)*U.ns)[1] == '*v[ns]'
 def test_value_array_tt():
-    assert ft.flatten(np.arange(10)*U.ns, '*v[ns]') == '*v[ns]'
+    assert ft.flatten(np.arange(10)*U.ns, '*v[ns]')[1] == '*v[ns]'
 def test_cluster_list():
     assert ft.flatten([('foo', 123), ('bar', 42)])[1] == '*(si)'
 def test_illegal_typetag():

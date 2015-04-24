@@ -241,6 +241,8 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         // ft_print_cobj(cobj_tag);
         if (cobj_tag == NULL) goto exception;
         cobj_type = ft_upgrade_first_cobj_to_encompass_second(cobj_type, cobj_tag, FALSE);
+        // printf("%d\n", __LINE__);
+        // ft_print_cobj(cobj_type);
         // if (cobj_type == NULL) printf("type didn't match tag\n");
         /*
         if (PyErr_Occurred() != NULL) {
@@ -253,6 +255,8 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         // if (PyErr_Occurred() != NULL) PyErr_Clear();
         if (cobj_type != NULL) {
             cobj = ft_upgrade_first_cobj_to_encompass_second(cobj, cobj_type, FALSE);
+            // printf("%d\n", __LINE__);
+            // ft_print_cobj(cobj);
             /*
             if (cobj == NULL) printf("object didn't match upgraded type\n");
             if (PyErr_Occurred() != NULL) {
@@ -1039,7 +1043,7 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
             cobj2->type = NDARRAY;
             free(cobj2->str);
             if (cobj2->subtype == FLOAT64_SU) cobj2->subtype = FLOAT64;
-            else cobj2->subtype = COMPLEX128;
+            else if (cobj2->subtype == COMPLEX128_SU) cobj2->subtype = COMPLEX128;
         }
         if (cobj2->type == NDARRAY) {
             if (cobj1->n != cobj2->n) goto exception;
@@ -1187,7 +1191,7 @@ COBJ *ft_convert_ndarray_to_list(COBJ *cobj) {
         free(cobj->str);
         cobj->str = NULL;
         if (cobj->subtype == FLOAT64_SU) cobj->subtype = FLOAT64;
-        else cobj->subtype = COMPLEX128;
+        else if (cobj->subtype == COMPLEX128_SU) cobj->subtype = COMPLEX128;
     }
     // printf("%d\n", __LINE__);
     
@@ -1330,8 +1334,15 @@ int ft_size(COBJ *cobj) {
     if (type == FLOAT64 || type == FLOAT64_SU) return LABRAD_FLOAT_SIZE;
     if (type == COMPLEX128 || type == COMPLEX128_SU) return 2*LABRAD_FLOAT_SIZE;
     if (type == STRING) return LABRAD_INT_SIZE + cobj->n;
-    if (type == CLUSTER || type == LIST) {
+    if (type == CLUSTER) {
         size = 0;
+        for (ui=0; ui<cobj->n; ui++) {
+            size += ft_size(cobj->cobj_arr[ui]);
+        }
+        return size;
+    }
+    if (type == LIST) {
+        size = LABRAD_INT_SIZE;
         for (ui=0; ui<cobj->n; ui++) {
             size += ft_size(cobj->cobj_arr[ui]);
         }
@@ -1451,6 +1462,7 @@ COBJ *ft_create_cobj_tag_from_char_buf(char *buf, int *iptr, int n) {
         return ft_create_cobj(UINT32, TRUE);
     }
     else if (buf[i] == 'v' || buf[i] == 'c') {
+        // printf("%d\n", __LINE__);
         if (buf[i] == 'v') cobj_tag = ft_create_cobj(FLOAT64_SU, TRUE);
         else cobj_tag = ft_create_cobj(COMPLEX128_SU, TRUE);
         if (i == n-1 || buf[i+1] != '[') {
