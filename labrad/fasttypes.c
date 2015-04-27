@@ -29,7 +29,8 @@ tobj : temporary Python object
 #define LABRAD_FLOAT_SIZE 8
 
 // supported internal data types
-#define EMPTY 0
+#define EMPTY -1
+#define ARBITRARY 0
 #define BOOL 1
 #define UINT31 2
 #define INT32 3
@@ -139,8 +140,8 @@ COBJ *ft_create_cobj_type(COBJ *cobj);
 // necessarily complex function that takes an object/type and a type and makes the first more general to encompass the second. eg: int, uint returns float since this
 // is the smallest type able to represent every int and uint value. When the second argument contains placeholder values (such as v[]) it can be modified. eg: v[s], v[]
 // will not only return v[s] but modify the second argument to be v[s].
-COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int exceptions);
-    COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2);
+COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int exceptions, int numeric_types_upgradeable);
+    COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int numeric_types_upgradeable);
     COBJ *ft_convert_ndarray_to_list(COBJ *cobj);
     COBJ *ft_create_cobj_from_ndarray_i(COBJ *cobj, int i);
     int ft_size(COBJ *cobj);
@@ -175,9 +176,6 @@ PyObject *ft_flatten_cobj(COBJ *cobj, COBJ *cobj_type);
 PyObject *ft_unflatten(PyObject *self, PyObject *args);
     PyObject *ft_unflatten_partial_parse(PyObject *o);
     PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type);
-
-// currently immature test function
-PyObject *ft_test(PyObject *self, PyObject *args);
 
 PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
     int i, n;
@@ -240,7 +238,7 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         // printf("%d\n", __LINE__);
         // ft_print_cobj(cobj_tag);
         if (cobj_tag == NULL) goto exception;
-        cobj_type = ft_upgrade_first_cobj_to_encompass_second(cobj_type, cobj_tag, FALSE);
+        cobj_type = ft_upgrade_first_cobj_to_encompass_second(cobj_type, cobj_tag, FALSE, FALSE);
         // printf("%d\n", __LINE__);
         // ft_print_cobj(cobj_type);
         // if (cobj_type == NULL) printf("type didn't match tag\n");
@@ -254,7 +252,7 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         */
         // if (PyErr_Occurred() != NULL) PyErr_Clear();
         if (cobj_type != NULL) {
-            cobj = ft_upgrade_first_cobj_to_encompass_second(cobj, cobj_type, FALSE);
+            cobj = ft_upgrade_first_cobj_to_encompass_second(cobj, cobj_type, FALSE, FALSE);
             // printf("%d\n", __LINE__);
             // ft_print_cobj(cobj);
             /*
@@ -269,7 +267,9 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
             // if (PyErr_Occurred() != NULL) PyErr_Clear();
             if (cobj != NULL) {
                 // ft_print_cobj(cobj_type);
+                // printf("%d\n", __LINE__);
                 robj = ft_flatten_cobj(cobj, cobj_type);
+                // printf("%d\n", __LINE__);
                 if (robj == NULL) goto exception;
                 
                 // clean up memory
@@ -785,7 +785,7 @@ COBJ *ft_create_list_type(COBJ *cobj) {
     
     if (cobj->n == 0) {
         cobj_type1 = calloc(1, sizeof(COBJ));
-        cobj_type1->type = EMPTY;
+        cobj_type1->type = ARBITRARY;
         cobj_type1->istype = TRUE;
         return cobj_type1;
     }
@@ -799,7 +799,7 @@ COBJ *ft_create_list_type(COBJ *cobj) {
             ft_free_cobj(cobj_type1);
             goto exception;
         }
-        cobj_type1 = ft_upgrade_first_cobj_to_encompass_second(cobj_type1, cobj_type2, TRUE);
+        cobj_type1 = ft_upgrade_first_cobj_to_encompass_second(cobj_type1, cobj_type2, TRUE, TRUE);
         ft_free_cobj(cobj_type2);
         if (cobj_type1 == NULL) goto exception;
     }
@@ -812,25 +812,29 @@ exception:
 }
 
 // handles both cobj1->istype == TRUE and FALSE, cobj2->istype == TRUE always
-COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int exceptions) {
+COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int exceptions, int numeric_types_upgradeable) {
     unsigned int ui;
     COBJ *cobj_copy;
     /* int N1, N2; */
     
-    // handle NULL, EMPTY
+    // handle NULL, ARBITRARY, EMPTY
     if (cobj1 == NULL || cobj2 == NULL) goto exception;
     
-    if (cobj1->type == EMPTY){
-        if (cobj1->istype == FALSE) return cobj1;
+    if (cobj2->type == ARBITRARY) return cobj1;
+    
+    if (cobj1->type == EMPTY) {
         if (cobj2->type == EMPTY) return cobj1;
+        goto exception;
+    }
+    
+    if (cobj1->type == ARBITRARY) {
+        if (cobj1->istype == FALSE) return cobj1;
         else {
             ft_free_cobj(cobj1);
             return ft_create_cobj_type(cobj2);
         }
     }
         
-    if (cobj2->type == EMPTY) return cobj1;
-    
     // handle BOOL, STRING, TIME, ERROR
     if ((cobj1->type == BOOL && cobj2->type != BOOL) ||
         (cobj1->type == STRING && cobj2->type != STRING) ||
@@ -851,7 +855,7 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
         if (cobj2->type != CLUSTER || cobj1->n != cobj2->n) goto exception;
         
         for (ui=0; ui<cobj1->n; ui++) {
-            cobj1->cobj_arr[ui] = ft_upgrade_first_cobj_to_encompass_second(cobj1->cobj_arr[ui], cobj2->cobj_arr[ui], exceptions);
+            cobj1->cobj_arr[ui] = ft_upgrade_first_cobj_to_encompass_second(cobj1->cobj_arr[ui], cobj2->cobj_arr[ui], exceptions, numeric_types_upgradeable);
             if (cobj1->cobj_arr[ui] == NULL) goto exception;
         }
         
@@ -874,6 +878,14 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
             }
             return cobj1;
         }
+        if (cobj2->type == FLOAT64_SU && cobj2->str[0] == '*') {
+            cobj2->type = FLOAT64;
+            free(cobj2->str);
+        }
+        else if (cobj2->type == COMPLEX128_SU && cobj2->str[0] == '*') {
+            cobj2->type = COMPLEX128;
+            free(cobj2->str);
+        }
         if (cobj2->type == FLOAT64) {
             cobj1->type = FLOAT64;
             if (cobj1->istype == FALSE) {
@@ -893,10 +905,18 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
     }
     
     if (cobj1->type == INT32) {
-        if (cobj2->type == UINT31 || cobj2->type == INT32) {
+        if ((cobj2->type == UINT31 && numeric_types_upgradeable) || cobj2->type == INT32) {
             return cobj1;
         }
-        if (cobj2->type == UINT32 || cobj2->type == FLOAT64) {
+        if (cobj2->type == FLOAT64_SU && cobj2->str[0] == '*') {
+            cobj2->type = FLOAT64;
+            free(cobj2->str);
+        }
+        else if (cobj2->type == COMPLEX128_SU && cobj2->str[0] == '*') {
+            cobj2->type = COMPLEX128;
+            free(cobj2->str);
+        }
+        if ((cobj2->type == UINT32 && numeric_types_upgradeable) || cobj2->type == FLOAT64) {
             cobj1->type = FLOAT64;
             if (cobj1->istype == FALSE) {
                 cobj1->x = (double)cobj1->i;
@@ -915,10 +935,18 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
     }
     
     if (cobj1->type == UINT32) {
-        if (cobj2->type == UINT31 || cobj2->type == UINT32) {
+        if ((cobj2->type == UINT31 && numeric_types_upgradeable) || cobj2->type == UINT32) {
             return cobj1;
         }
-        if (cobj2->type == INT32 || cobj2->type == FLOAT64) {
+        if (cobj2->type == FLOAT64_SU && cobj2->str[0] == '*') {
+            cobj2->type = FLOAT64;
+            free(cobj2->str);
+        }
+        else if (cobj2->type == COMPLEX128_SU && cobj2->str[0] == '*') {
+            cobj2->type = COMPLEX128;
+            free(cobj2->str);
+        }
+        if ((cobj2->type == INT32 && numeric_types_upgradeable) || cobj2->type == FLOAT64) {
             cobj1->type = FLOAT64;
             if (cobj1->istype == FALSE) {
                 cobj1->x = (double)cobj1->n;
@@ -937,14 +965,7 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
     }
     
     if (cobj1->type == FLOAT64) {
-        if (cobj2->type == UINT31 || cobj2->type == INT32 || cobj2->type == UINT32 || cobj2->type == FLOAT64) {
-            return cobj1;
-        }
-        if (cobj2->type == COMPLEX128) {
-            cobj1->type = COMPLEX128;
-            if (cobj1->istype == FALSE) {
-                cobj1->y = 0;
-            }
+        if (((cobj2->type == UINT31 || cobj2->type == INT32 || cobj2->type == UINT32) && numeric_types_upgradeable) || cobj2->type == FLOAT64) {
             return cobj1;
         }
         if (cobj2->type == FLOAT64_SU && cobj2->str[0] == '*') {
@@ -955,6 +976,8 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
         if (cobj2->type == COMPLEX128_SU && cobj2->str[0] == '*') {
             cobj2->type = COMPLEX128;
             free(cobj2->str);
+        }
+        if (cobj2->type == COMPLEX128) {
             cobj1->type = COMPLEX128;
             if (cobj1->istype == FALSE) {
                 cobj1->y = 0;
@@ -965,7 +988,7 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
     }
     
     if (cobj1->type == COMPLEX128) {
-        if (cobj2->type == UINT31 || cobj2->type == INT32 || cobj2->type == UINT32 || cobj2->type == FLOAT64 || cobj2->type == COMPLEX128) {
+        if (((cobj2->type == UINT31 || cobj2->type == INT32 || cobj2->type == UINT32 || cobj2->type == FLOAT64) && numeric_types_upgradeable) || cobj2->type == COMPLEX128) {
             return cobj1;
         }
         if (cobj2->type == COMPLEX128_SU && cobj2->str[0] == '*') {
@@ -1027,7 +1050,7 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
             }
             if (strcmp(cobj1->str, cobj2->str) != 0) goto exception;
             if (cobj1->n != cobj2->n) goto exception;
-            cobj1 = ft_upgrade_first_subtype_to_encompass_second(cobj1, cobj2);
+            cobj1 = ft_upgrade_first_subtype_to_encompass_second(cobj1, cobj2, numeric_types_upgradeable);
             if (cobj1 == NULL) return NULL;
             for (ui=0; ui<cobj1->n; ui++) {
                 if (cobj2->dim_arr[ui] == 0) cobj2->dim_arr[ui] = cobj1->dim_arr[ui];
@@ -1047,7 +1070,7 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
         }
         if (cobj2->type == NDARRAY) {
             if (cobj1->n != cobj2->n) goto exception;
-            cobj1 = ft_upgrade_first_subtype_to_encompass_second(cobj1, cobj2);
+            cobj1 = ft_upgrade_first_subtype_to_encompass_second(cobj1, cobj2, numeric_types_upgradeable);
             if (cobj1 == NULL) return NULL;
             for (ui=0; ui<cobj1->n; ui++) {
                 if (cobj2->dim_arr[ui] == 0) cobj2->dim_arr[ui] = cobj1->dim_arr[ui];
@@ -1057,7 +1080,7 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
         if (cobj2->type == LIST) {
             cobj1 = ft_convert_ndarray_to_list(cobj1);
             if (cobj1 == NULL) return NULL;
-            return ft_upgrade_first_cobj_to_encompass_second(cobj1, cobj2, exceptions);
+            return ft_upgrade_first_cobj_to_encompass_second(cobj1, cobj2, exceptions, numeric_types_upgradeable);
         }
         goto exception;
     }
@@ -1073,14 +1096,14 @@ COBJ *ft_upgrade_first_cobj_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int ex
             // printf("%d\n", __LINE__);
             if (cobj_copy == NULL) goto exception;
             // ft_print_cobj(cobj_copy);
-            cobj1 = ft_upgrade_first_cobj_to_encompass_second(cobj1, cobj_copy, exceptions);
+            cobj1 = ft_upgrade_first_cobj_to_encompass_second(cobj1, cobj_copy, exceptions, numeric_types_upgradeable);
             ft_free_cobj(cobj_copy);
             return cobj1;
         }
         if (cobj2->type == LIST) {
-            if (cobj1->n == 0 || cobj2->cobj_arr[0]->type == EMPTY) return cobj1;
+            if (cobj1->n == 0 || cobj2->cobj_arr[0]->type == ARBITRARY) return cobj1;
             for (ui=0; ui<cobj1->n; ui++) {
-                cobj1->cobj_arr[ui] = ft_upgrade_first_cobj_to_encompass_second(cobj1->cobj_arr[ui], cobj2->cobj_arr[0], exceptions);
+                cobj1->cobj_arr[ui] = ft_upgrade_first_cobj_to_encompass_second(cobj1->cobj_arr[ui], cobj2->cobj_arr[0], exceptions, numeric_types_upgradeable);
                 if (cobj1->cobj_arr[ui] == NULL) goto exception;
             }
             return cobj1;
@@ -1101,7 +1124,7 @@ exception:
     return NULL;
 }
 
-COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2) {
+COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int numeric_types_upgradeable) {
     unsigned int ui;
     int i, N;
     double *arr;
@@ -1120,12 +1143,12 @@ COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2) {
         goto exception;
     }
     
-    // upgrade data if required
+    // upgrade data if required and allowed
     N = 1;
     for (ui=0; ui<cobj1->n; ui++) N *= cobj1->dim_arr[ui];
     
     if (cobj1->subtype == INT32 || cobj1->subtype == UINT32) {
-        if (cobj2->subtype == INT32 || cobj2->subtype == UINT32 || cobj2->subtype == FLOAT64) {
+        if (((cobj2->subtype == INT32 || cobj2->subtype == UINT32) && numeric_types_upgradeable) || cobj2->subtype == FLOAT64) {
             cobj1->subtype = FLOAT64;
             if (!cobj1->istype) {
                 arr = (double *)malloc(N*LABRAD_FLOAT_SIZE);
@@ -1150,7 +1173,7 @@ COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2) {
     }
     
     if (cobj1->subtype == FLOAT64) {
-        if (cobj2->subtype == INT32 || cobj2->subtype == UINT32 || cobj2->subtype == FLOAT64) return cobj1;
+        if (((cobj2->subtype == INT32 || cobj2->subtype == UINT32) && numeric_types_upgradeable) || cobj2->subtype == FLOAT64) return cobj1;
         if (cobj2->subtype == COMPLEX128) {
             cobj1->subtype = COMPLEX128;
             if (!cobj1->istype) {
@@ -1165,7 +1188,7 @@ COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2) {
         goto exception;
     }
     
-    if (cobj1->subtype == COMPLEX128) return cobj1;
+    if (cobj1->subtype == COMPLEX128 && numeric_types_upgradeable) return cobj1;
     
     PyErr_SetString(PyExc_TypeError, "unsupported ndarray subtype");
     goto exception;
@@ -1207,7 +1230,7 @@ COBJ *ft_convert_ndarray_to_list(COBJ *cobj) {
         cobj->n = 1;
         cobj->cobj_arr = (COBJ **)malloc(sizeof(COBJ *));
         cobj->cobj_arr[0] = calloc(1, sizeof(COBJ));
-        cobj->cobj_arr[0]->type = EMPTY;
+        cobj->cobj_arr[0]->type = ARBITRARY;
         cobj->cobj_arr[0]->istype = TRUE;
         return cobj;
     }
@@ -1328,7 +1351,7 @@ int ft_size(COBJ *cobj) {
     
     type = cobj->type;
     
-    if (type == EMPTY) return 0;
+    if (type == ARBITRARY || type == EMPTY) return 0;
     if (type == BOOL) return LABRAD_BOOL_SIZE;
     if (type == UINT31 || type == INT32 || type == UINT32) return LABRAD_INT_SIZE;
     if (type == FLOAT64 || type == FLOAT64_SU) return LABRAD_FLOAT_SIZE;
@@ -1445,9 +1468,13 @@ COBJ *ft_create_cobj_tag_from_char_buf(char *buf, int *iptr, int n) {
     
     if (i == n) return NULL;
     
-    if (buf[i] == '_' || buf[i] == '?') {
+    if (buf[i] == '_') {
         (*iptr)++;
         return ft_create_cobj(EMPTY, TRUE);
+    }
+    else if (buf[i] == '?') {
+        (*iptr)++;
+        return ft_create_cobj(ARBITRARY, TRUE);
     }
     else if (buf[i] == 'b') {
         (*iptr)++;
@@ -1466,6 +1493,8 @@ COBJ *ft_create_cobj_tag_from_char_buf(char *buf, int *iptr, int n) {
         if (buf[i] == 'v') cobj_tag = ft_create_cobj(FLOAT64_SU, TRUE);
         else cobj_tag = ft_create_cobj(COMPLEX128_SU, TRUE);
         if (i == n-1 || buf[i+1] != '[') {
+            // if (cobj_tag->type == FLOAT64_SU) cobj_tag->type = FLOAT64;
+            // else if (cobj_tag->type == COMPLEX128_SU) cobj_tag->type = COMPLEX128;
             cobj_tag->str = (char *)malloc(2*sizeof(char));
             strcpy(cobj_tag->str, "*");
             (*iptr)++;
@@ -1483,8 +1512,10 @@ COBJ *ft_create_cobj_tag_from_char_buf(char *buf, int *iptr, int n) {
             goto exception;
         }
         if (len == 0) {
-            cobj_tag->str = (char *)malloc(2*sizeof(char));
-            strcpy(cobj_tag->str, "*");
+            if (cobj_tag->type == FLOAT64_SU) cobj_tag->type = FLOAT64;
+            else if (cobj_tag->type == COMPLEX128_SU) cobj_tag->type = COMPLEX128;
+            // cobj_tag->str = (char *)malloc(2*sizeof(char));
+            // strcpy(cobj_tag->str, "*");
             *iptr = i + 1;
             return cobj_tag;
         }
@@ -1898,6 +1929,9 @@ void ft_print_type_text(int type) {
         case EMPTY:
             printf("EMPTY");
             break;
+        case ARBITRARY:
+            printf("ARBITRARY");
+            break;
         case BOOL:
             printf("BOOL");
             break;
@@ -1957,12 +1991,20 @@ PyObject *ft_flatten_cobj(COBJ *cobj, COBJ *cobj_type) {
     so = NULL;
      
     size = ft_size(cobj);
+    // printf("size: %d\n", size);
     str = ft_create_type_string(cobj_type, &len);
     
     tup = PyTuple_New(2);
     
-    so = (PyStringObject *)PyString_FromStringAndSize(NULL, size);
+    if (size > 0) {
+        so = (PyStringObject *)PyString_FromStringAndSize(NULL, size);
+    }
+    else {
+        so = (PyStringObject *)PyString_FromString("");
+    }
+    
     if (so == NULL) {
+        // printf("%d\n", __LINE__);
         PyErr_SetString(PyExc_MemoryError, "out of memory");
         goto exception;
     }
@@ -2084,6 +2126,9 @@ char *ft_create_type_string(COBJ *cobj, int *len_ptr) {
     else if (cobj->type == STRING) {
         str1 = ft_append_char(str1, &len1, 's');
     }
+    else if (cobj->type == ARBITRARY) {
+        str1 = ft_append_char(str1, &len1, '?');
+    }
     else if (cobj->type == EMPTY) {
         str1 = ft_append_char(str1, &len1, '_');
     }
@@ -2116,7 +2161,7 @@ int ft_write_to_buf(COBJ *cobj, char *buf) {
     unsigned int ui;
     int i, n, size = 0;
     
-    if (cobj->type == EMPTY) {
+    if (cobj->type == ARBITRARY) {
         size = 0;
     }
     else if (cobj->type == BOOL) {
@@ -2413,70 +2458,9 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
     return obj;
 }
 
-PyObject *ft_test(PyObject *self, PyObject *args) {
-    int i, n;
-    PyObject *tc_mod, *tc_list, *tc_i;
-    COBJ *cobj, *cobj_type;
-    
-    tc_mod = tc_list = NULL;
-
-    if (!ft_gv_initialized) {
-        if (ft_initialize() == EXCEPTION_RAISED) goto exception;
-    }
-    
-    tc_mod = PyImport_ImportModule("fasttypes_testcases");
-    if (PyErr_Occurred() != NULL) goto exception;
-    
-    tc_list = PyObject_GetAttrString(tc_mod, "tests");
-    if (tc_list == NULL || !PyList_Check(tc_list)) goto exception;
-    
-    n = PyList_GET_SIZE(tc_list);
-    for (i=0; i<n; i++) {
-        printf("%d\n", i);
-        tc_i = PyList_GET_ITEM(tc_list, i);
-
-        if (tc_i != NULL) {
-            PyObject_Print(tc_i, stdout, Py_PRINT_RAW);
-            printf("\n\n");
-            
-            cobj = ft_create_cobj_from_pyobj(tc_i);
-            if (cobj == NULL) goto exception;
-            ft_print_cobj(cobj);
-            printf("\n");
-            
-            cobj_type = ft_create_cobj_type(cobj);
-            if (cobj_type == NULL) {
-                ft_free_cobj(cobj);
-                goto exception;
-            }
-            ft_print_cobj(cobj_type);
-            printf("\n");
-            
-            ft_free_cobj(cobj);
-            ft_free_cobj(cobj_type);
-        }
-    }
-    
-    printf("All %d test cases passed.\n", n);
-    
-    Py_DECREF(tc_list);
-    Py_DECREF(tc_mod);
-    
-    Py_INCREF(Py_None);
-    return Py_None;
-    
-exception:
-
-    if (tc_list != NULL) Py_DECREF(tc_list);
-    if (tc_mod != NULL) Py_DECREF(tc_mod);
-
-    return NULL;
-}
-
 static PyMethodDef fasttypes_methods[] = {
     {"flatten", (PyCFunction)ft_flatten, METH_VARARGS | METH_KEYWORDS, "flatten(obj, endianness='>') returns (data, typetag)."},
     {"unflatten", ft_unflatten, METH_VARARGS, "unflatten((data, typetag)) returns the unflattened data."},
-    {"test", ft_test, METH_VARARGS, "test() doc string."},
     {NULL, NULL, 0, NULL}
 };
 
