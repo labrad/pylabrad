@@ -129,15 +129,46 @@ class NumberDict(dict):
 
 
 class Lazy(object):
-    """A method decorator to implement lazy properties.
+    """A method decorator which converts methods to lazy properties.
 
     A lazy property is computed on demand the first time it is accessed,
     and the result of the computation is then stored in the object's instance
     __dict__ so that subsequent access is just a dict lookup and incurs no
     overhead from descriptor access.
+
+    Example use:
+
+    class Foo(object):
+        @Lazy
+        def bar(self):
+            return intense_computation(self, ...)
+
+    >>> foo = Foo()
+    >>> result_first_access = foo.bar
+    # Incurs long computation. Note the lack of ().
+    
+    >>> result_second_access = foo.bar
+    # Incurs no computation. Looks up previously computed and cached result.
+
+    Methods decorated by Lazy must take no arguments aside from the implicit
+    self argument and must return a deterministic result. Also note that the
+    decorated method is accessed as an attribute, i.e. no ().
+
+    Attributes:
+        f (function): The decorated function. f is called only the first time
+            the decorated method is accessed.
     """
 
     def __init__(self, f):
+        """Initialize a Lazy property
+
+        Args:
+            f (function): The function to by lazified.
+
+        Returns nothing. However, Lazy is used as a decorator on methods, so
+        Lazy.__new__ is called automatically at class creation time and returns
+        a Lazy instance which wraps the original method f.
+        """
         self.f = f
 
     def __get__(self, obj, objtype=None):
