@@ -1147,6 +1147,57 @@ COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int
     N = 1;
     for (ui=0; ui<cobj1->n; ui++) N *= cobj1->dim_arr[ui];
     
+    if (cobj1->subtype == INT32) {
+        if ((cobj2->subtype == UINT32 && numeric_types_upgradeable) || cobj2->subtype == FLOAT64) {
+            cobj1->subtype = FLOAT64;
+            if (!cobj1->istype) {
+                arr = (double *)malloc(N*LABRAD_FLOAT_SIZE);
+                for (i=0; i<N; i++) arr[i] = (double)((int *)cobj1->arr)[i];
+                cobj1->arr = arr;
+                cobj1->isarrowned = TRUE;
+            }
+            return cobj1;
+        }
+        if (cobj2->subtype == COMPLEX128) {
+            cobj1->subtype = COMPLEX128;
+            if (!cobj1->istype) {
+                arr = (double *)calloc(2*N, LABRAD_FLOAT_SIZE);
+                for (i=0; i<2*N; i+=2) arr[i] = (double)((int *)cobj1->arr)[i];
+                cobj1->arr = arr;
+                cobj1->isarrowned = TRUE;
+            }
+            return cobj1;
+        }
+        PyErr_SetString(PyExc_TypeError, "unsupported ndarray subtype");
+        goto exception;
+    }
+    
+    if (cobj1->subtype == UINT32) {
+        if ((cobj2->subtype == INT32 && numeric_types_upgradeable) || cobj2->subtype == FLOAT64) {
+            cobj1->subtype = FLOAT64;
+            if (!cobj1->istype) {
+                arr = (double *)malloc(N*LABRAD_FLOAT_SIZE);
+                for (i=0; i<N; i++) arr[i] = (double)((unsigned int *)cobj1->arr)[i];
+                cobj1->arr = arr;
+                cobj1->isarrowned = TRUE;
+            }
+            return cobj1;
+        }
+        if (cobj2->subtype == COMPLEX128) {
+            cobj1->subtype = COMPLEX128;
+            if (!cobj1->istype) {
+                arr = (double *)calloc(2*N, LABRAD_FLOAT_SIZE);
+                for (i=0; i<2*N; i+=2) arr[i] = (double)((unsigned int *)cobj1->arr)[i];
+                cobj1->arr = arr;
+                cobj1->isarrowned = TRUE;
+            }
+            return cobj1;
+        }
+        PyErr_SetString(PyExc_TypeError, "unsupported ndarray subtype");
+        goto exception;
+    }
+    
+    /*
     if (cobj1->subtype == INT32 || cobj1->subtype == UINT32) {
         if (((cobj2->subtype == INT32 || cobj2->subtype == UINT32) && numeric_types_upgradeable) || cobj2->subtype == FLOAT64) {
             cobj1->subtype = FLOAT64;
@@ -1171,6 +1222,7 @@ COBJ *ft_upgrade_first_subtype_to_encompass_second(COBJ *cobj1, COBJ *cobj2, int
         PyErr_SetString(PyExc_TypeError, "unsupported ndarray subtype");
         goto exception;
     }
+    */
     
     if (cobj1->subtype == FLOAT64) {
         if (((cobj2->subtype == INT32 || cobj2->subtype == UINT32) && numeric_types_upgradeable) || cobj2->subtype == FLOAT64) return cobj1;
