@@ -183,9 +183,16 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue((round_trip(np.arange(5)*ns) == np.arange(5)*ns).all()) # array
         self.assertEqual(round_trip(5*GHz*ns), 5)  # Dimensionless
         self.assertIsInstance(round_trip(3*blank), type(3*blank)) # Don't loose dimensionless type
+
     def testUnitCreation(self):
         self.assertIsInstance(units.Unit('test0', 1.0, units.hplanck/(2*units.e)), units.Unit)
         self.assertTrue((units.Unit('phi0')**2).isCompatible(units.Unit('phi0^2')))
+
+    def testInUnitsOf(self):
+        s = units.Unit('s')
+        ms = units.Unit('ms')
+        self.assertTrue((1*s).inUnitsOf(ms) == 1000*ms)
+        self.assertTrue((1*s).inUnitsOf('ms') == 1000*ms)
 
 if __name__ == "__main__":
     unittest.main()

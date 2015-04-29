@@ -399,7 +399,8 @@ class WithUnit(object):
         @raises TypeError: if any of the specified units are not compatible
         with the original unit
         """
-        return self[unit] * unit
+        u = Unit(unit)
+        return self[u] * u
 
     # Contributed by Berthold Hoellmann
     def inBaseUnits(self):
