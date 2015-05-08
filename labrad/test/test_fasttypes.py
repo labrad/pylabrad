@@ -4,6 +4,11 @@ import numpy as np
 import labrad.fasttypes as ft
 import labrad.types as T
 
+def check_flatten(data, expected_tag, expected_bytes):
+    flatdata, tt = ft.flatten(data)
+    assert tt==expected_tag
+    assert len(flatdata)==expected_bytes
+
 def test_int():
     assert ft.flatten(4) == ('\x00\x00\x00\x04', 'i')
     assert ft.flatten(4, 'i') == ('\x00\x00\x00\x04', 'i')
@@ -45,15 +50,15 @@ def test_values():
     assert ft.flatten(3+4j)[1] == 'c[]'
     assert ft.flatten(4j*U.V)[1] == 'c[V]'
 def test_float_list():
-    assert ft.flatten([1.0, 2.0, 3.0])[1] == '*v[]'
+    check_flatten([1.0, 2.0, 3.0],'*v[]', 8*3+4)
 def test_float_list_tt():
-    assert ft.flatten([1.0, 2.0, 3.0], '*v[]')[1] == '*v[]'
+    ft.flatten([1.0, 2.0, 3.0], '*v[]')[1] == '*v[]'
 def test_ndarray():
-    assert ft.flatten(np.arange(3)*1.5)[1] == '*v[]'
+    check_flatten(np.arange(3)*1.5, '*v[]', 8*3+4)
 def test_ndarray_tt():
     assert ft.flatten(np.arange(3)*1.5, '*v[]')[1] == '*v[]'
 def test_value_array():
-    assert ft.flatten(np.arange(10)*U.ns)[1] == '*v[ns]'
+    check_flatten(np.arange(10)*U.ns, '*v[ns]', 10*8+4)
 def test_value_array_tt():
     assert ft.flatten(np.arange(10)*U.ns, '*v[ns]')[1] == '*v[ns]'
 def test_cluster_list():
@@ -64,6 +69,11 @@ def test_illegal_typetag():
 def test_illegal_listtag():
     with pytest.raises(SyntaxError):
         ft.flatten(1, '*q')
-
+def test_2d_ndarray():
+    check_flatten(np.eye(4), '*2v[]', 16*8+2*4)
+def test_2d_valuearray():
+    check_flatten(np.eye(4)*U.ns, '*2v[ns]', 16*8+2*4)
+def test_2d_string():
+    check_flatten([['foo', 'bar'], ['abc', 'def'],['q', '1234']], '*2s', 49)
 if __name__ == '__main__':
     pytest.main(['-v', __file__])
