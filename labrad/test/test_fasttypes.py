@@ -154,6 +154,14 @@ def test_rt_list():
     check_roundtrip(['foo', 'bar'])
     check_roundtrip([['foo', 'bar'], ['baz', '12345']])
 
+def test_unflatten_short():
+    with pytest.raises(ValueError):
+        ft.unflatten(('\x1f\x1f\x00', 'i'))
+    with pytest.raises(ValueError):
+        ft.unflatten(('1234567', 'v[ns]'))
+    with pytest.raises(ValueError):
+        ft.unflatten(('12345678', 'c[ns]'))
+
 def test_unflatten_short_str():
     data, tt = ft.flatten('foobar')
     with pytest.raises(ValueError):
