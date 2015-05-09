@@ -1,8 +1,10 @@
 import pytest
 import labrad.units as U
 import numpy as np
-import fasttypes as ft
+import labrad.fasttypes as ft
+import time
 import labrad.types as T
+import datetime as dt
 
 def check_flatten(data, expected_tag, expected_bytes):
     flatdata, tt = ft.flatten(data)
@@ -75,7 +77,37 @@ def test_2d_ndarray():
     check_flatten(np.eye(4), '*2v[]', 16*8+2*4)
 def test_2d_valuearray():
     check_flatten(np.eye(4)*U.ns, '*2v[ns]', 16*8+2*4)
+def test_2d_list():
+    check_flatten([[1, 0], [0, 1]], '*2i', 4*6)
+def test_2d_mixed_unit():
+    with pytest.raises(TypeError):
+        ft.flatten([1*U.m, 2*U.ns])
 def test_2d_string():
     check_flatten([['foo', 'bar'], ['abc', 'def'],['q', '1234']], '*2s', 49)
+def test_ragged_list():
+    with pytest.raises(TypeError):
+        data, tt = ft.flatten([[1,2,3], [4,5]])
+    with pytest.raises(TypeError):
+        data, tt = ft.flatten([['foo', 'bar'], ['baz']])
+@pytest.mark.xfail(raises=TypeError)
+def test_datetime():
+    data, tt = ft.flatten(dt.datetime(2004,1,1))
+    assert tt == 't'
+    (secs, frac_secs) = struct.unpack('>qQ', data)
+    assert abs(1 - secs / 3.141e9) < .005 # If we are this close it is probably right
+                                          # but we don't check exactly because of timezone offsets
+@pytest.mark.xfail(raises=TypeError)
+def test_datetime_negative():
+    # This is the offset used by the python types.py to convert
+    # datetime objects presumed to have the current local time offset
+    # into UTC.  Note that this is not necessarily legit.
+    now = time.time()
+    offset = dt.datetime.fromtimestamp(now) - dt.datetime.utcfromtimestamp(now)
+    data, tt = ft.flatten(dt.datetime(1904, 1, 1) + offset - dt.timedelta(seconds=1, milliseconds=500))
+    assert tt == 't'
+    (secs, frac_secs) = struct.unpack('>qQ', data)
+    assert secs == -2
+    assert frac_secs == 2**63
+    
 if __name__ == '__main__':
     pytest.main(['-v', __file__])
