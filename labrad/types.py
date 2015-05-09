@@ -634,7 +634,7 @@ class LRTime(LRType, Singleton):
     width = 16
 
     def __unflatten__(self, s, endianness):
-        secs, us = unpack(endianness + 'QQ', s.get(16))
+        secs, us = unpack(endianness + 'qQ', s.get(16))
         us = float(us) / pow(2, 64) * pow(10, 6)
         t = timeOffset() + timedelta(seconds=secs, microseconds=us)
         return t
@@ -643,7 +643,7 @@ class LRTime(LRType, Singleton):
         diff = t - timeOffset()
         secs = diff.days * (60 * 60 * 24) + diff.seconds
         us = long(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
-        return pack(endianness + 'QQ', secs, us), self
+        return pack(endianness + 'qQ', secs, us), self
 
 registerType(dt, LRTime())
 
