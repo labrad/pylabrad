@@ -11,6 +11,29 @@ def check_flatten(data, expected_tag, expected_bytes):
     assert tt==expected_tag
     assert len(flatdata)==expected_bytes
 
+def roundtrip(obj, tag=None):
+    if tag:
+        flatdata, tt = ft.flatten(obj, tag)
+    else:
+        flatdata, tt = ft.flatten(obj)
+    
+    output = ft.unflatten((flatdata, tt))
+    return output
+
+def check_roundtrip(obj, tag=None, result=None):
+    output = roundtrip(obj, tag)
+    if result:
+        assert output==result
+    else:
+        assert output==obj
+
+def check_array_roundtrip(obj, tag=None, result=None):
+    output = roundtrip(obj, tag)
+    if result:
+        assert np.array_equal(output, result)
+    else:
+        assert np.array_equal(output, obj)
+    
 def test_int():
     assert ft.flatten(4) == ('\x00\x00\x00\x04', 'i')
     assert ft.flatten(4, 'i') == ('\x00\x00\x00\x04', 'i')
@@ -108,6 +131,45 @@ def test_datetime_negative():
     (secs, frac_secs) = struct.unpack('>qQ', data)
     assert secs == -2
     assert frac_secs == 2**63
+
+def test_rt_basic():
+    check_roundtrip(0)
+    check_roundtrip('foo bar')
+    check_roundtrip(42.0)
+    check_roundtrip(1.21*U.GW)
+    check_roundtrip(True)
+    check_roundtrip(False)
+    check_roundtrip(None)
+    check_roundtrip(3.1415+2.718j)
+
+def test_rt_cluster():
+    check_roundtrip((1,'foo', True))
+
+def test_rt_array():
+    check_array_roundtrip(np.arange(5)*U.ns)
+    check_array_roundtrip(np.eye(4))
+    check_array_roundtrip([1, 2, 3])
     
+def test_rt_list():
+    check_roundtrip(['foo', 'bar'])
+    check_roundtrip([['foo', 'bar'], ['baz', '12345']])
+
+def test_unflatten_short_str():
+    data, tt = ft.flatten('foobar')
+    with pytest.raises(ValueError):
+        ft.unflatten((data[0:3], tt))
+    with pytest.raises(ValueError):
+        ft.unflatten((data[0:8], tt))
+
+def test_unflatten_short_array():
+    obj = np.array(np.eye(5))
+    data, tt = ft.flatten(obj)
+    with pytest.raises(ValueError):
+        ft.unflatten((data[0:3], tt))
+    with pytest.raises(ValueError):
+        ft.unflatten((data[0:6], tt))
+    with pytest.raises(ValueError):
+        ft.unflatten((data[0:14], tt))
+
 if __name__ == '__main__':
     pytest.main(['-v', __file__])
