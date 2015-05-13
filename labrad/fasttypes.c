@@ -62,7 +62,8 @@ struct cobj {
     int *dim_arr; // dimensions of NDARRAY(_SU)
     void *arr; // data of NDARRAY(_SU)
     int isarrowned; // FALSE unless arr has be recreated to be a different type, usually arr is just a pointer to data in the pyobject.
-    long long int secs, usecs; // TIME data
+    long long int secs; // TIME data
+    unsigned long long int usecs; // TIME data
 };
 
 // the following is a simplification of the real numpy PyArrayObject, use with caution
@@ -92,6 +93,11 @@ PyObject *ft_gv_int_num_bits_minus_1 = NULL;
 PyObject *ft_gv_INT_MIN = NULL;
 PyObject *ft_gv_INT_MAX = NULL;
 PyObject *ft_gv_UINT_MAX = NULL;
+
+PyObject *ft_gv_datetime = NULL;
+PyTypeObject *ft_gv_datetime_datetime = NULL;
+PyObject *ft_gv_time = NULL;
+
 PyObject *ft_gv_numpy = NULL;
 PyTypeObject *ft_gv_numpy_ndarray = NULL;
 PyTypeObject *ft_gv_numpy_bool_ = NULL;
@@ -124,6 +130,8 @@ COBJ *ft_create_cobj_from_pyobj(PyObject *obj);
     COBJ *ft_create_cobj_from_pystring(PyObject *obj);
     COBJ *ft_create_cobj_from_pycluster(PyObject *obj);
     COBJ *ft_create_cobj_from_pylist(PyObject *obj);
+    COBJ *ft_create_cobj_from_datetime(PyObject *obj);
+        PyObject *ft_time_offset(void);
     COBJ *ft_create_cobj_from_pyndarray(PyObject *obj);
     
     COBJ *ft_create_cobj_from_bool(char b);
@@ -181,7 +189,9 @@ PyObject *ft_flatten_cobj(COBJ *cobj, COBJ *cobj_type);
 // C equivalent of labrad.types.unflatten, called in similar manner, although type tags must be strings
 PyObject *ft_unflatten(PyObject *self, PyObject *args);
     PyObject *ft_unflatten_partial_parse(PyObject *o);
-    PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type);
+    PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, int s_len, COBJ *cobj_type);
+    int ft_sufficient_data(int i, int size, int n);
+
 
 PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
     int i, n;
@@ -223,6 +233,9 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         goto exception;
     }
     
+    // printf("%d cobj:\n", __LINE__);
+    // ft_print_cobj(cobj);
+    
     if (!ft_cobj_rectangular(cobj)) {
         PyErr_SetString(PyExc_TypeError, "Python object not rectangular");
         goto exception;
@@ -234,10 +247,13 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
     // printf("%d\n", __LINE__);
     // ft_print_cobj(cobj_type);
     if (cobj_type == NULL) {
-        printf("%d\n", __LINE__);
-        // goto exception;
+        // printf("%d\n", __LINE__);
+        goto exception;
     }
     
+    // printf("%d cobj_type:\n", __LINE__);
+    // ft_print_cobj(cobj_type);
+
     // match C obj to provided type tag and flatten
     n = PyList_GET_SIZE(types);
     /*
@@ -256,12 +272,15 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         // printf("%d\n", __LINE__);
         tobj = PyList_GET_ITEM(types, i); // borrowed reference
         cobj_tag = ft_create_cobj_tag_from_pystring(tobj); // 4.) need to free cobj_tag when returning
-        // printf("%d\n", __LINE__);
+        
+        // printf("%d cobj_tag:\n", __LINE__);
         // ft_print_cobj(cobj_tag);
+        
         if (cobj_tag == NULL) {
-            printf("%d\n", __LINE__);
+            // printf("%d\n", __LINE__);
             goto exception;
         }
+        
         cobj_type = ft_upgrade_first_cobj_to_encompass_second(cobj_type, cobj_tag, FALSE, FALSE);
         // printf("%d\n", __LINE__);
         // ft_print_cobj(cobj_type);
@@ -276,6 +295,9 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
         */
         // if (PyErr_Occurred() != NULL) PyErr_Clear();
         if (cobj_type != NULL) {
+            // printf("%d upgraded cobj_type:\n", __LINE__);
+            // ft_print_cobj(cobj_type);
+        
             cobj = ft_upgrade_first_cobj_to_encompass_second(cobj, cobj_type, FALSE, FALSE);
             // printf("%d\n", __LINE__);
             // ft_print_cobj(cobj);
@@ -290,8 +312,9 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
             */
             // if (PyErr_Occurred() != NULL) PyErr_Clear();
             if (cobj != NULL) {
-                // ft_print_cobj(cobj_type);
-                // printf("%d\n", __LINE__);
+                // printf("%d upgraded cobj:\n", __LINE__);
+                // ft_print_cobj(cobj);
+                
                 robj = ft_flatten_cobj(cobj, cobj_type);
                 // printf("%d\n", __LINE__);
                 if (robj == NULL) goto exception;
@@ -376,6 +399,10 @@ COBJ *ft_create_cobj_from_pyobj(PyObject *obj) {
     }
     else if (PyList_Check(obj)) {
         cobj = ft_create_cobj_from_pylist(obj);
+        if (cobj == NULL) goto exception;
+    }
+    else if (PyObject_TypeCheck(obj, ft_gv_datetime_datetime)) {
+        cobj = ft_create_cobj_from_datetime(obj);
         if (cobj == NULL) goto exception;
     }
     else if (PyObject_TypeCheck(obj, ft_gv_numpy_ndarray)) {
@@ -611,6 +638,97 @@ exception:
     return NULL;
 }
 
+COBJ *ft_create_cobj_from_datetime(PyObject *obj) {
+    PyObject *tobj, *diff;
+    int overflow;
+    long long int days, seconds;
+    unsigned long long int microseconds;
+    COBJ *cobj;
+    
+    // PyObject_Print(obj, stdout, Py_PRINT_RAW);
+    // printf(" : input object\n");
+    
+    tobj = ft_time_offset();
+    // PyObject_Print(tobj, stdout, Py_PRINT_RAW);
+    // printf(" : time offset\n");
+    
+    diff = PyNumber_Subtract(obj, tobj);
+    // PyObject_Print(diff, stdout, Py_PRINT_RAW);
+    // printf(" : time delta\n");
+    Py_DECREF(tobj);
+    
+    tobj = PyObject_GetAttrString(diff, "days");
+    days = PyLong_AsLongLongAndOverflow(tobj, &overflow);
+    // PyObject_Print(tobj, stdout, Py_PRINT_RAW);
+    // printf("\n");
+    // printf("days : %ld\n", days);
+    Py_DECREF(tobj);
+    
+    tobj = PyObject_GetAttrString(diff, "seconds");
+    seconds = PyLong_AsLongLongAndOverflow(tobj, &overflow);
+    // PyObject_Print(tobj, stdout, Py_PRINT_RAW);
+    // printf("\n");
+    // printf("seconds : %ld\n", seconds);
+    Py_DECREF(tobj);
+    
+    tobj = PyObject_GetAttrString(diff, "microseconds");
+    // printf("%d\n", __LINE__);
+    microseconds = PyLong_AsLongLongAndOverflow(tobj, &overflow);
+    // microseconds = PyLong_AsUnsignedLongLong(tobj); NOTE: this API function generates and exception
+    // PyObject_Print(tobj, stdout, Py_PRINT_RAW);
+    // printf("\n");
+    // printf("microseconds : %ld\n", microseconds);
+    Py_DECREF(tobj);
+
+    // printf("d: %lld, s: %lld, us: %lld\n", days, seconds, microseconds);
+    Py_DECREF(diff);
+    
+    seconds += days * (24 * 60 * 60);
+    microseconds = (unsigned long long int)((double)microseconds/1e6*pow(2, 64));
+    
+    cobj = ft_allocate_memory_for_cobj();
+    
+    cobj->type = TIME;
+    cobj->istype = FALSE;
+    cobj->secs = seconds;
+    cobj->usecs = microseconds;
+    
+    return cobj;
+}
+
+PyObject *ft_time_offset(void) {
+    PyObject *now, *tobj1, *tobj2, *tobj3;
+    
+    now = PyObject_CallMethod(ft_gv_time, "time", "");
+    // PyObject_Print(now, stdout, Py_PRINT_RAW);
+    // printf("\n");
+    
+    tobj1 = PyObject_CallMethod(ft_gv_datetime, "datetime", "iii", 1904, 1, 1);
+    // PyObject_Print(tobj1, stdout, Py_PRINT_RAW);
+    // printf("\n");
+    
+    tobj2 = PyObject_CallMethod((PyObject *)ft_gv_datetime_datetime, "utcfromtimestamp", "O", now);
+    // PyObject_Print(tobj2, stdout, Py_PRINT_RAW);
+    // printf("\n");
+    
+    tobj3 = PyNumber_Subtract(tobj1, tobj2);
+    // PyObject_Print(tobj2, stdout, Py_PRINT_RAW);
+    // printf("\n");
+    
+    Py_DECREF(tobj1);
+    Py_DECREF(tobj2);
+    
+    tobj1 = tobj3;
+    tobj2 = PyObject_CallMethod((PyObject *)ft_gv_datetime_datetime, "fromtimestamp", "O", now);
+    tobj3 = PyNumber_Add(tobj1, tobj2);
+    Py_DECREF(tobj1);
+    Py_DECREF(tobj2);
+
+    Py_DECREF(now);
+    
+    return tobj3;
+}
+
 COBJ *ft_create_cobj_from_pyndarray(PyObject *obj) {
     unsigned int ui;
     PyObject *tobj, *tobj2;
@@ -825,22 +943,30 @@ COBJ *ft_create_cobj_type(COBJ *cobj) {
     unsigned int ui;
     COBJ *cobj_type;
     
-    cobj_type = ft_allocate_memory_for_cobj();
-    
     if (cobj == NULL) {
         PyErr_SetString(PyExc_TypeError, "NULL has no type");
         goto exception;
     }
     
+    // printf("%d input cobj:\n", __LINE__);
+    // ft_print_cobj(cobj);
+    // printf("%d\n", __LINE__);
+        
+    cobj_type = ft_allocate_memory_for_cobj();
+    
     cobj_type->type = cobj->type;
     cobj_type->istype = TRUE;
     
+    // printf("%d\n", __LINE__);
     if (cobj->type == FLOAT64_SU || cobj->type == COMPLEX128_SU || cobj->type == NDARRAY_SU) {
         cobj_type->str = (char *)malloc((strlen(cobj->str)+1)*sizeof(char));
         strcpy(cobj_type->str, cobj->str);
+        // return cobj_type;
     }
     
+    // printf("%d\n", __LINE__);
     if (cobj->type == NDARRAY || cobj->type == NDARRAY_SU) {
+        // printf("%d\n", __LINE__);
         cobj_type->subtype = cobj->subtype;
         cobj_type->n = cobj->n;
         cobj_type->dim_arr = (int *)malloc(cobj->n*sizeof(int));
@@ -866,6 +992,7 @@ COBJ *ft_create_cobj_type(COBJ *cobj) {
         cobj_type->cobj_arr = (COBJ **)malloc(sizeof(COBJ *));
         cobj_type->cobj_arr[0] = ft_create_list_type(cobj);
         if (cobj_type->cobj_arr[0] == NULL) goto exception;
+        // return cobj_type;
     }
 
     return cobj_type;
@@ -1653,6 +1780,10 @@ COBJ *ft_create_cobj_tag_from_char_buf(char *buf, int *iptr, int n) {
         (*iptr)++;
         return ft_create_cobj(UINT32, TRUE);
     }
+    else if (buf[i] == 't') {
+        (*iptr)++;
+        return ft_create_cobj(TIME, TRUE);
+    }
     else if (buf[i] == 'v' || buf[i] == 'c') {
         // printf("%d\n", __LINE__);
         if (buf[i] == 'v') cobj_tag = ft_create_cobj(FLOAT64_SU, TRUE);
@@ -1880,6 +2011,15 @@ int ft_initialize() {
     ft_gv_INT_MAX = PyNumber_Subtract(tobj, ft_gv_1);
     Py_DECREF(tobj);
     
+    ft_gv_datetime = PyImport_ImportModule("datetime");
+    if (PyErr_Occurred() != NULL) goto exception;
+    
+    ft_gv_datetime_datetime = (PyTypeObject *)PyObject_GetAttrString(ft_gv_datetime, "datetime");
+    if (PyErr_Occurred() != NULL) goto exception;
+    
+    ft_gv_time = PyImport_ImportModule("time");
+    if (PyErr_Occurred() != NULL) goto exception;
+    
     ft_gv_numpy = PyImport_ImportModule("numpy");
     if (PyErr_Occurred() != NULL) goto exception;
     
@@ -2085,7 +2225,7 @@ void ft_print_cobj(COBJ *cobj) {
         switch (cobj->type) {
             case TIME:
                 printf("secs: %lld\n", cobj->secs);
-                printf("usecs: %lld\n", cobj->usecs);
+                printf("usecs: %llu\n", cobj->usecs);
         }
     }
     
@@ -2327,6 +2467,9 @@ char *ft_create_type_string(COBJ *cobj, int *len_ptr, int list_level) {
         else if (cobj->type == EMPTY) {
             str1 = ft_append_char(str1, &len1, '_');
         }
+        else if (cobj->type == TIME) {
+            str1 = ft_append_char(str1, &len1, 't');
+        }
     }
     
     *len_ptr = len1;
@@ -2406,6 +2549,11 @@ int ft_write_to_buf(COBJ *cobj, char *buf, int write_len) {
         size = LABRAD_INT_SIZE + cobj->n;
         ft_appropriate_memcpy(buf, &(cobj->n), LABRAD_INT_SIZE);
         memcpy(buf + LABRAD_INT_SIZE, cobj->str, cobj->n);
+    }
+    else if (cobj->type == TIME) {
+        size = 2*LABRAD_LONG_SIZE;
+        ft_appropriate_memcpy(buf, &(cobj->secs), LABRAD_LONG_SIZE);
+        ft_appropriate_memcpy(buf + LABRAD_LONG_SIZE, &(cobj->usecs), LABRAD_LONG_SIZE);
     }
     else if (cobj->type == LIST) {
         if (write_len) {
@@ -2526,7 +2674,7 @@ PyObject *ft_unflatten_partial_parse(PyObject *o) {
     
     // PyObject_Print(so, stdout, Py_PRINT_RAW);
     
-    robj = ft_unflatten_no_parse(s, &si, cobj_type);
+    robj = ft_unflatten_no_parse(s, &si, PyString_GET_SIZE(so), cobj_type);
     ft_free_cobj(cobj_type);
     
     return robj;
@@ -2536,16 +2684,23 @@ exception:
     return NULL;
 }
 
-PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
+PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, int s_len, COBJ *cobj_type) {
     int i, n, ni, N, pos;
     unsigned int ui;
     double x, y;
-    PyObject *obj, *tobj;
+    PyObject *obj, *tobj, *tobj2;
     char *buf, c;
     PyArrayObject *aobj;
+    long long int secs;
+    unsigned long long int usecs;
+    
+    // printf("%d\n", __LINE__);
+    // ft_print_cobj(cobj_type);
+    // printf("ptr: %p, len: %d\n", s, *size_ptr);
     
     if (cobj_type->type == LIST) {
         if (cobj_type->subtype == LIST || (cobj_type->subtype == NDARRAY && cobj_type->i < 0)) {
+            if (!ft_sufficient_data(*size_ptr, LABRAD_INT_SIZE, s_len)) goto exception;
             ft_appropriate_memcpy(&n, s + *size_ptr, LABRAD_INT_SIZE);
             *size_ptr += LABRAD_INT_SIZE;
             cobj_type->i = n;
@@ -2553,7 +2708,7 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
         n = cobj_type->i;
         obj = PyList_New(n);
         for (i=0; i<n; i++) {
-            PyList_SET_ITEM(obj, i, ft_unflatten_no_parse(s, size_ptr, cobj_type->cobj_arr[0]));
+            PyList_SET_ITEM(obj, i, ft_unflatten_no_parse(s, size_ptr, s_len, cobj_type->cobj_arr[0]));
         }
     }
     else if (cobj_type->type == NDARRAY || cobj_type->type == NDARRAY_SU) {
@@ -2562,6 +2717,10 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
         tobj = PyTuple_New(n);
         N = 1;
         for (i=0; i<n; i++) {
+            if (!ft_sufficient_data(*size_ptr, LABRAD_INT_SIZE, s_len)) {
+                Py_DECREF(tobj);
+                goto exception;
+            }
             ft_appropriate_memcpy(&ni, s + *size_ptr, LABRAD_INT_SIZE);
             PyTuple_SET_ITEM(tobj, i, PyInt_FromLong(ni));
             N *= ni;
@@ -2571,11 +2730,19 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
         // ft_print_subtype(cobj_type);
         
         if (cobj_type->subtype == BOOL) {
+            if (!ft_sufficient_data(*size_ptr, N*LABRAD_BOOL_SIZE, s_len)) {
+                Py_DECREF(tobj);
+                goto exception;
+            }
             obj = PyObject_CallMethod(ft_gv_numpy, "empty", "Os", tobj, "bool_");
             aobj = (PyArrayObject *)obj;
             memcpy(aobj->data, s + *size_ptr, N*LABRAD_BOOL_SIZE);
         }
         else if (cobj_type->subtype == INT32) {
+            if (!ft_sufficient_data(*size_ptr, N*LABRAD_INT_SIZE, s_len)) {
+                Py_DECREF(tobj);
+                goto exception;
+            }
             obj = PyObject_CallMethod(ft_gv_numpy, "empty", "Os", tobj, "int32");
             aobj = (PyArrayObject *)obj;
             pos = 0;
@@ -2586,6 +2753,10 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
             }
         }
         else if (cobj_type->subtype == UINT32) {
+            if (!ft_sufficient_data(*size_ptr, N*LABRAD_INT_SIZE, s_len)) {
+                Py_DECREF(tobj);
+                goto exception;
+            }
             obj = PyObject_CallMethod(ft_gv_numpy, "empty", "Os", tobj, "uint32");
             aobj = (PyArrayObject *)obj;
             pos = 0;
@@ -2596,7 +2767,10 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
             }
         }
         else if (cobj_type->subtype == FLOAT64 || cobj_type->subtype == FLOAT64_SU) {
-            // ***
+            if (!ft_sufficient_data(*size_ptr, N*LABRAD_FLOAT_SIZE, s_len)) {
+                Py_DECREF(tobj);
+                goto exception;
+            }
             // printf("%d\n", __LINE__);
             obj = PyObject_CallMethod(ft_gv_numpy, "empty", "Os", tobj, "float64");
             // printf("%d\n", __LINE__);
@@ -2617,6 +2791,10 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
             // printf("%d\n", __LINE__);
         }
         else if (cobj_type->subtype == COMPLEX128 || cobj_type->subtype == COMPLEX128_SU) {
+            if (!ft_sufficient_data(*size_ptr, 2*N*LABRAD_FLOAT_SIZE, s_len)) {
+                Py_DECREF(tobj);
+                goto exception;
+            }
             obj = PyObject_CallMethod(ft_gv_numpy, "empty", "Os", tobj, "complex128");
             aobj = (PyArrayObject *)obj;
             pos = 0;
@@ -2638,20 +2816,23 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
         // *size_ptr += LABRAD_INT_SIZE;
         obj = PyTuple_New(cobj_type->n);
         for (ui=0; ui<cobj_type->n; ui++) {
-            PyTuple_SET_ITEM(obj, ui, ft_unflatten_no_parse(s, size_ptr, cobj_type->cobj_arr[ui]));
+            PyTuple_SET_ITEM(obj, ui, ft_unflatten_no_parse(s, size_ptr, s_len, cobj_type->cobj_arr[ui]));
         }
     }
     else if (cobj_type->type == INT32) {
+        if (!ft_sufficient_data(*size_ptr, LABRAD_INT_SIZE, s_len)) goto exception;
         ft_appropriate_memcpy(&n, s + *size_ptr, LABRAD_INT_SIZE);
         *size_ptr += LABRAD_INT_SIZE;
         obj = PyInt_FromLong(n);
     }
     else if (cobj_type->type == UINT32) {
+        if (!ft_sufficient_data(*size_ptr, LABRAD_INT_SIZE, s_len)) goto exception;
         ft_appropriate_memcpy(&ui, s + *size_ptr, LABRAD_INT_SIZE);
         *size_ptr += LABRAD_INT_SIZE;
         obj = PyLong_FromUnsignedLong(ui);
     }
     else if (cobj_type->type == FLOAT64 || cobj_type->type == FLOAT64_SU) {
+        if (!ft_sufficient_data(*size_ptr, LABRAD_FLOAT_SIZE, s_len)) goto exception;
         ft_appropriate_memcpy(&x, s + *size_ptr, LABRAD_FLOAT_SIZE);
         *size_ptr += LABRAD_FLOAT_SIZE;
         obj = PyFloat_FromDouble(x);
@@ -2660,6 +2841,7 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
         }
     }
     else if (cobj_type->type == COMPLEX128 || cobj_type->type == COMPLEX128_SU) {
+        if (!ft_sufficient_data(*size_ptr, 2*LABRAD_FLOAT_SIZE, s_len)) goto exception;
         ft_appropriate_memcpy(&x, s + *size_ptr, LABRAD_FLOAT_SIZE);
         *size_ptr += LABRAD_FLOAT_SIZE;
         ft_appropriate_memcpy(&y, s + *size_ptr, LABRAD_FLOAT_SIZE);
@@ -2670,20 +2852,64 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, COBJ *cobj_type) {
         }
     }
     else if (cobj_type->type == STRING) {
+        if (!ft_sufficient_data(*size_ptr, LABRAD_INT_SIZE, s_len)) goto exception;
         ft_appropriate_memcpy(&n, s + *size_ptr, LABRAD_INT_SIZE);
         *size_ptr += LABRAD_INT_SIZE;
+        if (!ft_sufficient_data(*size_ptr, n, s_len)) goto exception;
         obj = PyString_FromStringAndSize(NULL, n);
         buf = ((PyStringObject *)obj)->ob_sval;
         memcpy(buf, s + *size_ptr, n);
         *size_ptr += n;
     }
     else if (cobj_type->type == BOOL) {
+        if (!ft_sufficient_data(*size_ptr, LABRAD_BOOL_SIZE, s_len)) goto exception;
         ft_appropriate_memcpy(&c, s + *size_ptr, LABRAD_BOOL_SIZE);
         *size_ptr += LABRAD_BOOL_SIZE;
         obj = PyBool_FromLong(c);
     }
+    else if (cobj_type->type == EMPTY) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    else if (cobj_type->type == TIME) {
+        if (!ft_sufficient_data(*size_ptr, 2*LABRAD_LONG_SIZE, s_len)) goto exception;
+        ft_appropriate_memcpy(&secs, s + *size_ptr, LABRAD_LONG_SIZE);
+        *size_ptr += LABRAD_LONG_SIZE;
+        ft_appropriate_memcpy(&usecs, s + *size_ptr, LABRAD_LONG_SIZE);
+        *size_ptr += LABRAD_LONG_SIZE;
+        x = (double)usecs / pow(2, 64) * 1e6;
+        
+        // printf("%d\n", __LINE__);
+        tobj = ft_time_offset();
+        // printf("%d\n", __LINE__);
+        tobj2 = PyObject_CallMethod(ft_gv_datetime, "timedelta", "Ld", secs, x);
+        // printf("%d\n", __LINE__);
+        obj = PyNumber_Add(tobj, tobj2);
+        // printf("%d\n", __LINE__);
+        
+        Py_DECREF(tobj);
+        Py_DECREF(tobj2);
+        
+        return obj;
+    }
+    else {
+         PyErr_SetString(PyExc_TypeError, "unknown type tag passed to unflatten()");
+         goto exception;
+    }
      
     return obj;
+    
+exception:
+    
+    return NULL;
+}
+
+int ft_sufficient_data(int i, int size, int n) {
+    if (i+size <= n) return TRUE;
+    
+    PyErr_SetString(PyExc_ValueError, "insufficient data to unflatten()");
+    
+    return FALSE;
 }
 
 static PyMethodDef fasttypes_methods[] = {
