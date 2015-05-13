@@ -16,26 +16,29 @@
 """
 labrad.node
 
-
-Provides an interface to manage all python labrad servers
-running on a particular computer.  This version runs each
-server in a separate process, so that they can not interfere
-with each other.  Information such as the manager host, port
-and password are passed to the child process in environment
-variables or via command line arguments.  The startup process
-for each child server is controlled by an associated .ini file.
+Provides an interface to manage multiple labrad servers running on a particular
+computer. The node runs each server in a separate process, so that they can not
+interfere with each other. Information such as the manager host, port and
+password are passed to the child process in environment variables or via
+command line arguments. The startup process for each child server is controlled
+by an associated .ini file.
 
 The node name is read either from the LABRADNODE environment variable,
 or failing that the system's hostname.
 
-Registry keys for the node:
-Path: >> Nodes >> [node name]
-Key -- Value
-  directories -- [where to look for servers]
-  extensions -- [what files to look at--['.ini', '.py', '.exe'] is good]
-  javapath -- [full path to the java executable on this system,
-               including 'java.exe' at the end]
-  packages -- currently unused.
+The node running on a particular computer is configured via the registry, at
+the path ['', 'Nodes', node_name]. Defaults values can be configured to be
+used whenever a new node connects, at ['', 'Nodes', '__default__']. The
+configuration keys are:
+
+  directories (*s): file directories to be scanned for servers. Any subdirs
+                    that contain a file called '.nodeignore' will be skipped,
+                    along with all their subdirs.
+  extensions (*s): what files to look at, e.g. ['.ini', '.py', '.exe']
+  javapath (s): full path to the java executable on this system,
+                     including 'java.exe' at the end
+  packages (*s): python packages to be scanned for servers using twisted's
+                 plugin system (this feature is deprecated and will be removed).
 
 Changes required on the server:
 
@@ -45,16 +48,17 @@ the node. See labrad-servers/Qubit Server/ for an example of a java server.
 Another option is to have this configuration in the file itself, set off by
 ### BEGIN NODE INFO and ### END NODE INFO. See servers/gpibMockDeviceServer.py
 in this repository for an example.
+
 ***N.B.*** The name given in the server's [info] section MUST MATCH the name
 given as a class variable in the server class itself. That is, note that the
 name string "GPIB Mock Device Server" appears _twice_. If this is not the case,
 then while the node will still start the server, it will not register that the
 server has been started and you will have to drop the server connection manually
 to restart it.
+
 Bonus: The node will also open up compiled executable files to look for
 this information. This is how it works for the Direct Ethernet server, for
 example.
-
 """
 
 from __future__ import with_statement
@@ -678,6 +682,9 @@ class NodeServer(LabradServer):
         # look for .ini files
         for dirname in self.config.dirs:
             for path, dirs, files in os.walk(dirname):
+                if '.nodeignore' in files:
+                    del dirs[:] # clear dirs list so we don't visit subdirs
+                    continue
                 for f in files:
                     try:
                         _, ext = os.path.splitext(f)
