@@ -247,7 +247,7 @@ class DeviceServer(LabradServer):
         try:
             dev = self.devices[key]
         except KeyError:
-            raise errors.NoSuchDeviceError()
+            raise errors.NoSuchDeviceError(key)
         if not dev.accessibleFrom(context.ID):
             raise DeviceLockedError()
 
