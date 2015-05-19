@@ -333,7 +333,7 @@ class DeviceServer(LabradServer):
     def lock_device(self, c, data):
         """Lock a device to be accessible only in this context."""
         dev = self.selectedDevice(c)
-        if data:
+        if data is not None:
             data = data['s']
         dev.lock(c.ID, data)
 
