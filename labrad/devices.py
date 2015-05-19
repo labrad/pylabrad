@@ -43,17 +43,17 @@ class DeviceWrapper(object):
         self._lockContext = None
         self._unlockCall = None
 
-    def lock(self, c, timeout=None):
+    def lock(self, c, timeout_s=None):
         """Get or renew a lock on this device."""
         if not self.accessibleFrom(c):
             raise DeviceLockedError()
         self.locked = True
         self._lockContext = c
-        timeout = timeout or LOCK_TIMEOUT
+        timeout_s = timeout_s or LOCK_TIMEOUT
         if self._unlockCall is None:
-            self._unlockCall = reactor.callLater(timeout, self.unlock)
+            self._unlockCall = reactor.callLater(timeout_s, self.unlock)
         else:
-            self._unlockCall.reset(timeout)
+            self._unlockCall.reset(timeout_s)
 
     def unlock(self, c=None):
         """Release the lock on this device."""
@@ -327,13 +327,15 @@ class DeviceServer(LabradServer):
         returnValue(self.list_devices(c))
 
     @setting(1000001, 'Lock Device',
-                      data=[': Lock the selected device',
+                      timeout=[': Lock the selected device for default time',
                             'v[s]: Lock for specified time'],
                       returns=[''])
-    def lock_device(self, c, data):
+    def lock_device(self, c, timeout):
         """Lock a device to be accessible only in this context."""
         dev = self.selectedDevice(c)
-        dev.lock(c.ID, data)
+        if timeout is not None:
+            timeout = timeout['s']
+        dev.lock(c.ID, timeout)
 
     @setting(1000002, 'Release Device', returns=[''])
     def release_device(self, c):
