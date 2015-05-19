@@ -313,6 +313,11 @@ class LabradTypesTests(unittest.TestCase):
         a = np.array([1, 2, 3, 4, 5], dtype='int32')
         b = T.unflatten(*T.flatten(a))
         self.assertTrue(np.all(a == b))
+        self.assertTrue(T.flatten(np.int32(5))[0] == '\x00\x00\x00\x05')
+        self.assertTrue(T.flatten(np.int64(-5))[0] == '\xff\xff\xff\xfb')
+        self.assertTrue(len(T.flatten(np.float64(3.15))[0]) == 8)
+        with self.assertRaises(T.FlatteningError):
+            T.flatten(np.int64(-5), T.LRWord())
 
     def testIntegerRanges(self):
         """Test flattening of out-of-range integer values"""

@@ -578,7 +578,7 @@ class LRInt(LRType, Singleton):
         return unpack(endianness + 'i', s.get(4))[0]
 
     def __flatten__(self, n, endianness):
-        if not isinstance(n, (int, long)):
+        if not isinstance(n, (int, long, np.integer)):
             raise FlatteningError(n, self)
         if n >= 0x80000000 or n < -0x80000000:
             raise ValueError("out of range for type i: {0}".format(n))
@@ -597,7 +597,7 @@ class LRWord(LRType, Singleton):
         return long(unpack(endianness + 'I', s.get(4))[0])
 
     def __flatten__(self, n, endianness):
-        if not isinstance(n, (int, long)):
+        if not isinstance(n, (int, long, np.integer)):
             raise FlatteningError(n, self)
         if n > 0xFFFFFFFF or n < 0:
             raise ValueError("out of range for type w: {0}".format(n))
