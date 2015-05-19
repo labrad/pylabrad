@@ -43,17 +43,17 @@ class DeviceWrapper(object):
         self._lockContext = None
         self._unlockCall = None
 
-    def lock(self, c, timeout=None):
+    def lock(self, c, timeout_s=None):
         """Get or renew a lock on this device."""
         if not self.accessibleFrom(c):
             raise DeviceLockedError()
         self.locked = True
         self._lockContext = c
-        timeout = timeout or LOCK_TIMEOUT
+        timeout_s = timeout_s or LOCK_TIMEOUT
         if self._unlockCall is None:
-            self._unlockCall = reactor.callLater(timeout, self.unlock)
+            self._unlockCall = reactor.callLater(timeout_s, self.unlock)
         else:
-            self._unlockCall.reset(timeout)
+            self._unlockCall.reset(timeout_s)
 
     def unlock(self, c=None):
         """Release the lock on this device."""
