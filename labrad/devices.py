@@ -327,12 +327,14 @@ class DeviceServer(LabradServer):
         returnValue(self.list_devices(c))
 
     @setting(1000001, 'Lock Device',
-                      data=[': Lock the selected device',
+                      data=[': Lock the selected device for default time',
                             'v[s]: Lock for specified time'],
                       returns=[''])
     def lock_device(self, c, data):
         """Lock a device to be accessible only in this context."""
         dev = self.selectedDevice(c)
+        if data:
+            data = data['s']
         dev.lock(c.ID, data)
 
     @setting(1000002, 'Release Device', returns=[''])
