@@ -19,7 +19,7 @@ def roundtrip(obj, tag=None):
     else:
         flatdata, tt = ft.flatten(obj)
     
-    output = ft.unflatten((flatdata, tt))
+    output = ft.unflatten(flatdata, tt)
     return output
 
 def check_roundtrip(obj, tag=None, result=None):
@@ -67,7 +67,7 @@ def test_list():
     assert all(T.unflatten(*ft.flatten([1,2,3])) == [1,2,3])
     (data, tt) = T.flatten([1,2,3])
     data, tt = str(data), str(tt)
-    assert all(ft.unflatten((data, tt)) == [1,2,3])
+    assert all(ft.unflatten(data, tt) == [1,2,3])
     assert len(ft.flatten(['a', 'bc', 'def'])[0])==22
 
 def test_cluster_data():
@@ -187,28 +187,28 @@ def test_rt_list():
 
 def test_unflatten_short():
     with pytest.raises(ValueError):
-        ft.unflatten(('\x1f\x1f\x00', 'i'))
+        ft.unflatten('\x1f\x1f\x00', 'i')
     with pytest.raises(ValueError):
-        ft.unflatten(('1234567', 'v[ns]'))
+        ft.unflatten('1234567', 'v[ns]')
     with pytest.raises(ValueError):
-        ft.unflatten(('12345678', 'c[ns]'))
+        ft.unflatten('12345678', 'c[ns]')
 
 def test_unflatten_short_str():
     data, tt = ft.flatten('foobar')
     with pytest.raises(ValueError):
-        ft.unflatten((data[0:3], tt))
+        ft.unflatten(data[0:3], tt)
     with pytest.raises(ValueError):
-        ft.unflatten((data[0:8], tt))
+        ft.unflatten(data[0:8], tt)
 
 def test_unflatten_short_array():
     obj = np.array(np.eye(5))
     data, tt = ft.flatten(obj)
     with pytest.raises(ValueError):
-        ft.unflatten((data[0:3], tt))
+        ft.unflatten(data[0:3], tt)
     with pytest.raises(ValueError):
-        ft.unflatten((data[0:6], tt))
+        ft.unflatten(data[0:6], tt)
     with pytest.raises(ValueError):
-        ft.unflatten((data[0:14], tt))
+        ft.unflatten(data[0:14], tt)
 
 if __name__ == '__main__':
     pytest.main(['-v', __file__])

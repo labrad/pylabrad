@@ -189,8 +189,8 @@ PyObject *ft_flatten_cobj(COBJ *cobj, COBJ *cobj_type);
     void ft_reverse_memcpy(void *dest, void *src, int len);
 
 // C equivalent of labrad.types.unflatten, called in similar manner, although type tags must be strings
-PyObject *ft_unflatten(PyObject *self, PyObject *args);
-    PyObject *ft_unflatten_partial_parse(PyObject *o);
+PyObject *ft_unflatten(PyObject *self, PyObject *args, PyObject *keywds);
+    PyObject *ft_unflatten_partial_parse(PyObject *obj, PyObject *types);
     PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, int s_len, COBJ *cobj_type);
     int ft_sufficient_data(int i, int size, int n);
 
@@ -214,9 +214,10 @@ PyObject *ft_flatten(PyObject *self, PyObject *args, PyObject *keywds) {
     if (endianness != NULL) {
         if (ft_set_send_endianness(endianness) == EXCEPTION_RAISED) goto exception;
     }
+    else ft_gv_send_big_endian = TRUE;
     
     // make types a non-empty list
-    if (types == NULL) {
+    if (types == NULL || types == Py_None) {
         types = sobj = PyString_FromString("?"); // sobj will be DECREFed when lobj is
     }
     if (!PyList_Check(types)) {
@@ -2428,48 +2429,48 @@ void ft_reverse_memcpy(void *dest, void *src, int len) {
     for (i=0; i<len; i++) cdest[i] = csrc[len-1-i];
 }
 
-PyObject *ft_unflatten(PyObject *self, PyObject *args) {
-    PyObject *o;
+PyObject *ft_unflatten(PyObject *self, PyObject *args, PyObject *keywds) {
+    PyObject *obj, *types, *endianness;
+    char *kwlist[] = {"obj", "types", "endianness", NULL};
     
     if (!ft_gv_initialized) {
         if (ft_initialize() == EXCEPTION_RAISED) goto exception;
     }
     
-    PyArg_ParseTuple(args, "O", &o);
-    if (PyErr_Occurred() != NULL) goto exception;
+    obj = types = endianness = NULL;
     
-    if (!PyTuple_Check(o) || PyTuple_GET_SIZE(o) != 2) {
-         PyErr_SetString(PyExc_TypeError, "unflatten() takes a tuple (string, string)");
-         goto exception;
+    // Get the Python input objects, if provided. Reference counts not increased, pointers remain NULL if no object provided.
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "O|OO", kwlist, &obj, &types, &endianness)) goto exception;
+    
+    if (endianness != NULL) {
+        if (ft_set_send_endianness(endianness) == EXCEPTION_RAISED) goto exception;
     }
-    
-    return ft_unflatten_partial_parse(o);
+    else ft_gv_send_big_endian = TRUE;
+
+    return ft_unflatten_partial_parse(obj, types);
     
 exception:
     
     return NULL;
 }
 
-PyObject *ft_unflatten_partial_parse(PyObject *o) {
+PyObject *ft_unflatten_partial_parse(PyObject *obj, PyObject *types) {
     int si;
-    PyObject *so, *to, *robj;
+    PyObject *robj;
     char *s;
     COBJ *cobj_type;
     
-    so = PyTuple_GET_ITEM(o, 0);
-    to = PyTuple_GET_ITEM(o, 1);
-    
-    if (!PyString_Check(so) || !PyString_Check(to)) {
-         PyErr_SetString(PyExc_TypeError, "unflatten() takes a tuple (string, string)");
+    if (!PyString_Check(obj) || !PyString_Check(types)) {
+         PyErr_SetString(PyExc_TypeError, "unflatten() must be provided with two strings");
          goto exception;
     }
     
-    s = ((PyStringObject *)so)->ob_sval;
-    cobj_type = ft_create_cobj_tag_from_pystring(to);
+    s = ((PyStringObject *)obj)->ob_sval;
+    cobj_type = ft_create_cobj_tag_from_pystring(types);
     
     si = 0;
     
-    robj = ft_unflatten_no_parse(s, &si, PyString_GET_SIZE(so), cobj_type);
+    robj = ft_unflatten_no_parse(s, &si, PyString_GET_SIZE(obj), cobj_type);
     ft_free_cobj(cobj_type);
     
     return robj;
@@ -2654,11 +2655,9 @@ PyObject *ft_unflatten_no_parse(char *s, int *size_ptr, int s_len, COBJ *cobj_ty
         ft_appropriate_memcpy(&usecs, s + *size_ptr, LABRAD_LONG_SIZE);
         *size_ptr += LABRAD_LONG_SIZE;
         x = (double)usecs / pow(2, 64) * 1e6;
-        
         tobj = ft_time_offset();
-        tobj2 = PyObject_CallMethod(ft_gv_datetime, "timedelta", "Ld", secs, x);
+        tobj2 = PyObject_CallMethod(ft_gv_datetime, "timedelta", "iLd", 0, secs, x);
         obj = PyNumber_Add(tobj, tobj2);
-        
         Py_DECREF(tobj);
         Py_DECREF(tobj2);
         
@@ -2685,8 +2684,8 @@ int ft_sufficient_data(int i, int size, int n) {
 }
 
 static PyMethodDef fasttypes_methods[] = {
-    {"flatten", (PyCFunction)ft_flatten, METH_VARARGS | METH_KEYWORDS, "flatten(obj, endianness='>') returns (data, typetag)."},
-    {"unflatten", ft_unflatten, METH_VARARGS, "unflatten((data, typetag)) returns the unflattened data."},
+    {"flatten", (PyCFunction)ft_flatten, METH_VARARGS | METH_KEYWORDS, "flatten(obj, typetags=['?'], endianness='>') returns (data, typetag)."},
+    {"unflatten", (PyCFunction)ft_unflatten, METH_VARARGS | METH_KEYWORDS, "unflatten(data, typetag, endianness='>') returns the unflattened data."},
     {NULL, NULL, 0, NULL}
 };
 
