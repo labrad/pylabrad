@@ -34,6 +34,7 @@ import sys
 from struct import pack, unpack
 import time
 from types import InstanceType
+import datetime  # required for evalLRData
 from datetime import timedelta, datetime as dt
 from itertools import chain, imap
 from operator import itemgetter
