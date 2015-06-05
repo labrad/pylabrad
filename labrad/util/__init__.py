@@ -15,6 +15,8 @@
 
 import copy, re, textwrap
 import contextlib
+import os
+import sys
 
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -291,18 +293,27 @@ class DeferredSignal(object):
 
 # run labrad server
 
-def runServer(srv):
-    """Run a server of the specified class."""
+def parseServerOptions(name, exit_on_failure=True):
+    """Parse standard command line options for a server.
 
-    import os, sys, time
-    from twisted.internet import reactor
+    Args:
+        name (string): The default server name to use if no name is specified
+            on the command line.
+        exit_on_failure (boolean): If True, we call sys.exit when we fail
+            to parse the command line options. Otherwise, we raise UsageError.
+
+    Returns:
+        A ServerOptions instance initialized from the command line arguments.
+        This is a dict-like object containing these string-valued keys:
+            'name', 'node', 'host', 'port', 'password'
+    """
     from twisted.python import usage
 
     class ServerOptions(usage.Options):
-        optParameters = [['name', 'n', srv.name, 'Server name.'],
+        optParameters = [['name', 'n', name, 'Server name.'],
                          ['node', 'd', getNodeName(), 'Node name.'],
-                         ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
                          ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
+                         ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
                          ['password', 'w', C.PASSWORD, 'Login password.']]
 
     config = ServerOptions()
@@ -311,25 +322,21 @@ def runServer(srv):
     except usage.UsageError, errortext:
         print '%s: %s' % (sys.argv[0], errortext)
         print '%s: Try --help for usage details.' % (sys.argv[0])
-        sys.exit(1)
+        if exit_on_failure:
+            sys.exit(1)
+        else:
+            raise
+    return config
 
-    def _ensureReactorStop():
-        try:
-            reactor.stop()
-        except RuntimeError:
-            pass
+def updateServerOptions(srv, config):
+    """Update server options (name, instanceName, password) from cmdline config.
 
-    def _disconnect(data):
-        log.msg('Disconnected cleanly.')
-        _ensureReactorStop()
-
-    def _error(failure):
-        log.msg('There was an error: ' + failure.getErrorMessage())
-        _ensureReactorStop()
-
-    srv.onStartup().addErrback(_error)
-    srv.onShutdown().addCallbacks(_disconnect, _error)
-
+    Args:
+        srv: An instance of LabradServer to be updated to match the config.
+        config: A dict-like object containing keys 'name', 'instanceName' and
+            'password'. Typically, this will be a ServerOptions instance
+            returned by parseServerOptions.
+    """
     if config['name']:
         srv.name = config['name']
     env = dict(os.environ)
@@ -340,11 +347,45 @@ def runServer(srv):
 
     srv.password = config['password']
 
+def runServer(srv, run_reactor=True, stop_reactor=True):
+    """Run the given server instance.
+
+    Args:
+        srv (LabradServer): The server instance to run.
+        run_reactor (boolean): If True, we call reactor.run() to start the
+            twisted reactor. Otherwise, the caller must ensure that reactor.run
+            is called.
+        stop_reactor (boolean): If True, we call reactor.stop() after the
+            server instance shuts down (whether normally or due to an error
+            condition. Otherwise, the caller must arrange to call reactor.stop.
+    """
+    from twisted.internet import reactor
+
+    config = parseServerOptions(name=srv.name)
+    updateServerOptions(srv, config)
+
     log.startLogging(sys.stdout)
     #observer = MyLogObserver(sys.stdout)
     #log.startLoggingWithObserver(observer.emit)
-    reactor.connectTCP(config['host'], int(config['port']), srv)
-    reactor.run()
+
+    @inlineCallbacks
+    def run(srv):
+        reactor.connectTCP(config['host'], int(config['port']), srv)
+        try:
+            yield srv.onStartup()
+            yield srv.onShutdown()
+            log.msg('Disconnected cleanly.')
+        except Exception as e:
+            log.msg('There was an error: {}'.format(e))
+        if stop_reactor:
+            try:
+                reactor.stop()
+            except Exception:
+                pass
+
+    _ = run(srv)
+    if run_reactor:
+        reactor.run()
 
 @contextlib.contextmanager
 def syncRunServer(srv, host=C.MANAGER_HOST, port=C.MANAGER_PORT, password=None):
