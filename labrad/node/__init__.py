@@ -72,7 +72,7 @@ import StringIO
 import zipfile
 
 import labrad
-from labrad import util, types as T
+from labrad import util, types as T, constants as C
 from labrad.server import ILabradServer, LabradServer, setting
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 
@@ -82,7 +82,7 @@ from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.error import ProcessDone, ProcessTerminated
-from twisted.python import log, failure
+from twisted.python import log, failure, usage
 from twisted.python.components import registerAdapter
 from twisted.plugin import getPlugins
 
@@ -831,3 +831,22 @@ class NodeServer(LabradServer):
             'labrad date': labrad.__date__,
             }
         return list(info.items())
+
+class NodeOptions(usage.Options):
+    optParameters = [['name', 'n', util.getNodeName(), 'Node name.'],
+                     ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
+                     ['host', 'h', C.MANAGER_HOST, 'Manager location.']]
+
+def makeService(options):
+    """Construct a TCPServer from a LabRAD node."""
+    name = options['name']
+    host = options['host']
+    port = int(options['port'])
+    return Node(name, host, port)
+
+if __name__ == '__main__':
+    config = NodeOptions()
+    config.parseOptions
+    service = makeService(config)
+    service.startService()
+    reactor.run()
