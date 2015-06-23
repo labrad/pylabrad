@@ -679,7 +679,7 @@ class Unit(object):
         for unit, power in (zip(_base_names, self.powers) +
                             self.lex_names.items()):
             if power != 1 and power != -1:
-                unit += '**' + str(abs(power))
+                unit += '^' + str(abs(power))
             if power < 0: denom += '/' + unit
             elif power > 0: num += '*' + unit
         if not len(num):

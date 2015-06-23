@@ -194,5 +194,14 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue((1*s).inUnitsOf(ms) == 1000*ms)
         self.assertTrue((1*s).inUnitsOf('ms') == 1000*ms)
 
+    def testBaseUnitPowers(self):
+        x = Value(1, 'ns^2')
+
+        self.assertTrue(x.unit.base_unit == units.Unit('s^2'))
+        self.assertTrue(x.inBaseUnits() == Value(1e-18, 's^2'))
+
+    def testUnitPowers(self):
+        self.assertTrue(units.Unit('ns')**2 == units.Unit('ns^2'))
+
 if __name__ == "__main__":
     unittest.main()
