@@ -1,8 +1,8 @@
 pylabrad
 ========
 
-[![Build Status](https://secure.travis-ci.org/martinisgroup/pylabrad.png)](http://travis-ci.org/martinisgroup/pylabrad)
-[![Coverage Status](https://coveralls.io/repos/martinisgroup/pylabrad/badge.svg)](https://coveralls.io/r/martinisgroup/pylabrad)
+[![Build Status](https://secure.travis-ci.org/labrad/pylabrad.png)](http://travis-ci.org/labrad/pylabrad)
+[![Coverage Status](https://coveralls.io/repos/labrad/pylabrad/badge.svg)](https://coveralls.io/r/labrad/pylabrad)
 
 NOTE: This repo was moved from the martinisgroup organization.
 To tell git to pull updates from the new location, you'll
