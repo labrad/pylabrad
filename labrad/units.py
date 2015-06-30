@@ -496,6 +496,14 @@ class ValueArray(WithUnit):
     def __len__(self):
         return len(self._value)
 
+    @property
+    def shape(self):
+        return self._value.shape
+
+    @property
+    def dtype(self):
+        return self._value.dtype
+
     def allclose(self, other, *args, **kw):
         return np.allclose(self._value, other[self.unit], *args, **kw)
 
