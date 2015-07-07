@@ -8,6 +8,11 @@ pylabrad is an interface to the LabRAD system in python with support for both cl
 For general information about the LabRAD system/protocol see [the labrad repository](https://github.com/labrad/labrad) and associated [wiki](https://github.com/labrad/labrad/wiki).
 For help getting started and understanding pylabrad take a look at the [wiki](https://github.com/labrad/pylabrad/wiki).
 
+Contributing
+------------
+
+For instructions on how to contribute to pylabrad, see [contributing.md](https://github.com/labrad/pylabrad/blob/master/contributing.md).
+
 Migration note
 --------------
 
