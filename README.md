@@ -22,6 +22,12 @@ If you have commit access, just edit the wiki, no pull request needed.
 If you do not have commit access, please file an issue and add the `doc/wiki` tag.
 We really appreciate contributions to help improve the documentation!
 
+Tests
+-----
+
+New code should have tests, and changes to existing code should not break existing tests.
+To run the test suite, you'll need to have `pytest` installed. Then run ```py.test``` from the command line when in the pylabrad directory.
+
 Migration note
 --------------
 
