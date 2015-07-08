@@ -13,7 +13,7 @@ Contributing
 
 ### Code
 
-For instructions on how to contribute to pylabrad, see [contributing.md](https://github.com/labrad/pylabrad/blob/master/contributing.md).
+For instructions on how to contribute to pylabrad, see [contributing.md](https://github.com/labrad/labrad/blob/master/contributing.md).
 
 ### Documentation
 
