@@ -178,7 +178,30 @@ class Lazy(object):
 
 
 class WithUnit(object):
-    """Mixin class for adding units to numeric types."""
+    """Mixin class for adding units to numeric types.
+
+    Quantities with units can be used with basic arithmetic operations
+    (addition, subtraction, multiplication, division, raising to powers).
+
+    The 'unit' property stores the units for a given quantity, and you
+    can get the bare value converted to a particular unit 'u' by using
+    square-bracket indexing with the name of a unit or a unit object:
+
+    >>> x = Value(1, 's')
+    >>> x
+    Value(1.0, 's')
+    >>> x.unit
+    <Unit 's'>
+    >>> x['ms']
+    1000.0
+
+    To just strip off the units, you can use the square bracket indexing
+    with the 'unit' property. For example, if you wanted to print the value
+    and units separately:
+
+    >>> print "The value is {:3.2f} {}".format(x[x.unit], x.unit)
+    1.00 s
+    """
 
     __array_priority__ = 15
 
@@ -366,11 +389,16 @@ class WithUnit(object):
         exact number.  C'est la floating point.
         '''
         if not hasattr(self, '_hash'):
-            self._hash = hash(self.base_value)
+            self._hash = hash(self._base_value)
         return self._hash
 
     @Lazy
-    def base_value(self):
+    def _base_value(self):
+        """The bare value of this WithUnit in units of our base unit.
+
+        This is used internally for performance reasons in certain contexts,
+        but should not be used externally.
+        """
         return self[self.unit.base_unit]
 
     def __getitem__(self, unit):
