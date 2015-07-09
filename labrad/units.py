@@ -399,6 +399,8 @@ class WithUnit(object):
         @raises TypeError: if any of the specified units are not compatible
         with the original unit
         """
+        if unit == self.unit:
+            return self
         u = Unit(unit)
         return self[u] * u
 
