@@ -1,16 +1,19 @@
 language: python
+sudo: false
 python:
   - "2.7"
 install:
   - pip install .
-  - pip install coveralls
-  - pip install numpy
-  - pip install pytest
-  - pip install twisted
+  - pip install numpy twisted
+  - pip install pytest coveralls
+env:
+  - SCALABRAD_VERSION=0.3.3
+cache:
+  directories:
+    - $HOME/scalabrad-$SCALABRAD_VERSION
 before_script:
-  - wget https://bintray.com/artifact/download/maffoo/generic/scalabrad-0.2-SNAPSHOT.tar.gz -O /tmp/scalabrad-0.2-SNAPSHOT.tar.gz
-  - tar -xvf /tmp/scalabrad-0.2-SNAPSHOT.tar.gz
-  - export PATH=$PATH:$PWD/scalabrad-0.2-SNAPSHOT/bin/
+  - bash scripts/test/install-scalabrad.sh
+  - export PATH=$PATH:$HOME/scalabrad-$SCALABRAD_VERSION/bin/
 script: scripts/test/test.sh
 after_success:
   - coveralls

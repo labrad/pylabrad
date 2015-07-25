@@ -1,7 +1,9 @@
+import time
+
 import pytest
 
 import labrad
-from labrad import util
+from labrad import types as T, util
 from labrad.server import LabradServer, setting
 
 class RefreshServer1(LabradServer):
@@ -39,15 +41,24 @@ def test_refresh():
             assert hasattr(cxn, 'refresh_test_server')
             rts = cxn.refresh_test_server
 
+            def type_list(strs):
+                return [T.parseTypeTag(s) for s in strs]
+
+            def same_types(a, b):
+                return type_list(a) == type_list(b)
+
             assert hasattr(rts, 'greet')
-            assert rts.greet.accepts == ['_']
-            assert rts.greet.returns == ['s']
+            assert same_types(rts.greet.accepts, ['_'])
+            assert same_types(rts.greet.returns, ['s'])
 
             assert hasattr(rts, 'go_away')
-            assert rts.go_away.accepts == ['_']
-            assert rts.go_away.returns == ['_']
+            assert same_types(rts.go_away.accepts, ['_'])
+            assert same_types(rts.go_away.returns, ['_'])
 
             assert rts.greet() == 'hello!'
+
+        # pause before refreshing after server disconnect
+        time.sleep(1)
 
         cxn.refresh()
         assert not hasattr(cxn, 'refresh_test_server')
@@ -59,12 +70,12 @@ def test_refresh():
             # check the old rts we got earlier, as well as the cxn attribute
             for srv in [rts, cxn.refresh_test_server]:
                 assert hasattr(srv, 'greet')
-                assert srv.greet.accepts == ['s']
-                assert srv.greet.returns == ['s']
+                assert same_types(srv.greet.accepts, ['s'])
+                assert same_types(srv.greet.returns, ['s'])
 
                 assert hasattr(srv, 'add')
-                assert srv.add.accepts == ['(ii)']
-                assert srv.add.returns == ['i']
+                assert same_types(srv.add.accepts, ['(ii)'])
+                assert same_types(srv.add.returns, ['i'])
 
                 assert not hasattr(srv, 'go_away')
 
