@@ -203,5 +203,19 @@ class LabradUnitsTests(unittest.TestCase):
     def testUnitPowers(self):
         self.assertTrue(units.Unit('ns')**2 == units.Unit('ns^2'))
 
+
+class NumpyBugTests(unittest.TestCase):
+    """Tests to make sure we don't hit any known numpy bugs"""
+
+    def test_array_priority(self):
+        """numpy issue 6133
+
+        We can explain this better once we understand the bug
+        """
+        x = np.float64(1)
+        y = units.DimensionlessFloat(2)
+        self.assertTrue(x < y)
+
+
 if __name__ == "__main__":
     unittest.main()
