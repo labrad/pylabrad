@@ -23,7 +23,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import blockingCallFromThread
 from twisted.python import log, reflect, util
 
-from labrad import constants as C, thread
+from labrad import constants as C, crypto, thread
 from labrad.support import getNodeName
 from labrad.util.unwrap import unwrap
 
@@ -210,7 +210,20 @@ def convertUnits(**unitdict):
     return wrap
 
 
+def is_local_connection(transport):
+    """Determine whether the given network transport is connected to localhost.
 
+    Args:
+        transport (twisted.internet.interfaces.ITransport): a twisted transport
+            object, representing a network connection.
+
+    Returns (boolean):
+        True if the transport is connected to a peer on the local host, False
+        otherwise.
+    """
+    remote_addr = transport.getPeer().host
+    local_addr = transport.getHost().host
+    return remote_addr in ['127.0.0.1', '::1'] or remote_addr == local_addr
 
 
 # deferred helpers
@@ -293,7 +306,7 @@ class DeferredSignal(object):
 
 # run labrad server
 
-def parseServerOptions(name, exit_on_failure=True):
+def parseServerOptions(name, exit_on_failure=True, options=None):
     """Parse standard command line options for a server.
 
     Args:
@@ -301,24 +314,33 @@ def parseServerOptions(name, exit_on_failure=True):
             on the command line.
         exit_on_failure (boolean): If True, we call sys.exit when we fail
             to parse the command line options. Otherwise, we raise UsageError.
+        options (list(string)): If given, parse options from the given strings.
+            Otherwise, will parse options from the command line in sys.argv.
 
     Returns:
         A ServerOptions instance initialized from the command line arguments.
         This is a dict-like object containing these string-valued keys:
-            'name', 'node', 'host', 'port', 'password'
+            'name', 'node', 'host', 'port', 'password', 'tls'
     """
     from twisted.python import usage
 
     class ServerOptions(usage.Options):
-        optParameters = [['name', 'n', name, 'Server name.'],
-                         ['node', 'd', getNodeName(), 'Node name.'],
-                         ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
-                         ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
-                         ['password', 'w', C.PASSWORD, 'Login password.']]
+        optParameters = [
+            ['name', 'n', name, 'Server name.'],
+            ['node', 'd', getNodeName(), 'Node name.'],
+            ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
+            ['port', 'p', None, 'Manager port.', int],
+            ['password', 'w', C.PASSWORD, 'Login password.'],
+            ['tls', 's', C.MANAGER_TLS,
+             'TLS mode for connecting to manager (on/starttls/off)']]
 
     config = ServerOptions()
+    config['tls'] = C.check_tls_mode(config['tls'])
     try:
-        config.parseOptions()
+        config.parseOptions(options=options)
+        if config['port'] is None:
+            tls_on = config['tls'] == 'on'
+            config['port'] = C.MANAGER_PORT_TLS if tls_on else C.MANAGER_PORT
     except usage.UsageError, errortext:
         print '%s: %s' % (sys.argv[0], errortext)
         print '%s: Try --help for usage details.' % (sys.argv[0])
@@ -370,7 +392,14 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
 
     @inlineCallbacks
     def run(srv):
-        reactor.connectTCP(config['host'], int(config['port']), srv)
+        host = config['host']
+        port = int(config['port'])
+        srv.configure_tls(host, config['tls'])
+        if config['tls'] == 'on':
+            tls_options = crypto.tls_options(host)
+            reactor.connectSSL(host, port, srv, tls_options)
+        else:
+            reactor.connectTCP(host, port, srv)
         try:
             yield srv.onStartup()
             yield srv.onShutdown()
@@ -388,13 +417,19 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
         reactor.run()
 
 @contextlib.contextmanager
-def syncRunServer(srv, host=C.MANAGER_HOST, port=C.MANAGER_PORT, password=None):
+def syncRunServer(srv, host=C.MANAGER_HOST, port=None, password=None,
+                  tls=C.MANAGER_TLS):
     """Run a labrad server of the specified class in a synchronous context.
 
     Returns a context manager to be used with python's with statement that
     will yield when the server has started and then shut the server down after
     the context is exited.
     """
+
+    tls = C.check_tls_mode(tls)
+
+    if port is None:
+        port = C.MANAGER_PORT_TLS if tls == 'on' else C.MANAGER_PORT
 
     if password is None:
         password = C.PASSWORD
@@ -403,7 +438,12 @@ def syncRunServer(srv, host=C.MANAGER_HOST, port=C.MANAGER_PORT, password=None):
 
     @inlineCallbacks
     def start_server():
-        reactor.connectTCP(host, port, srv)
+        srv.configure_tls(host, tls)
+        if tls == 'on':
+            tls_options = crypto.tls_options(host)
+            reactor.connectSSL(host, port, srv, tls_options)
+        else:
+            reactor.connectTCP(host, port, srv)
         yield srv.onStartup()
 
     @inlineCallbacks

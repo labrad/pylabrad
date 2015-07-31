@@ -29,10 +29,11 @@ class BaseConnection(object):
         self._nextContext += 1
         return ctx
 
-    def connect(self, host=C.MANAGER_HOST, port=C.MANAGER_PORT, timeout=C.TIMEOUT, password=None):
+    def connect(self, host=C.MANAGER_HOST, port=None, timeout=C.TIMEOUT,
+                password=None, tls=C.MANAGER_TLS):
         self.host = host
         self.port = port
-        self.ID = self._connect(password, timeout)
+        self.ID = self._connect(password, timeout, tls=tls)
         self.connected = True
 
     def disconnect(self):
@@ -40,7 +41,7 @@ class BaseConnection(object):
             self._disconnect()
             self.connected = False
 
-    def _connect(self, password=None, timeout=None):
+    def _connect(self, password=None, timeout=None, tls=C.MANAGER_TLS):
         """Implemented by subclass"""
 
     def _disconnect(self):
@@ -59,9 +60,10 @@ try:
     from labrad.wrappers import getConnection
 
     class TwistedConnection(BaseConnection):
-        def _connect(self, password, _timeout):
+        def _connect(self, password, _timeout, tls):
             startReactor()
-            self.cxn = self.call(getConnection, self.host, self.port, self.name, password).wait()
+            self.cxn = self.call(getConnection, self.host, self.port, self.name,
+                                 password, tls=tls).wait()
             return self.cxn.ID
 
         def _disconnect(self):
@@ -89,12 +91,19 @@ except ImportError:
 
 
 class AsyncoreConnection(BaseConnection):
-    def _connect(self, password, timeout):
+    def _connect(self, password, timeout, tls):
+        if tls.lower() == 'on':
+            raise Exception('TLS is not currently supported with the asyncore '
+                            'backend')
         self.connected = False
         self.serverCache = {}
         self.settingCache = {}
+        if self.port is None:
+            port = C.MANAGER_PORT_TLS if tls.lower() == 'on' else C.MANAGER_PORT
+        else:
+            port = self.port
         try:
-            sock = socket.create_connection((self.host, self.port),
+            sock = socket.create_connection((self.host, port),
                                             timeout or 5)
             socketMap = {}
             self.cxn = AsyncoreProtocol(sock, map=socketMap)
@@ -410,7 +419,7 @@ class Future(object):
             return '<Future: pending...>'
 
 
-def connect(host=C.MANAGER_HOST, port=C.MANAGER_PORT, name=None, backend=None, **kw):
+def connect(host=C.MANAGER_HOST, port=None, name=None, backend=None, **kw):
     """Create a backend connection to labrad"""
     if backend is None:
         if 'twisted' in backends:

@@ -4,10 +4,10 @@ python:
   - "2.7"
 install:
   - pip install .
-  - pip install numpy twisted
+  - pip install numpy twisted pyOpenSSL
   - pip install pytest coveralls
 env:
-  - SCALABRAD_VERSION=0.4.0
+  - SCALABRAD_VERSION=0.5.0
 cache:
   directories:
     - $HOME/scalabrad-$SCALABRAD_VERSION

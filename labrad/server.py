@@ -34,7 +34,7 @@ from twisted.python.components import registerAdapter
 from twisted.plugin import IPlugin
 from zope.interface import implements
 
-from labrad import util, constants as C, types as T
+from labrad import constants as C, crypto, types as T, util
 from labrad.decorators import setting
 from labrad.protocol import LabradProtocol
 from labrad.interfaces import ILabradServer, IClientAsync
@@ -227,6 +227,25 @@ class LabradServer(ClientFactory):
         self.signals = []
         self.contexts = {}
 
+    def configure_tls(self, host, tls):
+        """Configure TLS options for this server's connection to labrad.
+
+        Must be called before we actually initiate a network connection, e.g.
+        before this server instance is passed to one of the reactor.connect*
+        methods.
+
+        Args:
+            host (string): The remote hostname of the manager we are connecting
+                to. This will be used to validate the hostname of the
+                certificate presented by the manager.
+            tls (string): One of 'on', 'off' or 'starttls'. Note that if
+                tls == 'on', the connection should be initiated with
+                reactor.connectSSL, while if tls == 'off' or tls == 'starttls'
+                then reactor.connectTCP should be used instead.
+        """
+        self._remote_host = host
+        self._tls_mode = C.check_tls_mode(tls)
+
     # request handling
     @inlineCallbacks
     def handleRequest(self, source, context, records):
@@ -353,7 +372,26 @@ class LabradServer(ClientFactory):
         """Login as a server after connecting to LabRAD."""
         try:
             addr = protocol.transport.getPeer()
-            log.msg('connected to %s:%s' % (addr.host, addr.port))
+            is_local_connection = util.is_local_connection(protocol.transport)
+            log.msg('Connected to {}:{}'.format(addr.host, addr.port))
+            if ((self._tls_mode == 'starttls-force') or
+                (self._tls_mode == 'starttls' and not is_local_connection)):
+                log.msg('Manager is remote ({}). Starting TLS.'.format(addr.host))
+                host = self._remote_host
+                try:
+                    yield protocol.sendRequest(C.MANAGER_ID, [(1L, ('STARTTLS', host))])
+                except Exception, e:
+                    raise Exception(
+                        'Failed sending STARTTLS command to server. You should '
+                        'update the manager and configure it to support '
+                        'encryption or else disable encryption for clients. See '
+                        'https://github.com/labrad/pylabrad/blob/master/CONFIG.md.'
+                        'Error: {}'.format(e))
+                protocol.transport.startTLS(crypto.tls_options(host))
+                try:
+                    yield protocol.sendRequest(C.MANAGER_ID, [(2L, 'PING')])
+                except Exception, e:
+                    raise Exception('STARTTLS failed. Check that manager certificates are accepted.')
             self.mgr_host, self.mgr_port = addr.host, addr.port
             name = getattr(self, 'instanceName', self.name)
             yield protocol.loginServer(self._getPassword(), name,

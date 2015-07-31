@@ -23,7 +23,7 @@ __version__  = '0.93.1'
 __revision__ = '$Revision$'
 __date__     = '$Date$'
 
-def connect(host=constants.MANAGER_HOST, port=constants.MANAGER_PORT, name=None, **kw):
+def connect(host=constants.MANAGER_HOST, port=None, name=None, **kw):
     """Create a client connection to the labrad manager."""
     cxn = backend.connect(host=host, port=port, name=name, **kw)
     return client.Client(cxn)

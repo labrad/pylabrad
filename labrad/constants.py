@@ -21,9 +21,36 @@ Important constants that show up throughout the code.
 
 import os
 
+def check_tls_mode(tls):
+    """Check that provided tls mode is valid and convert to canonical form.
+
+    Args:
+        tls (string): One of 'on', 'off', 'starttls', or 'starttls-force'.
+            If 'on', we use TLS for the initial session establishment.
+            If 'off', no TLS is used (for connecting to a legacy manager that
+            does not support TLS). If 'starttls', the connection is initially
+            unencrypted and will then be upgraded to a TLS connection after the
+            initial handshake when connecting to a remote manager.
+            If 'starttls-force', the client will behave like starttls mode but
+            the connection will be upgraded to TLS even when connecting to the
+            manager on localhost.
+
+    Returns (string): tls mode in canonical (lowercase) form.
+
+    Raises:
+        ValueError: an invalid tls mode was specified
+    """
+    tls = tls.lower()
+    if tls not in ['on', 'off', 'starttls', 'starttls-force']:
+        raise ValueError("tls mode must be one of 'on', 'off', 'starttls', or "
+                         "'starttls-force'. got: '{}'".format(tls))
+    return tls
+
 # defaults for the labrad manager
 MANAGER_ID = 1
 MANAGER_PORT = int(os.environ.get('LABRADPORT', 7682))
+MANAGER_TLS = check_tls_mode(os.environ.get('LABRAD_TLS', 'starttls'))
+MANAGER_PORT_TLS = int(os.environ.get('LABRAD_TLS_PORT', 7643))
 MANAGER_HOST = os.environ.get('LABRADHOST', 'localhost')
 PASSWORD = os.environ.get('LABRADPASSWORD', None)
 
