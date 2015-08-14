@@ -846,7 +846,7 @@ def makeService(options):
 
 if __name__ == '__main__':
     config = NodeOptions()
-    config.parseOptions
+    config.parseOptions()
     service = makeService(config)
     service.startService()
     reactor.run()
