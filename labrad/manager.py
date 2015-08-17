@@ -82,6 +82,16 @@ class AsyncManager:
         returnValue((description, accepts, returns, notes))
 
     @inlineCallbacks
+    def getSettingInfoByName(self, serverID, settingName):
+        """Get information about a setting using its name."""
+        packet = [(C.HELP, (long(serverID), settingName)),
+                  (C.LOOKUP, (long(serverID), settingName))]
+        resp = yield self._send(packet)
+        description, accepts, returns, notes = resp[0][1]
+        ID = resp[1][1][1]
+        returnValue((description, accepts, returns, notes, ID))
+
+    @inlineCallbacks
     def subscribeToNamedMessage(self, name, ID, enable=True):
         """Subscribe to or stop a named message."""
         packet = [(C.MESSAGE_SUBSCRIBE, (name, long(ID), enable))]
