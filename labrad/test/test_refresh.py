@@ -23,11 +23,11 @@ class RefreshServer2(LabradServer):
     """Second version of the refresh server, with different settings."""
     name = 'Refresh Test Server'
 
-    @setting(1, name='s', returns='s')
+    @setting(10, name='s', returns='s')
     def greet(self, c, name):
         return 'hello, {}!'.format(name)
 
-    @setting(2, a='i', b='i', returns='i')
+    @setting(12, a='i', b='i', returns='i')
     def add(self, c, a, b):
         return a + b
 
