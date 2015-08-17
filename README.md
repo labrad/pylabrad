@@ -17,7 +17,9 @@ Tests
 -----
 
 New code should have tests, and changes to existing code should not break existing tests.
-To run the test suite, you'll need to have `pytest` installed. Then run ```py.test``` from the command line when in the pylabrad directory.
+To run the test suite, you'll need to have `pytest` installed.
+In addition, the tests assume that the python test server is running, so you'll need to spin up a labrad manager and run the test server located in `labrad/servers/test_server.py`.
+Then run `py.test` from the command line when in the pylabrad directory.
 
 Migration note
 --------------
