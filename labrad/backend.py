@@ -451,6 +451,15 @@ class ManagerService:
         description, accepts, returns, notes = resp[0][1]
         return (description, accepts, returns, notes)
 
+    def getSettingInfoByName(self, serverID, settingName):
+        """Get information about a setting using its name."""
+        packet = [(C.HELP, (long(serverID), settingName)),
+                  (C.LOOKUP, (long(serverID), settingName))]
+        resp = self._send(packet)
+        description, accepts, returns, notes = resp[0][1]
+        ID = resp[1][1][1]
+        return (description, accepts, returns, notes, ID)
+
     def _send(self, packet, *args, **kw):
         """Send a request to the manager and wait for the result."""
         return self.cxn.sendRequest(C.MANAGER_ID, packet, *args, **kw).wait()

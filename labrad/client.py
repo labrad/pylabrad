@@ -87,8 +87,8 @@ class SettingWrapper(object):
 
     def _refresh(self):
         if not self._refreshed:
-            info = self._mgr.getSettingInfo(self._server.ID, self.ID)
-            self.__doc__, self._accepts, self._returns, self._notes = info
+            info = self._mgr.getSettingInfoByName(self._server.ID, self.name)
+            self.__doc__, self._accepts, self._returns, self._notes, self.ID = info
             self._refreshed = True
 
     def refresh(self):
