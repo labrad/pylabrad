@@ -2,10 +2,22 @@ import unittest
 
 import labrad
 from labrad import types as T
+from labrad.servers.test_server import TestServer
+from labrad.util import syncRunServer
 
 TEST_STR = 'this is a test, this is only a test'
 
 class ClientTests(unittest.TestCase):
+    def run(self, result=None):
+        """Override the TestCase run method to launch the test server.
+
+        This seems to be the cleanest solution for effectively using a
+        context manager as part of a test fixture.  This method then calls
+        the usual test fixture setUp and tearDown within this context.
+        """
+        with syncRunServer(TestServer()):
+            super(ClientTests, self).run(result)
+
     def setUp(self):
         self.cxn = labrad.connect()
 
