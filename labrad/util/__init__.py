@@ -403,21 +403,20 @@ def syncRunServer(srv, host=C.MANAGER_HOST, port=C.MANAGER_PORT, password=None):
 
     @inlineCallbacks
     def start_server():
-        connector = reactor.connectTCP(host, port, srv)
+        reactor.connectTCP(host, port, srv)
         yield srv.onStartup()
-        returnValue(connector)
 
     @inlineCallbacks
     def stop_server():
+        srv.disconnect()
         yield srv.onShutdown()
 
     thread.startReactor()
-    connector = blockingCallFromThread(reactor, start_server)
+    blockingCallFromThread(reactor, start_server)
     try:
         yield
     finally:
         try:
-            connector.disconnect()
             blockingCallFromThread(reactor, stop_server)
         except Exception:
             pass # don't care about exceptions here
