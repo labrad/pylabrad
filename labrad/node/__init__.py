@@ -125,6 +125,7 @@ class ServerProcess(ProcessProtocol):
         self.stopping = False
         self.output = []
         self._lock = defer.DeferredLock()
+        self.logger = logging.getLogger('labrad.' + labrad.support.mangle(self.name))
 
     @property
     def status(self):
@@ -285,15 +286,13 @@ class ServerProcess(ProcessProtocol):
         
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]
-        l = logging.getLogger('labrad.' + labrad.support.mangle(self.name))
-        l.info(data)
+        self.logger.info(data.strip())
 
     def errReceived(self, data):
         """Called when the server prints to stderr."""
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]
-        l = logging.getLogger('labrad.' + labrad.support.mangle(self.name))
-        l.warning(data)
+        self.logger.warning(data.strip())
             
     def clearOutput(self):
         """Clear the log of stdout."""
@@ -867,7 +866,7 @@ def setup_logging(options):
                 address = options['syslog_socket']
             else:
                 host, _, port = options['syslog_socket'].partition(':')
-                if port=="":
+                if port == "":
                     address = (host, 514)
                 else:
                     address = (host, int(port))
@@ -877,7 +876,7 @@ def setup_logging(options):
         elif sys.platform.startswith('darwin'):
             syslog_handler = logging.handlers.SysLogHandler(address='/var/run/syslog')
         else:
-            node_log.critical("Syslog specified, but default socket not known for platform %s.  Use -s option" % (sys.platform,))
+            node_log.critical("Syslog specified, but default socket not known for platform {}.  Use -s option".format(sys.platform))
             sys.exit(1)
         syslog_handler.setFormatter(logging.Formatter('%(name)s: %(message)s'))
         node_log.addHandler(syslog_handler)
