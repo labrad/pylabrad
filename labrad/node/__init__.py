@@ -841,8 +841,10 @@ class NodeOptions(usage.Options):
     optParameters = [['name', 'n', util.getNodeName(), 'Node name.'],
                      ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
                      ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
-                     ['logfile', 'l', None, 'Enable logging to a file']]
-    optFlags = [['syslog', 's', 'Enable syslog']]
+                     ['logfile', 'l', None, 'Enable logging to a file'],
+                     ['syslog_socket', 'x', None, 'Override default syslog socket.  absolute path or host[:port]']]
+    optFlags = [['syslog', 's', 'Enable syslog'],
+                ['verbose', 'v', 'Enable debug output']]
     
 def makeService(options):
     """Construct a TCPServer from a LabRAD node."""
@@ -855,13 +857,28 @@ def setup_logging(options):
     logging.basicConfig()
     node_log = logging.getLogger('labrad')
     if options['syslog']:
-        print "logging to syslog"
-        if sys.platform.startswith('linux'):
+        # We need to find the path to the system log socket, which varies by platform
+        # https://docs.python.org/2/library/logging.handlers.html#sysloghandler
+        # Linux and OS/X defaults are listed below.
+        # On windows you will have to use UDP logging.  Because UDP is connectionless,
+        # there is no way to tell if there is actually a syslog daemon listening.
+        if options['syslog_socket']:
+            if "/" in options['syslog_socket']:
+                address = options['syslog_socket']
+            else:
+                host, _, port = options['syslog_socket'].partition(':')
+                if port=="":
+                    address = (host, 514)
+                else:
+                    address = (host, int(port))
+            syslog_handler = logging.handlers.SysLogHandler(address=address)
+        elif sys.platform.startswith('linux'):
             syslog_handler = logging.handlers.SysLogHandler(address='/dev/log')
         elif sys.platform.startswith('darwin'):
             syslog_handler = logging.handlers.SysLogHandler(address='/var/run/syslog')
         else:
-            syslog_handler = logging.handlers.SysLogHandler()
+            node_log.critical("Syslog specified, but default socket not known for platform %s.  Use -s option" % (sys.platform,))
+            sys.exit(1)
         syslog_handler.setFormatter(logging.Formatter('%(name)s: %(message)s'))
         node_log.addHandler(syslog_handler)
     if options['logfile']:
@@ -869,7 +886,10 @@ def setup_logging(options):
         file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s: %(message)s',
                                                     datefmt='%Y-%m-%d %H:%M:%S'))
         node_log.addHandler(file_handler)
-    node_log.setLevel(logging.INFO)
+    if config['verbose']:
+        node_log.setLevel(logging.DEBUG)
+    else:
+        node_log.setLevel(logging.INFO)
     
 if __name__ == '__main__':
     config = NodeOptions()
@@ -879,4 +899,3 @@ if __name__ == '__main__':
     service = makeService(config)
     service.startService()
     reactor.run()
-    
