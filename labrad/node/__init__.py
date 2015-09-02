@@ -70,6 +70,8 @@ from datetime import datetime
 from ConfigParser import SafeConfigParser
 import StringIO
 import zipfile
+import logging
+import logging.handlers
 
 import labrad
 from labrad import util, types as T, constants as C
@@ -87,8 +89,6 @@ from twisted.python import log, failure, usage
 from twisted.python.components import registerAdapter
 from twisted.plugin import getPlugins
 from zope.interface import Interface, implements
-import logging
-import logging.handlers
 
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
 
@@ -283,7 +283,6 @@ class ServerProcess(ProcessProtocol):
 
     def outReceived(self, data):
         """Called when the server prints to stdout."""
-        
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]
         self.logger.info(data.strip())
@@ -293,7 +292,7 @@ class ServerProcess(ProcessProtocol):
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]
         self.logger.warning(data.strip())
-            
+
     def clearOutput(self):
         """Clear the log of stdout."""
         self.output = []
