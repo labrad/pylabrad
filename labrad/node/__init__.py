@@ -75,6 +75,7 @@ import labrad
 from labrad import util, types as T, constants as C
 from labrad.server import ILabradServer, LabradServer, setting
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
+import labrad.support
 
 from twisted.application.service import IService, MultiService
 from twisted.application.internet import TCPClient
@@ -86,11 +87,9 @@ from twisted.python import log, failure, usage
 from twisted.python.components import registerAdapter
 from twisted.plugin import getPlugins
 from zope.interface import Interface, implements
-try:
-    import syslog
-except ImportError:
-    syslog = None
-    
+import logging
+import logging.handlers
+
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
 
 class IServerProcess(Interface):
@@ -286,15 +285,15 @@ class ServerProcess(ProcessProtocol):
         
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]
-        if syslog:
-            syslog.syslog(syslog.LOG_INFO, "%s: %s" % (self.name, data))
+        l = logging.getLogger('labrad.' + labrad.support.mangle(self.name))
+        l.info(data)
 
     def errReceived(self, data):
         """Called when the server prints to stderr."""
         self.output.append((datetime.now(), data))
         self.output = self.output[-LOG_LENGTH:]
-        if syslog:
-            syslog.syslog(syslog.LOG_WARNING, "%s: %s" % (self.name, data))
+        l = logging.getLogger('labrad.' + labrad.support.mangle(self.name))
+        l.warning(data)
             
     def clearOutput(self):
         """Clear the log of stdout."""
@@ -537,7 +536,7 @@ class NodeConfig(object):
         p.get('directories', '*s', key='dirs')
         p.get('packages', '*s', key='mods')
         p.get('extensions', '*s', key='exts')
-        p.get('javapath', 's', True, '', key='java')
+        p.get('javapath', 's', True, defaults[3], key='java')
         ans = yield p.send()
         dirs = filter(None, ans.dirs)
         mods = filter(None, ans.mods)
@@ -841,8 +840,10 @@ class NodeServer(LabradServer):
 class NodeOptions(usage.Options):
     optParameters = [['name', 'n', util.getNodeName(), 'Node name.'],
                      ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
-                     ['host', 'h', C.MANAGER_HOST, 'Manager location.']]
-
+                     ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
+                     ['logfile', 'l', None, 'Enable logging to a file']]
+    optFlags = [['syslog', 's', 'Enable syslog']]
+    
 def makeService(options):
     """Construct a TCPServer from a LabRAD node."""
     name = options['name']
@@ -850,11 +851,31 @@ def makeService(options):
     port = int(options['port'])
     return Node(name, host, port)
 
+def setup_logging(options):
+    logging.basicConfig()
+    node_log = logging.getLogger('labrad')
+    if options['syslog']:
+        print "logging to syslog"
+        if sys.platform.startswith('linux'):
+            syslog_handler = logging.handlers.SysLogHandler(address='/dev/log')
+        elif sys.platform.startswith('darwin'):
+            syslog_handler = logging.handlers.SysLogHandler(address='/var/run/syslog')
+        else:
+            syslog_handler = logging.handlers.SysLogHandler()
+        syslog_handler.setFormatter(logging.Formatter('%(name)s: %(message)s'))
+        node_log.addHandler(syslog_handler)
+    if options['logfile']:
+        file_handler = logging.handlers.RotatingFileHandler(options['logfile'], maxBytes=800000, backupCount=5)
+        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s: %(message)s',
+                                                    datefmt='%Y-%m-%d %H:%M:%S'))
+        node_log.addHandler(file_handler)
+    node_log.setLevel(logging.INFO)
+    
 if __name__ == '__main__':
     config = NodeOptions()
     config.parseOptions()
-    if syslog:
-        syslog.openlog('LabRAD-Node')
+    setup_logging(config)
+    logging.getLogger('labrad.node').info("Starting")
     service = makeService(config)
     service.startService()
     reactor.run()
