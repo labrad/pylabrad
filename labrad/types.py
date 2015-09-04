@@ -400,18 +400,45 @@ def _flatten_to(obj, types, endianness):
 # Evaluation functions
 
 def evalLRData(s):
-    """
-    Evaluate LR data in a namespace with all LRTypes.
+    """Evaluate labrad data from string form produced by reprLRData.
 
-    What is this for? -DTS
+    DEPRECATED
+
+    The format produced by reprLRData has been deprecated, and this function
+    is kept solely for backwards compatibility to load data stored with the
+    old format.
     """
-    return eval(s)
+
+    # Value and Complex constructors previously allowed the unit parameter
+    # to be None, and old data may have been saved that way. These shims
+    # convert the unit to '' instead and then call the real constructors.
+    def _Value(x, unit=''):
+        if unit is None:
+            unit = ''
+        return U.Value(x, unit)
+
+    def _Complex(x, unit=''):
+        if unit is None:
+            unit = ''
+        return U.Complex(x, unit)
+
+    globs = globals()
+    globs['Value'] = _Value
+    globs['Complex'] = _Complex
+    globs['nan'] = float('nan')
+    globs['inf'] = float('inf')
+    return eval(s, globs)
 
 def reprLRData(s):
-    """
-    Make a repr of LR data in a namespace with all LRTypes.
+    """Make a string repr of labrad data that can be parsed with evalLRData.
 
-    What is this for? -DTS
+    DEPRECATED
+
+    This was an attempt to create a human-readable string representation of
+    labrad data suitable for storing small amounts of data and reading it
+    in later. It was used in early versions of the data vault, and is kept
+    here for backwards-compatibility only. This should not be used for new
+    applications; instead, just use the standard wire-format for serialization.
     """
     return repr(s)
 
