@@ -976,6 +976,7 @@ class LRList(LRType):
         #uses ==, so our use of in here should be ok
         if L.dtype == 'bool': t = LRBool()
         elif L.dtype in ['>i4', '<i4']: t = LRInt()
+        elif L.dtype in ['>i8', '<i8']: t = LRInt()
         elif L.dtype in ['>u4', '<u4']: t = LRWord()
         elif L.dtype in ['>u8', '<u8']: t = LRWord()
         elif L.dtype in ['>f8', '<f8']: t = LRValue()
@@ -1079,6 +1080,9 @@ class LRList(LRType):
             if wanted_dtype == 'u4':
                 if a.dtype in ['<i8', '>i8']:
                     a = a.astype(endianness + 'u4')
+            if wanted_dtype == 'i4':
+                if a.dtype in ['<i8', '>i8']:
+                    a = a.astype(endianness + 'i4')
             if a.dtype.itemsize > dtype(wanted_dtype).itemsize:
                 raise Exception("Narrowing type cast while flattening numpy array: dtype=%s, wanted_dtype=%s" % (a.dtype, dtype(wanted_dtype)))
             a = a.astype(endianness + wanted_dtype)
