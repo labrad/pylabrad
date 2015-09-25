@@ -989,13 +989,12 @@ def setup_logging(options):
                                       datefmt='%Y-%m-%d %H:%M:%S')
         file_handler.setFormatter(formatter)
         node_log.addHandler(file_handler)
-    if config['verbose']:
+    if options['verbose']:
         node_log.setLevel(logging.DEBUG)
     else:
         node_log.setLevel(logging.INFO)
 
-
-if __name__ == '__main__':
+def main():
     config = NodeOptions()
     config.parseOptions()
     setup_logging(config)
@@ -1003,3 +1002,6 @@ if __name__ == '__main__':
     service = makeService(config)
     service.startService()
     reactor.run()
+
+if __name__ == '__main__':
+    main()

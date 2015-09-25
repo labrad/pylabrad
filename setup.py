@@ -50,8 +50,5 @@ setup(
         'labrad': ['LICENSE.txt'],
         'labrad.node': ['*.ini'],
         },
-    py_modules = [
-        'twisted.plugins.labrad_node',
-        ],
-    scripts = ['labrad_postinstall.py'],
+    scripts = [],
     )
