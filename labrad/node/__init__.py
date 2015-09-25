@@ -35,8 +35,6 @@ configuration keys are:
                     that contain a file called '.nodeignore' will be skipped,
                     along with all their subdirs.
   extensions (*s): what files to look at, e.g. ['.ini', '.py', '.exe']
-  javapath (s): full path to the java executable on this system,
-                     including 'java.exe' at the end
   packages (*s): python packages to be scanned for servers using twisted's
                  plugin system (this feature is deprecated and will be removed).
 
@@ -93,6 +91,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.error import ProcessDone, ProcessTerminated
 from twisted.python import log, failure, usage
+from twisted.python.runtime import platformType
 from twisted.python.components import registerAdapter
 from twisted.plugin import getPlugins
 from zope.interface import Interface, implements
@@ -116,17 +115,6 @@ class ServerProcess(ProcessProtocol):
         # TODO allow for spaces in args by doing a proper split here
         self.args = self.cmdline.split()
         self.args = [interpEnvironmentVars(a, self.env) for a in self.args]
-        if self.args[0].lower() == 'java':
-            # a bit of a hack to get java working
-            if not env['JAVA']:
-                print "WARNING: cmdline=java, but no javapath defined for " +\
-                      "this node"
-            else:
-                self.args[0] = env['JAVA']
-        if not os.path.isabs(self.args[0]):
-            # must use absolute path for the executable
-            self.args[0] = os.path.join(self.path, self.args[0])
-        self.executable = self.args[0]
         self.starting = False
         self.started = False
         self.stopping = False
@@ -163,13 +151,34 @@ class ServerProcess(ProcessProtocol):
             return
         print "starting '%s'..." % self.name
         print "path:", self.path
-        print "executable:", self.executable
         print "args:", self.args
         self.starting = True
         self.startup = defer.Deferred()
         dispatcher.connect(self.serverConnected, 'serverConnected')
         self.emitMessage('server_starting')
-        self.proc = reactor.spawnProcess(self, self.executable, self.args,
+        # This looks crazy.  On Unix, spawnProcess calls fork() and then
+        # execvpe which expects an executable name and a series of arguments,
+        # and tries to resolve the executable using PATH.  On windows,
+        # it calls createProcess, which expects a command string and an
+        # optional executable.  If the executable argument is present,
+        # it must be an absolute path including .exe suffix.  If executable
+        # is not present, the first part of the command string is used,
+        # and invokes the %PATH% and extension search.
+        #
+        # Twisted spawnProcess only supports posix (including Mac) and
+        # win32, so we just abandon anything else.
+        # Relevant code is in twisted/internet/process.py:_BaseProcess and
+        # twisted/internet/dumbwin32proc.py:Process.  The twisted docs
+        # at http://twistedmatrix.com/documents/current/api/twisted.internet.interfaces.IReactorProcess.spawnProcess.html say that the full executable path is required, but
+        # this is not true.
+        if platformType == 'posix':
+            executable = self.args[0]
+        elif platformType == 'win32':
+            executable = None
+        else:
+            raise RuntimeError("Unsupported platform %s" % platformType)
+
+        self.proc = reactor.spawnProcess(self, executable, self.args,
                                          env=self.env, path=self.path)
         timeoutCall = reactor.callLater(self.timeout, self.kill)
         try:
@@ -522,8 +531,8 @@ class NodeConfig(object):
 
     def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
-        self.dirs, self.mods, self.extensions, self.java = config
-        print 'config updated:', self.dirs, self.mods, self.extensions, self.java
+        self.dirs, self.mods, self.extensions  = config
+        print 'config updated:', self.dirs, self.mods, self.extensions
         if triggerRefresh:
             self.parent.refreshServers()
 
@@ -537,17 +546,14 @@ class NodeConfig(object):
             p.set('directories', defaults[0])
             p.set('packages', defaults[1])
             p.set('extensions', defaults[2])
-            p.set('javapath', defaults[3])
         p.get('directories', '*s', key='dirs')
         p.get('packages', '*s', key='mods')
         p.get('extensions', '*s', key='exts')
-        p.get('javapath', 's', True, defaults[3], key='java')
         ans = yield p.send()
         dirs = filter(None, ans.dirs)
         mods = filter(None, ans.mods)
         exts = filter(None, ans.exts)
-        java = ans.java
-        returnValue((dirs, mods, exts, java))
+        returnValue((dirs, mods, exts))
 
     def _save(self):
         """Save the current configuration to the registry."""
@@ -555,7 +561,6 @@ class NodeConfig(object):
         p.set('directories', self.dirs)
         p.set('packages', self.mods)
         p.set('extensions', self.extensions)
-        p.set('javapath', self.java)
         return p.send()
 
     @inlineCallbacks
@@ -743,8 +748,7 @@ class NodeServer(LabradServer):
                        LABRADHOST=self.host,
                        LABRADPORT=str(self.port),
                        LABRADPASSWORD=self.password,
-                       PYTHON=sys.executable,
-                       JAVA=self.config.java)
+                       PYTHON=sys.executable)
         srv = self.servers[name](environ)
         # TODO check whether an instance with this name already exists
         self.instances[name] = srv
