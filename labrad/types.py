@@ -289,7 +289,7 @@ def unflatten(s, t, endianness='>'):
     """
     if isinstance(t, str):
         t = parseTypeTag(t)
-    if isinstance(s, str):
+    if not isinstance(s, Buffer):
         s = Buffer(s)
     return t.__unflatten__(s, endianness)
 
@@ -648,14 +648,22 @@ class LRStr(LRType, Singleton):
 
     def __unflatten__(self, s, endianness):
         n = unpack(endianness + 'i', s.get(4))[0]
-        return s.get(n)
+        return bytes(s.get(n))
 
     def __flatten__(self, s, endianness):
-        if not isinstance(s, str):
+        if not isinstance(s, (str, bytes, bytearray, memoryview, unicode)):
             raise FlatteningError(s, self)
-        return pack(endianness + 'I', len(s)) + s, self
+        if isinstance(s, memoryview):
+            s = s.tobytes()
+        elif isinstance(s, unicode):
+            s = s.encode('utf-8')
+        return pack(endianness + 'I', len(s)) + bytes(s), self
 
 registerType(str, LRStr())
+registerType(bytes, LRStr())
+registerType(bytearray, LRStr())
+registerType(memoryview, LRStr())
+registerType(unicode, LRStr())
 
 
 def timeOffset():
