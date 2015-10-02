@@ -651,12 +651,37 @@ class LRStr(LRType, Singleton):
         return s.get(n)
 
     def __flatten__(self, s, endianness):
+        if isinstance(s, unicode):
+            s = s.encode('UTF-8')
         if not isinstance(s, str):
             raise FlatteningError(s, self)
         return pack(endianness + 'I', len(s)) + s, self
 
 registerType(str, LRStr())
+registerType(unicode, LRStr())
 
+class LRBytes(LRType, Singleton):
+    """A raw 8-bit byte string."""
+    tag = 'y'
+    isFixedWidth = False
+
+    def __width__(self, s, endianness):
+        width = unpack(endianness + 'i', s.get(4))[0]
+        s.skip(width)
+        return 4 + width
+
+    def __unflatten__(self, s, endianness):
+        n = unpack(endianness + 'i', s.get(4))[0]
+        return s.get(n)
+
+    def __flatten__(self, s, endianness):
+        if not isinstance(s, str):
+            raise FlatteningError(s, self)
+        return pack(endianness + 'I', len(s)) + s, self
+
+# Since bytes is an alias for str in python 2.7, don't enable this
+# until we are ready to cut over.
+# registerType(bytes, LRBytes)
 
 def timeOffset():
     now = time.time()

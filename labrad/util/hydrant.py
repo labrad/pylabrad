@@ -31,6 +31,7 @@ def randType(noneOkay=True, listOkay=True, nStructs=0):
         T.LRInt,
         T.LRWord,
         T.LRStr,
+        T.LRBytes,
         T.LRTime,
         lambda: T.LRValue(randUnits()),
         lambda: T.LRComplex(randUnits()),
@@ -57,6 +58,7 @@ def randValue(t):
     if isinstance(t, T.LRInt): return genInt()
     if isinstance(t, T.LRWord): return genWord()
     if isinstance(t, T.LRStr): return genStr()
+    if isinstance(t, T.LRBytes): return genStr()
     if isinstance(t, T.LRTime): return genTime()
     if isinstance(t, T.LRComplex): return genComplex(t.unit) # check complex before value
     if isinstance(t, T.LRValue): return genValue(t.unit)

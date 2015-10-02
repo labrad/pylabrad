@@ -37,6 +37,7 @@ class LabradTypesTests(unittest.TestCase):
             'w': T.LRWord(),
             's': T.LRStr(),
             't': T.LRTime(),
+            'y': T.LRBytes(),
 
             # clusters
             'ii': T.LRCluster(T.LRInt(), T.LRInt()),
@@ -342,6 +343,13 @@ class LabradTypesTests(unittest.TestCase):
         data = datetime.now()
         data2 = T.evalLRData(repr(data))
         self.assertEquals(data, data2)
+
+    def testUnicodeBytes(self):
+        foo = T.flatten('foo bar')
+        self.assertEquals(foo, T.flatten(u'foo bar'))
+        self.assertEquals(str(foo.tag), 's')
+        self.assertEquals(T.unflatten(foo.bytes, 'y'), 'foo bar')
+        self.assertEquals(T.unflatten(*T.flatten('foo bar', ['y'])), 'foo bar')
 
 if __name__ == "__main__":
     unittest.main()
