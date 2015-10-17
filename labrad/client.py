@@ -219,11 +219,12 @@ class HasDynamicAttrs(object):
         if now:
             self._refresh()
 
-    def _getAttributeNames(self):
-        """Return a list of dynamic attributes, for tab-completion"""
+    def __dir__(self):
+        """Return a list of attributes for tab-completion.
+        """
         self.refresh() # force refresh so the list is current
-        return sorted(self._attrs.keys())
-
+        return sorted(set(self._attrs.keys() + self.__dict__.keys() + dir(type(self))))
+    
     def __getattr__(self, key):
         return self._attrs[key]
 
