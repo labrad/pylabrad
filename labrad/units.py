@@ -1069,7 +1069,7 @@ class WithDimensionlessUnit(object):
         return WithUnit(result, '')
 
 
-class DimensionlessFloat(WithDimensionlessUnit, float):
+class DimensionlessFloat(WithDimensionlessUnit, np.float64):
     _numType = float
 
     def __iter__(self):
@@ -1084,7 +1084,7 @@ WithUnit._dimensionlessTypes[np.float32] = DimensionlessFloat
 WithUnit._numericTypes[DimensionlessFloat] = Value
 
 
-class DimensionlessComplex(WithDimensionlessUnit, complex):
+class DimensionlessComplex(WithDimensionlessUnit, np.complex128):
     _numType = complex
 
     def __iter__(self):
