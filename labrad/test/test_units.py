@@ -171,6 +171,13 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue((5*ns*5j*GHz) == 25j)
         self.assertTrue((5*ns*5j*GHz).isDimensionless())
 
+        self.assertTrue(units.DimensionlessFloat(3) > 2.0)
+        self.assertTrue(units.DimensionlessFloat(3) > np.float64(2.0))
+        self.assertTrue(2.0 < units.DimensionlessFloat(3))
+        self.assertTrue(np.float64(2.0) < units.DimensionlessFloat(3))
+        self.assertTrue(4.0 > units.DimensionlessFloat(3))
+        self.assertTrue(np.float64(4.0) > units.DimensionlessFloat(3))
+        
     def testPickling(self):
         ns = units.Unit('ns')
         GHz = units.Unit('GHz')
