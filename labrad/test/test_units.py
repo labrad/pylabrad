@@ -203,5 +203,23 @@ class LabradUnitsTests(unittest.TestCase):
     def testUnitPowers(self):
         self.assertTrue(units.Unit('ns')**2 == units.Unit('ns^2'))
 
+    def test_array_priority(self):
+        """numpy issue 6133
+
+        DimensionlessX needs to support all arithmetic operations when the
+        other side is an array.  Numpy's __array_priority__ machinery doesn't
+        handle NotImplemented results correctly, so the higher priority element
+        *must* be able to handle all operations.
+
+        In numpy 1.9 this becomes more critical because numpy scalars like np.float64
+        get converted to arrays before being passed to binary arithmetic operations.
+        """
+        x = np.float64(1)
+        y = units.DimensionlessFloat(2)
+        self.assertTrue(x < y)
+        z = np.arange(5)
+        self.assertTrue(((x<z) == [False, False, True, True, True]).all())
+
+
 if __name__ == "__main__":
     unittest.main()

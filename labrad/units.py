@@ -1068,6 +1068,32 @@ class WithDimensionlessUnit(object):
         result = abs(self._value)
         return WithUnit(result, '')
 
+    # We need to define all the comparison operators this way so that they
+    # work when 'other' is an array type.  This is because we have defined
+    # an __array_priority__ flag.  When numpy sees this, it assumes we know
+    # how to handle numpy arrays and doesn't handle a NotImplemented return
+    # value.  The built in float() operators don't know how to handle arrays
+    # so we have to override them.
+    
+    def __lt__(self, other):
+        return self._value < other
+
+    def __le__(self, other):
+        return self._value <= other
+
+    def __eq__(self, other):
+        return self._value == other
+
+    def __ne__(self, other):
+        return self._value != other
+
+    def __ge__(self, other):
+        return self._value >= other
+
+    def __gt__(self, other):
+        return self._value > other
+    
+    
 
 class DimensionlessFloat(WithDimensionlessUnit, float):
     _numType = float
