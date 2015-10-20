@@ -171,6 +171,17 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue((5*ns*5j*GHz) == 25j)
         self.assertTrue((5*ns*5j*GHz).isDimensionless())
 
+    def testInfNan(self):
+        ms = units.Unit('ms')
+        GHz = units.Unit('GHz')
+        MHz = units.Unit('MHz')
+        
+        self.assertEquals(float('inf')*GHz, float('inf')*MHz)
+        self.assertNotEqual(float('inf')*GHz, float('inf')*ms)
+        self.assertNotEqual(float('inf')*GHz, -float('inf')*GHz)
+        self.assertNotEqual(float('nan')*GHz, float('nan')*GHz)
+        self.assertNotEqual(float('nan')*GHz, float('nan')*ms)
+        
     def testPickling(self):
         ns = units.Unit('ns')
         GHz = units.Unit('GHz')

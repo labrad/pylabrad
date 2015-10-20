@@ -268,63 +268,72 @@ class WithUnit(object):
         """A string representation of the unit of this value."""
         return self.unit.name
 
-    def _sum(self, other, sign1, sign2):
+    def _convert_units(self, other):
+        """Convert two objects to use compatible units.
+
+        This is used by __add__ and __sub__ as well as the __lt__ family of comparison
+        operators.  This repalces the old __cmp__ based operation which didn't work on
+        inf and nans.
+
+        This returns (left, right, unit) where 'left' and 'right' are bare numeric types
+        (float, complex, array), and unit is their common unit.
+        """
         if isinstance(other, WithUnit):
-            return sign1 * self._value + sign2 * other[self.unit]
+            if self.isCompatible(other):
+                if self.unit.conversionFactorTo(other.unit) > 1:
+                    unit = other.unit
+                else:
+                    unit = self.unit
+                return (self[unit], other[unit], unit)
+            else:
+                raise TypeError("Incompatible units: %s, %s" % (self.unit, other.unit))
         elif self.is_dimensionless:
-            return sign1 * self._value + sign2 * other / self.unit.conversionFactorTo('')
+            return (self[''], other, U.Unit(''))
         elif other == 0:
-            return sign1 * self._value
+            return (self._value, 0.0, self.unit)
         else:
             raise TypeError("Incompatible Units %s, ''" % (self.unit,))
 
     def __add__(self, other):
-        return WithUnit(self._sum(other, 1, 1), self.unit)
+        a, b, unit = self._convert_units(other)
+        return WithUnit(a+b, unit)
 
     __radd__ = __add__
 
     def __sub__(self, other):
-        return WithUnit(self._sum(other, 1, -1), self.unit)
+        a, b, unit = self._convert_units(other)
+        return WithUnit(a-b, unit)
 
     def __rsub__(self, other):
-        return WithUnit(self._sum(other, -1, 1), self.unit)
+        a, b, unit = self._convert_units(other)
+        return WithUnit(b-a, unit)
 
     def __eq__(self, other):
-        if not isinstance(other, WithUnit):
-            if self.is_dimensionless:
-                return self[''] == other
-            if self._value == 0:
-                return other == 0
+        try:
+            a, b, unit = self._convert_units(other)
+            return a==b
+        except Exception as e:
+            # Anything that prevents comparison means and b are not equal
             return False
-        else:
-            if self.isCompatible(other.unit):
-                return self.__cmp__(other) == 0
-            else:
-                return False
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def __cmp__(self, other):
-        '''
-        This just returns the difference between self and other.
-        We don't call cmp() on it to convert to +/-1 or 0 because
-        that doesn't work on complex numbers, even if we only want
-        to test for equality.
-        '''
-        return self._sum(other, 1, -1)
-
     def __lt__(self, other):
-        return self.__cmp__(other) < 0
+        a, b, unit = self._convert_units(other)
+        return a < b
 
     def __le__(self, other):
-        return self.__cmp__(other) <= 0
+        a, b, unit = self._convert_units(other)
+        return a <= b
 
     def __gt__(self, other):
-        return self.__cmp__(other) > 0
+        a, b, unit = self._convert_units(other)
+        return a > b
 
     def __ge__(self, other):
-        return self.__cmp__(other) >= 0
+        a, b, unit = self._convert_units(other)
+        return a >= b
 
     def __mul__(self, other):
         if isinstance(other, Unit):
