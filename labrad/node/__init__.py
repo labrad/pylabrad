@@ -435,11 +435,12 @@ class Node(MultiService):
     """
     reconnectDelay = 10
 
-    def __init__(self, name, host, port):
+    def __init__(self, name, host, port, tls=C.MANAGER_TLS):
         MultiService.__init__(self)
         self.name = name
         self.host = host
         self.port = port
+        self.tls = tls
 
     def startService(self):
         MultiService.startService(self)
@@ -449,6 +450,7 @@ class Node(MultiService):
         """Attempt to start the node and connect to LabRAD."""
         print 'Connecting to %s:%d...' % (self.host, self.port)
         node = NodeServer(self.name, self.host, self.port)
+        node.configure_tls(self.host, self.tls)
         node.onStartup().addErrback(self._error)
         node.onShutdown().addCallbacks(self._disconnected, self._error)
         self.cxn = TCPClient(self.host, self.port, node)
@@ -847,20 +849,25 @@ class NodeServer(LabradServer):
         return list(info.items())
 
 class NodeOptions(usage.Options):
-    optParameters = [['name', 'n', util.getNodeName(), 'Node name.'],
-                     ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
-                     ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
-                     ['logfile', 'l', None, 'Enable logging to a file'],
-                     ['syslog_socket', 'x', None, 'Override default syslog socket.  absolute path or host[:port]']]
+    optParameters = [
+            ['name', 'n', util.getNodeName(), 'Node name.'],
+            ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
+            ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
+            ['tls', 's', C.MANAGER_TLS,
+             'TLS mode for connecting to manager (on/starttls/off)'],
+            ['logfile', 'l', None, 'Enable logging to a file'],
+            ['syslog_socket', 'x', None,
+             'Override default syslog socket. Absolute path or host[:port]']]
     optFlags = [['syslog', 's', 'Enable syslog'],
                 ['verbose', 'v', 'Enable debug output']]
-    
+
 def makeService(options):
     """Construct a TCPServer from a LabRAD node."""
     name = options['name']
     host = options['host']
     port = int(options['port'])
-    return Node(name, host, port)
+    tls = C.check_tls_mode(options['tls'])
+    return Node(name, host, port, tls)
 
 def setup_logging(options):
     logging.basicConfig()
@@ -899,7 +906,7 @@ def setup_logging(options):
         node_log.setLevel(logging.DEBUG)
     else:
         node_log.setLevel(logging.INFO)
-    
+
 if __name__ == '__main__':
     config = NodeOptions()
     config.parseOptions()
