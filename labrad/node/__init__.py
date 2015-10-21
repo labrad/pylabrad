@@ -68,38 +68,41 @@ For rsyslogd on ubuntu, create the following file:
 
 from __future__ import with_statement
 
-import os
-import sys
-import socket
-from datetime import datetime
 from ConfigParser import SafeConfigParser
-import StringIO
-import zipfile
+from datetime import datetime
 import logging
 import logging.handlers
+import os
+import shlex
+import socket
+import StringIO
+import sys
+import zipfile
 
-import labrad
-from labrad import util, types as T, constants as C
-from labrad.server import ILabradServer, LabradServer, setting
-from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
-import labrad.support
-
-from twisted.application.service import IService, MultiService
+from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.error import ProcessDone, ProcessTerminated
-from twisted.python import log, failure, usage
+from twisted.python import usage
 from twisted.python.runtime import platformType
-from twisted.python.components import registerAdapter
 from twisted.plugin import getPlugins
 from zope.interface import Interface, implements
 
+import labrad
+from labrad import util, types as T, constants as C
+from labrad.server import ILabradServer, LabradServer, setting
+import labrad.support
+from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
+
+
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
+
 
 class IServerProcess(Interface):
     pass
+
 
 class ServerProcess(ProcessProtocol):
     """A class to represent a running server instance."""
@@ -112,15 +115,15 @@ class ServerProcess(ProcessProtocol):
         self.env.update(env, DIR=self.path, FILE=self.filename)
         cls = self.__class__
         self.name = interpEnvironmentVars(cls.instancename, self.env)
-        # TODO allow for spaces in args by doing a proper split here
-        self.args = self.cmdline.split()
+        self.args = shlex.split(self.cmdline)
         self.args = [interpEnvironmentVars(a, self.env) for a in self.args]
         self.starting = False
         self.started = False
         self.stopping = False
         self.output = []
         self._lock = defer.DeferredLock()
-        self.logger = logging.getLogger('labrad.' + labrad.support.mangle(self.name))
+        logname = 'labrad.' + labrad.support.mangle(self.name)
+        self.logger = logging.getLogger(logname)
 
     @property
     def status(self):
@@ -168,9 +171,10 @@ class ServerProcess(ProcessProtocol):
         # Twisted spawnProcess only supports posix (including Mac) and
         # win32, so we just abandon anything else.
         # Relevant code is in twisted/internet/process.py:_BaseProcess and
-        # twisted/internet/dumbwin32proc.py:Process.  The twisted docs
-        # at http://twistedmatrix.com/documents/current/api/twisted.internet.interfaces.IReactorProcess.spawnProcess.html say that the full executable path is required, but
-        # this is not true.
+        # twisted/internet/dumbwin32proc.py:Process. The twisted docs for
+        # spawnProcess say that the full executable path is required, but
+        # this is not in fact the case. See:
+        # http://twistedmatrix.com/documents/current/api/twisted.internet.interfaces.IReactorProcess.spawnProcess.html
         if platformType == 'posix':
             executable = self.args[0]
         elif platformType == 'win32':
@@ -206,12 +210,9 @@ class ServerProcess(ProcessProtocol):
         self.emitMessage('server_stopping')
         # hack: marker to tell the kill func that it worked
         finished = [False]
-        #print 'calling kill...'
         self.kill(finished)
-        #print 'killing'
         yield self.shutdown
         finished[0] = True
-        #print 'killed'
         self.stopping = False
         self.emitMessage('server_stopped')
 
@@ -292,10 +293,9 @@ class ServerProcess(ProcessProtocol):
             # if we're not dead yet, kill with a vengeance
             if self.started:
                 self.proc.signalProcess('KILL')
-        except:
-            msg = 'Error while trying to kill server process for "%s":'
-            print msg % self.name
-            failure.Failure().printTraceback(elideFrameworkCode=1)
+        except Exception:
+            logging.error('Error while trying to kill server process for "%s":' % self.name,
+                          exc_info=True)
 
     def outReceived(self, data):
         """Called when the server prints to stdout."""
@@ -312,6 +312,7 @@ class ServerProcess(ProcessProtocol):
     def clearOutput(self):
         """Clear the log of stdout."""
         self.output = []
+
 
 def findConfigBlock(path, filename):
     """Find a Node configuration block embedded in a file."""
@@ -387,6 +388,7 @@ def createGenericServerCls(path, filename, conf):
 
     return cls
 
+
 def createPythonServerCls(plugin):
     """Create a ServerProcess class representing a python server.
 
@@ -425,6 +427,7 @@ def createPythonServerCls(plugin):
         pass
 
     return cls
+
 
 class Node(MultiService):
     """Parent Service that keeps the node running.
@@ -476,6 +479,7 @@ class Node(MultiService):
             del self.cxn
         reactor.callLater(self.reconnectDelay, self.startConnection)
         print 'Will try to reconnect in %d seconds...' % self.reconnectDelay
+
 
 class NodeConfig(object):
     """Load configuration from the registry and monitor it for changes."""
@@ -694,8 +698,8 @@ class NodeServer(LabradServer):
                     if s.name not in servers:
                         servers[s.name] = s
             except:
-                print 'Error while loading plugins from module "%s":' % module
-                failure.Failure().printTraceback(elideFrameworkCode=1)
+                logging.error('Error while loading plugins from module "%s":' % module,
+                              exc_info=True)
         # look for .ini files
         for dirname in self.config.dirs:
             for path, dirs, files in os.walk(dirname):
@@ -731,8 +735,8 @@ class NodeServer(LabradServer):
                             servers[s.name] = s
                     except:
                         fname = os.path.join(path, f)
-                        print 'Error while loading config file "%s":' % fname
-                        failure.Failure().printTraceback(elideFrameworkCode=1)
+                        logging.error('Error while loading config file "%s":' % fname,
+                                  exc_info=True)
         self.servers = servers
         # send a message with the current server list
         dispatcher.send('status', servers=self.status())
@@ -848,6 +852,7 @@ class NodeServer(LabradServer):
             }
         return list(info.items())
 
+
 class NodeOptions(usage.Options):
     optParameters = [
             ['name', 'n', util.getNodeName(), 'Node name.'],
@@ -861,6 +866,7 @@ class NodeOptions(usage.Options):
     optFlags = [['syslog', 's', 'Enable syslog'],
                 ['verbose', 'v', 'Enable debug output']]
 
+
 def makeService(options):
     """Construct a TCPServer from a LabRAD node."""
     name = options['name']
@@ -869,49 +875,55 @@ def makeService(options):
     tls = C.check_tls_mode(options['tls'])
     return Node(name, host, port, tls)
 
+
 def setup_logging(options):
     logging.basicConfig()
     node_log = logging.getLogger('labrad')
     if options['syslog']:
-        # We need to find the path to the system log socket, which varies by platform
+        # We need to find the path to the system log socket, which varies by
+        # platform. Linux and OS/X defaults are listed below. On windows the
+        # only option is UDP logging, but since UDP is connectionless there is
+        # no way to tell if there is actually a syslog daemon listening.
         # https://docs.python.org/2/library/logging.handlers.html#sysloghandler
-        # Linux and OS/X defaults are listed below.
-        # On windows you will have to use UDP logging.  Because UDP is connectionless,
-        # there is no way to tell if there is actually a syslog daemon listening.
         if options['syslog_socket']:
-            if "/" in options['syslog_socket']:
+            if '/' in options['syslog_socket']:
                 address = options['syslog_socket']
             else:
                 host, _, port = options['syslog_socket'].partition(':')
-                if port == "":
+                if port == '':
                     address = (host, 514)
                 else:
                     address = (host, int(port))
-            syslog_handler = logging.handlers.SysLogHandler(address=address)
         elif sys.platform.startswith('linux'):
-            syslog_handler = logging.handlers.SysLogHandler(address='/dev/log')
+            address = '/dev/log'
         elif sys.platform.startswith('darwin'):
-            syslog_handler = logging.handlers.SysLogHandler(address='/var/run/syslog')
+            address = '/var/run/syslog'
         else:
-            node_log.critical("Syslog specified, but default socket not known for platform {}.  Use -s option".format(sys.platform))
+            node_log.critical(
+                    'Syslog specified, but default socket not known for '
+                    'platform {}. Use -s option'.format(sys.platform))
             sys.exit(1)
+        syslog_handler = logging.handlers.SysLogHandler(address=address)
         syslog_handler.setFormatter(logging.Formatter('%(name)s: %(message)s'))
         node_log.addHandler(syslog_handler)
     if options['logfile']:
-        file_handler = logging.handlers.RotatingFileHandler(options['logfile'], maxBytes=800000, backupCount=5)
-        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s: %(message)s',
-                                                    datefmt='%Y-%m-%d %H:%M:%S'))
+        file_handler = logging.handlers.RotatingFileHandler(
+                options['logfile'], maxBytes=800000, backupCount=5)
+        formatter = logging.Formatter('%(asctime)s - %(name)s: %(message)s',
+                                      datefmt='%Y-%m-%d %H:%M:%S')
+        file_handler.setFormatter(formatter)
         node_log.addHandler(file_handler)
     if config['verbose']:
         node_log.setLevel(logging.DEBUG)
     else:
         node_log.setLevel(logging.INFO)
 
+
 if __name__ == '__main__':
     config = NodeOptions()
     config.parseOptions()
     setup_logging(config)
-    logging.getLogger('labrad.node').info("Starting")
+    logging.getLogger('labrad.node').info('Starting')
     service = makeService(config)
     service.startService()
     reactor.run()
