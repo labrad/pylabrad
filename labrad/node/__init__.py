@@ -482,8 +482,18 @@ class Node(MultiService):
 
 
 class NodeConfig(object):
-    """Load configuration from the registry and monitor it for changes."""
-    # TODO add to config: autostarting, refreshinterval, preferred start location
+    """Load configuration from the registry and monitor it for changes.
+
+    Attributes:
+        dirs (list(string)): a list of directories that will be searched for
+            runnable servers.
+        exts (list(string)): a list of file extensions that will be included
+            when searching for servers.
+        mods (list(string)): a list of python modules that will be searched for
+            runnable servers using twisted's plugin mechanism. TODO: remove this
+        autostart (list(string)): a list of servers that will be automatically
+            started when the node launches.
+    """
 
     @classmethod
     @inlineCallbacks
@@ -517,7 +527,7 @@ class NodeConfig(object):
 
         # load defaults (creating them if necessary)
         create = '__default__' not in dirs
-        defaults = ([], ['labrad.servers'], ['.ini', '.py'], '')
+        defaults = ([], ['labrad.servers'], ['.ini', '.py'], [])
         defaults = yield self._load('__default__', create, defaults)
 
         # load this node (creating config if necessary)
@@ -537,8 +547,9 @@ class NodeConfig(object):
 
     def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
-        self.dirs, self.mods, self.extensions  = config
-        print 'config updated:', self.dirs, self.mods, self.extensions
+        self.dirs, self.mods, self.extensions, self.autostart = config
+        print 'config updated: dirs={}, modules={}, extensions={}, autostart={}'.format(
+                self.dirs, self.mods, self.extensions, self.autostart)
         if triggerRefresh:
             self.parent.refreshServers()
 
@@ -552,14 +563,19 @@ class NodeConfig(object):
             p.set('directories', defaults[0])
             p.set('packages', defaults[1])
             p.set('extensions', defaults[2])
+            p.set('autostart', defaults[3])
         p.get('directories', '*s', key='dirs')
         p.get('packages', '*s', key='mods')
         p.get('extensions', '*s', key='exts')
+        p.get('autostart', '*s', True, [], key='autostart')
         ans = yield p.send()
-        dirs = filter(None, ans.dirs)
-        mods = filter(None, ans.mods)
-        exts = filter(None, ans.exts)
-        returnValue((dirs, mods, exts))
+        def remove_empties(strs):
+            return [s for s in strs if s]
+        dirs = remove_empties(ans.dirs)
+        mods = remove_empties(ans.mods)
+        exts = remove_empties(ans.exts)
+        autostart = sorted(remove_empties(ans.autostart))
+        returnValue((dirs, mods, exts, autostart))
 
     def _save(self):
         """Save the current configuration to the registry."""
@@ -572,8 +588,24 @@ class NodeConfig(object):
     @inlineCallbacks
     def _handleMessage(self, c, msg):
         """Reload when we get a message from the registry."""
-        config = yield self._load()
-        self._update(config)
+        try:
+            config = yield self._load()
+            self._update(config)
+        except Exception:
+            logging.error('Error in _handleMessage', exc_info=True)
+
+    @inlineCallbacks
+    def update_autostart(self, autostart):
+        """Update the list of servers to be autostarted.
+
+        Args:
+            autostart (list(string)): New list of autostart server names. This
+                will completely replace the current list.
+        """
+        p = self._packet()
+        p.cd(['', 'Nodes', self.nodename])
+        p.set('autostart', sorted(autostart))
+        yield p.send()
 
 
 class NodeServer(LabradServer):
@@ -603,6 +635,7 @@ class NodeServer(LabradServer):
         self.initMessages(True)
         self.config = yield NodeConfig.create(self)
         self.refreshServers()
+        self.autostart(None)
 
     def stopServer(self):
         """Stop this node by killing all subprocesses."""
@@ -838,6 +871,49 @@ class NodeServer(LabradServer):
         remote view of the server's console window.
         """
         pass
+
+    @setting(200, returns='')
+    def autostart(self, c):
+        """Start all servers from the configured autostart list.
+
+        Any servers that are already running will be left as is, while those
+        that are not yet running will be started. Autostart is triggered when
+        the node first starts up, but can be invoked manually at any time
+        thereafter.
+        """
+        running = set(s.__class__.name for s in self.runners.values())
+        to_start = [name for name in self.config.autostart
+                         if name not in running]
+        deferreds = [(name, self.start(c, name)) for name in to_start]
+        for name, deferred in deferreds:
+            try:
+                yield deferred
+            except Exception:
+                logging.error('Failed to autostart "%s"', name, exc_info=True)
+
+    @setting(201, returns='*s')
+    def autostart_list(self, c):
+        """Get the list of servers that are configured to be autostarted."""
+        return self.config.autostart
+
+    @setting(202, name='s', returns='')
+    def autostart_add(self, c, name):
+        """Add a server to the autostart list."""
+        if name not in self.servers:
+            raise Exception("Unknown server: '%s'." % name)
+        autostart = set(self.config.autostart)
+        autostart.add(name)
+        yield self.config.update_autostart(sorted(autostart))
+
+    @setting(203, name='s', returns='')
+    def autostart_remove(self, c, name):
+        """Remove a server from the autostart list."""
+        autostart = set(self.config.autostart)
+        try:
+            autostart.remove(name)
+        except KeyError:
+            pass
+        yield self.config.update_autostart(sorted(autostart))
 
     @setting(1000, returns='*(ss)')
     def node_version(self, c):
