@@ -559,13 +559,45 @@ WithUnit._numericTypes[list] = ValueArray
 WithUnit._numericTypes[np.float64] = Value
 WithUnit._numericTypes[np.complex128] = Complex
 
-#if useNumpy:
-#    class ValueArray(WithUnit, ndarray):
-#        _numType = ndarray
-#        _units = {}
-#    WithUnit._numericTypes[ndarray] = ValueArray
-#    WithUnit._numericTypes[list] = ValueArray
-
+# Unit class implementation
+#
+# Unit class attributes:
+#       powers:         9 element list of the power of each SI base unit
+#       lex_names:      Number Dictionary of non-SI "base" units (i.e., {'counts': 1}).  
+#       names:          (Number)-Dictionary of display names with the associated powers
+#       factor:         Ratio between the unit value described by 'names', and the base
+#                       units described by powers and lex_names.
+#       offset:         Offset from zero used for degF and degC.
+#
+# So, for example, the unit representation of a few types are given here:
+#
+# N [newton]: names: {'N': 1}, powers: [1, 1, -2, 0, ...] lex_names: {}, factor: 1.0
+# l/s [liter/sec]: names: {'l': 1, 's': -1} powers: [3, 0, -1, 0...] lex_names: {}, factor: .001
+# kN: names: {'kN': 1}, powers: [1, 1, -2, 0, ...], lex_names: {}, factor: 1000
+# 'count': names: {'count': 1}, powers: [0, 0, 0,...] lex_names: {'count': 1}, factor: 1
+#
+# The important invariant is that 'names' (the display name) should contain the display
+# equivalents to the base units stored in powers (for SI derived units) and lex_names
+# (for custom units).
+#
+# names and lex_names are instances of the NumberDict type.
+# NumberDict works like a standard dictionary, except that the keys
+# are numeric values, which are used to store the power of each unit
+# element.  In addition to normal dictionary access, NumberDicts
+# support addition and subtraction.  Adding two NumberDict's merges
+# their keys, adding the values of matching keys together.  
+#
+# There are a few more attributes computed from the above attributes as optimzations:
+#
+# _name:                The computed name in string form.  For instance, if
+#                       names={'km': 1, 'l': -1}, _name will be 'km/l'.  _name
+#                       is computed on-demand.
+# is_dimensionless:     if powers is all zeros and lex_names is empty, the unit is dimensionless
+# is_angle:             If the only non-zero element in powers is 'radians' and lex_names is empty
+#
+# Unit instances are registered in the module level _unit_table
+# dictionary.  This allows you to say Unit('N'), and have it look up
+# the right object (including the SI base unit factors).
 
 class Unit(object):
     """Unit of measurement
@@ -656,7 +688,7 @@ class Unit(object):
     @staticmethod
     def _stringUnit(name):
         """Create a unit that has a name, but is outside the usual SI system."""
-        return Unit(NumberDict(), 1., [0]*9, 0, name)
+        return Unit(NumberDict([(name, 1)]), 1., [0]*9, 0, name)
 
     def _init(self, names, factor, powers, offset=0, lex_names=''):
         """
@@ -694,7 +726,8 @@ class Unit(object):
             self.lex_names = lex_names
         self.is_dimensionless = not any(self.powers) and not any(self.lex_names.values())
         self.is_angle = (self.powers[7] == 1 and
-                        sum(self.powers) == 1 and
+                        not any(self.powers[0:7]) and
+                        not self.powers[8] and
                         not any(self.lex_names.values()))
 
     @Lazy

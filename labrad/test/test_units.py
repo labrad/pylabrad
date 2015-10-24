@@ -171,6 +171,13 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertTrue((5*ns*5j*GHz) == 25j)
         self.assertTrue((5*ns*5j*GHz).isDimensionless())
 
+    def testAngle(self):
+        rad = units.Unit('rad')
+        self.assertTrue(rad.is_angle)
+        self.assertTrue(rad.isAngle())
+        x = units.Unit('rad*m/s')
+        self.assertFalse(x.is_angle)
+        
     def testInfNan(self):
         ms = units.Unit('ms')
         GHz = units.Unit('GHz')
@@ -236,6 +243,18 @@ class LabradUnitsTests(unittest.TestCase):
             units.Unit(None)
         with self.assertRaises(TypeError):
             None * units.Unit('MHz')
+
+    def test_non_SI(self):
+        units.addNonSI('count', True)
+        x = 5 * units.Unit('kcount')
+        self.assertTrue(x['count'] == 5000.0)
+        self.assertTrue(x.inBaseUnits() == 5000.0*units.Unit('count'))
+        self.assertTrue((x**2).unit == units.Unit('kcount^2'))
+
+    def test_string_unit(self):
+        ts = units.Unit('tshirt/s')
+        self.assertEqual((1*ts)['tshirt/h'], 3600.0)
+        self.assertEqual(str(ts), 'tshirt/s')
 
 if __name__ == "__main__":
     unittest.main()
