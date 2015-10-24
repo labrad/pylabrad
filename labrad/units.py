@@ -604,7 +604,7 @@ class Unit(object):
             elif isinstance(unit, str):
                 unit = cls._parse(unit)
             inst = Unit(name, factor * unit.factor,
-                        unit.powers, unit.offset)
+                        unit.powers, unit.offset, unit.lex_names)
             return inst
         # construct a new unit
         inst = super(Unit, cls).__new__(cls)
@@ -701,15 +701,14 @@ class Unit(object):
     def name(self):
         num = ''
         denom = ''
-        full_dict = dict(self.names, **self.lex_names)
-        if all(power < 0 for unit, power in full_dict.items()):
+        if all(power < 0 for unit, power in self.names.items()):
             # if all powers are negative, use negative exponents
-            for unit, power in full_dict.items():
+            for unit, power in self.names.items():
                 unit += '^' + str(power)
                 num += '*' + unit
         else:
             # if some powers are positive, use num/denom
-            for unit, power in full_dict.items():
+            for unit, power in self.names.items():
                 if power != 1 and power != -1:
                     unit += '^' + str(abs(power))
                 if power < 0: denom += '/' + unit
@@ -1150,6 +1149,18 @@ def _addUnit(name, factor, unit, comment='', label='', prefixable=False):
                 raise KeyError('Unit %s already defined' % name)
             unit = Unit(prefix + name, factor, base)
             globals()[prefix + name] = _unit_table[prefix + name] = unit
+
+
+def addNonSI(name, prefixable=False):
+    base = Unit(name, Fraction(1), [0,0,0,0,0,0,0,0,0], lex_names=name)
+    base.name # This forces the Lazy evaluation of name, which populates _unit_table
+    if prefixable:
+        for prefix, factor in _prefixes:
+            if (prefix + name) in _unit_table:
+                raise KeyError('Unit %s%s already defined' % (prefix, name))
+            derived = Unit(prefix+name, factor, base)
+            derived.name
+
 
 _help = []
 
