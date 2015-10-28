@@ -23,6 +23,7 @@ servers with labrad.
 import getpass
 from datetime import datetime
 from operator import attrgetter
+import traceback
 
 from twisted.application import service, internet
 from twisted.internet import defer, reactor
@@ -55,7 +56,7 @@ class ServerProtocol(LabradProtocol):
         try:
             response = yield self.factory.handleRequest(source, context, records)
             self.sendPacket(source, context, -request, response)
-        except Exception, e:
+        except Exception as e:
             # this will only happen if there was a problem while sending,
             # which usually means a problem flattening the response into
             # a valid LabRAD packet
@@ -380,7 +381,7 @@ class LabradServer(ClientFactory):
                 host = self._remote_host
                 try:
                     yield protocol.sendRequest(C.MANAGER_ID, [(1L, ('STARTTLS', host))])
-                except Exception, e:
+                except Exception as e:
                     raise Exception(
                         'Failed sending STARTTLS command to server. You should '
                         'update the manager and configure it to support '
@@ -390,7 +391,7 @@ class LabradServer(ClientFactory):
                 protocol.transport.startTLS(crypto.tls_options(host))
                 try:
                     yield protocol.sendRequest(C.MANAGER_ID, [(2L, 'PING')])
-                except Exception, e:
+                except Exception as e:
                     raise Exception('STARTTLS failed. Check that manager certificates are accepted.')
             self.mgr_host, self.mgr_port = addr.host, addr.port
             name = getattr(self, 'instanceName', self.name)
@@ -403,7 +404,9 @@ class LabradServer(ClientFactory):
             yield self._initServer()
             self.started = True
             self.onStartup.callback(self)
-        except Exception, e:
+        except Exception as e:
+            log.err("connection failed, disconnecting")
+            traceback.print_exc()
             self.disconnect(e)
 
     def _getPassword(self):

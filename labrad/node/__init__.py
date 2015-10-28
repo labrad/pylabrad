@@ -623,16 +623,16 @@ class NodeServer(LabradServer):
         self.name = 'node %s' % nodename
         self.host = host
         self.port = port
-
-    @inlineCallbacks
-    def initServer(self):
-        """Initialize this server."""
         self.servers = {}
         self.instances = {}
         self.starters = {}
         self.runners = {}
         self.stoppers = {}
         self.initMessages(True)
+
+    @inlineCallbacks
+    def initServer(self):
+        """Initialize this server."""
         self.config = yield NodeConfig.create(self)
         self.refreshServers()
         self.autostart(None)
@@ -653,7 +653,7 @@ class NodeServer(LabradServer):
         def f(receiver, signal):
             try:
                 method(receiver, signal)
-            except Exception, e:
+            except dispatcher.DispatcherError as e:
                 msg = 'Error while setting up message dispatching. receiver={0}, method={1}, signal={2}.'
                 print msg.format(receiver, attr, signal), e
         # set up messages to be relayed out over LabRAD
