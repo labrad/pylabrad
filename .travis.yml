@@ -3,11 +3,12 @@ sudo: false
 python:
   - "2.7"
 install:
+  - cat requirements.txt | perl -p -i -e 's/>=/==/g' > exact_requirements.txt
+  - pip install -r exact_requirements.txt
   - pip install .
-  - pip install numpy twisted pyOpenSSL
   - pip install pytest coveralls
 env:
-  - SCALABRAD_VERSION=0.5.0
+  - SCALABRAD_VERSION=0.5.1
 cache:
   directories:
     - $HOME/scalabrad-$SCALABRAD_VERSION
