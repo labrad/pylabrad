@@ -6,8 +6,14 @@ import re
 
 
 try:
-    from twisted.internet import ssl
-    TLS = True
+    import twisted
+    if int(twisted.__version__.split('.')[0]) >= 14:
+        from twisted.internet import ssl
+        TLS = True
+    else:
+        logging.warning("Twisted version >= 14.0.0 required for SSL support. "
+                        "Older versions don't support the platform CA roots.")
+        TLS = False
 except ImportError:
     logging.warning('pyOpenSSL not found. Without encryption you will only be '
                     'able to connect to the labrad manager on localhost.')

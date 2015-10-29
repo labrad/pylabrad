@@ -20,6 +20,9 @@ Important constants that show up throughout the code.
 """
 
 import os
+import labrad.crypto
+
+DEFAULT_TLS = 'starttls' if labrad.crypto.TLS else 'off'
 
 def check_tls_mode(tls):
     """Check that provided tls mode is valid and convert to canonical form.
@@ -49,7 +52,7 @@ def check_tls_mode(tls):
 # defaults for the labrad manager
 MANAGER_ID = 1
 MANAGER_PORT = int(os.environ.get('LABRADPORT', 7682))
-MANAGER_TLS = check_tls_mode(os.environ.get('LABRAD_TLS', 'starttls'))
+MANAGER_TLS = check_tls_mode(os.environ.get('LABRAD_TLS', DEFAULT_TLS))
 MANAGER_PORT_TLS = int(os.environ.get('LABRAD_TLS_PORT', 7643))
 MANAGER_HOST = os.environ.get('LABRADHOST', 'localhost')
 PASSWORD = os.environ.get('LABRADPASSWORD', None)
