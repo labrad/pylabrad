@@ -231,6 +231,11 @@ class LabradUnitsTests(unittest.TestCase):
         z = np.arange(5)
         self.assertTrue(((x<z) == [False, False, True, True, True]).all())
 
+    def testNone(self):
+        with self.assertRaises(Exception):
+            units.Unit(None)
+        with self.assertRaises(TypeError):
+            None * units.Unit('MHz')
 
 if __name__ == "__main__":
     unittest.main()

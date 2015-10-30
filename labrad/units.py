@@ -593,8 +593,6 @@ class Unit(object):
                 return unit.unit
             elif isinstance(unit, str):
                 return cls._parse(unit)
-            elif unit is None:
-                return None
             raise Exception('Cannot create Unit for %r' % unit)
         elif len(args) == 3 and isinstance(args[2], (Unit, WithUnit, str)):
             # construct a named unit that is equal to a
@@ -778,9 +776,7 @@ class Unit(object):
                     self.lex_names + other.lex_names)
 
     def __mul__(self, other):
-        if other is None:
-            return self
-        elif isinstance(other, Unit):
+        if isinstance(other, Unit):
             return self._mul_units(other)
         return WithUnit(other, self)
 
@@ -797,11 +793,7 @@ class Unit(object):
                     self.lex_names - other.lex_names)
 
     def __div__(self, other):
-        if other is None:
-            if self.offset != 0:
-                raise TypeError("cannot divide unit with non-zero offset: '%s'" % (self,))
-            return self
-        elif isinstance(other, Unit):
+        if isinstance(other, Unit):
             return self._div_units(other)
         return WithUnit(1.0 / other, self)
 
@@ -816,14 +808,6 @@ class Unit(object):
                     other.lex_names - self.lex_names)
 
     def __rdiv__(self, other):
-        if other is None:
-            if self.offset != 0:
-                raise TypeError("cannot divide unit with non-zero offset: '%s'" % (self,))
-            return Unit(NumberDict() - self.names,
-                        1.0 / self.factor,
-                        [- b for b in self.powers],
-                        self.offset,
-                        NumberDict() - self.lex_names)
         if isinstance(other, Unit):
             return self._rdiv_units(other)
         return WithUnit(other, self**(-1))
@@ -876,8 +860,6 @@ class Unit(object):
         other = Unit(other)
         if not self.isCompatible(other):
             raise TypeError("Incompatible units: '%s', '%s'" % (self, other))
-        if other is None:
-            return self.factor
         if self.offset != other.offset and self.factor != other.factor:
             raise TypeError(('Unit conversion (%s to %s) cannot be expressed ' +
                              'as a simple multiplicative factor') % (self, other))
@@ -893,8 +875,6 @@ class Unit(object):
         @rtype: (C{float}, C{float})
         @raises TypeError: if the units are not compatible
         """
-        if other is None:
-            return 1.0, 0.0
         other = Unit(other)
         if not self.isCompatible(other):
             raise TypeError("Incompatible units: '%s', '%s'" % (self, other))
