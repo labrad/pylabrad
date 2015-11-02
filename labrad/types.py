@@ -43,12 +43,9 @@ import functools
 import labrad.units as U
 from labrad.units import Value, Complex
 
-try:
-    import numpy as np
-    from numpy import ndarray, array, dtype, fromstring
-    useNumpy = True
-except ImportError:
-    useNumpy = False
+import numpy as np
+from numpy import ndarray, array, dtype, fromstring
+
 
 # helper classes
 
@@ -1053,6 +1050,8 @@ class LRList(LRType):
 
     tag = '*'
 
+    ARRAY_TYPES = [LRValue(), LRComplex(), LRInt(), LRWord(), LRBool()]
+
     def __init__(self, elem=LRNone(), depth=1):
         self.elem = elem
         self.depth = depth
@@ -1174,8 +1173,7 @@ class LRList(LRType):
     def __unflatten__(self, s, endianness):
         data = s.get(self.__width__(Buffer(s), endianness))
         elem = self.elem
-        arrayTypes = [LRValue(), LRComplex(), LRInt(), LRWord(), LRBool()]
-        for t in arrayTypes:
+        for t in self.ARRAY_TYPES:
             if elem is not None and elem <= t:
                 return self.__unflattenAsArray__(data, endianness)
         else:
@@ -1250,12 +1248,12 @@ class LRList(LRType):
             else:
                 # Make sure it is unflattened so endian conversion happens
                 L.aslist
-        if useNumpy and isinstance(L, ndarray):
+        if isinstance(L, ndarray):
             if self.elem <= LRValue() and self.elem.unit != '':
                 msg = "Can't flatten ndarray to %s"%(self,)
                 raise TypeError(msg)
             return self.__flatten_array__(L, endianness)
-        if useNumpy and isinstance(L, U.ValueArray):
+        if isinstance(L, U.ValueArray):
             return self.__flatten_ValueArray__(L, endianness)
         if self.elem == LRAny():
             self.elem = self.__lrtype__(L).elem
@@ -1316,10 +1314,9 @@ _known_dtypes = {
 }
 
 registerTypeFunc(list, LRList.__lrtype__)
-if useNumpy:
-    registerTypeFunc(ndarray, LRList.__lrtype_array__)
-    registerTypeFunc(U.ValueArray, LRList.__lrtype_ValueArray__)
-    registerTypeFunc(U.DimensionlessArray, LRList.__lrtype_array__)
+registerTypeFunc(ndarray, LRList.__lrtype_array__)
+registerTypeFunc(U.ValueArray, LRList.__lrtype_ValueArray__)
+registerTypeFunc(U.DimensionlessArray, LRList.__lrtype_array__)
 
 
 def nestedList(obj, n):
