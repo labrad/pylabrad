@@ -934,7 +934,7 @@ class NodeOptions(usage.Options):
             ['name', 'n', util.getNodeName(), 'Node name.'],
             ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
             ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
-            ['tls', 's', C.MANAGER_TLS,
+            ['tls', '', C.MANAGER_TLS,
              'TLS mode for connecting to manager (on/starttls/off)'],
             ['logfile', 'l', None, 'Enable logging to a file'],
             ['syslog_socket', 'x', None,
