@@ -13,7 +13,7 @@ import Queue
 
 from concurrent.futures import Future
 
-from labrad import constants as C, support, types as T
+from labrad import auth, constants as C, support, types as T
 from labrad.errors import LoginFailedError
 from labrad.stream import packetStream, flattenPacket, flattenRecords
 
@@ -32,13 +32,17 @@ class BaseConnection(object):
         return ctx
 
     def connect(self, host=C.MANAGER_HOST, port=None, timeout=C.TIMEOUT,
-                password=None, tls_mode=C.MANAGER_TLS):
+                password=None, tls_mode=C.MANAGER_TLS, username=None,
+                headless=False):
         self.host = host
         self.port = port
         self.timeout = timeout
         self.tls_mode = tls_mode
+        self.username = username
         self.password = password
-        self.ID = self._connect(password, timeout, tls_mode=tls_mode)
+        self.headless = headless
+        self.ID = self._connect(password, timeout, tls_mode=tls_mode,
+                                username=username, headless=headless)
 
     @property
     def connected(self):
@@ -53,10 +57,12 @@ class BaseConnection(object):
         cls = self.__class__
         inst = cls(name=self.name)
         inst.connect(host=self.host, port=self.port, timeout=self.timeout,
-                     password=self.password, tls_mode=self.tls_mode)
+                     password=self.password, tls_mode=self.tls_mode,
+                     username=self.username, headless=self.headless)
         return inst
 
-    def _connect(self, password=None, timeout=None, tls_mode=C.MANAGER_TLS):
+    def _connect(self, password=None, timeout=None, tls_mode=C.MANAGER_TLS,
+                 username=None, headless=False):
         """Implemented by subclass"""
 
     def _disconnect(self):
@@ -76,11 +82,12 @@ try:
     from labrad.wrappers import getConnection
 
     class TwistedConnection(BaseConnection):
-        def _connect(self, password, _timeout, tls_mode):
+        def _connect(self, password, _timeout, tls_mode, username, headless):
             @defer.inlineCallbacks
             def _connect_deferred():
                 cxn = yield getConnection(self.host, self.port, self.name,
-                                          password, tls_mode=tls_mode)
+                                          password, tls_mode=tls_mode,
+                                          username=username, headless=headless)
                 self._connected.set()
 
                 # Setup a coroutine that will clear the connected flag when the
@@ -130,7 +137,7 @@ except ImportError:
 
 
 class AsyncoreConnection(BaseConnection):
-    def _connect(self, password, timeout, tls_mode):
+    def _connect(self, password, timeout, tls_mode, username, headless):
         tls_mode = C.check_tls_mode(tls_mode)
         if tls_mode == 'on':
             raise Exception('TLS is not currently supported with the asyncore '
@@ -175,7 +182,8 @@ class AsyncoreConnection(BaseConnection):
 
         # send password response
         if password is None:
-            password = support.get_password(self.host, self.port)
+            credential = auth.get_password(self.host, self.port)
+            password = credential.password
         m = hashlib.md5()
         m.update(challenge)
         m.update(password)
@@ -183,7 +191,8 @@ class AsyncoreConnection(BaseConnection):
             resp = self.sendRequest(C.MANAGER_ID, [(0L, m.digest())]).result()
         except Exception:
             raise LoginFailedError('Incorrect password.')
-        support.cache_password(self.host, self.port, password)
+        credential = auth.Password(username='', password=password)
+        auth.cache_password(self.host, self.port, credential)
         self.password = password
         self.loginMessage = resp[0][1] # get welcome message
 

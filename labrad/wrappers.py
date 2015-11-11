@@ -389,18 +389,21 @@ class AsyncServerWrapper(object):
 
 @inlineCallbacks
 def getConnection(host=C.MANAGER_HOST, port=None, name="Python Client",
-                  password=None, tls_mode=C.MANAGER_TLS):
+                  password=None, tls_mode=C.MANAGER_TLS, username=None,
+                  headless=False):
     """Connect to LabRAD and return a deferred that fires the protocol object."""
     p = yield protocol.connect(host, port, tls_mode)
-    yield p.authenticate(password)
+    yield p.authenticate(password, username, headless)
     yield p.loginClient(name)
     returnValue(p)
 
 @inlineCallbacks
 def connectAsync(host=C.MANAGER_HOST, port=None, name="Python Client",
-                 password=None, tls_mode=C.MANAGER_TLS):
+                 password=None, tls_mode=C.MANAGER_TLS, username=None,
+                 headless=False):
     """Connect to LabRAD and return a deferred that fires the client object."""
-    p = yield getConnection(host, port, name, password, tls_mode=tls_mode)
+    p = yield getConnection(host, port, name, password, tls_mode=tls_mode,
+                            username=username, headless=headless)
     cxn = ClientAsync(p)
     yield cxn._init()
     cxn.onDisconnect = p.onDisconnect

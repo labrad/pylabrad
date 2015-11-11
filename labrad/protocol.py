@@ -28,7 +28,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
 import labrad.types as T
 
-from labrad import constants as C, crypto, errors, support, util
+from labrad import auth, constants as C, crypto, errors, oauth, support, util
 from labrad.stream import packetStream, flattenPacket
 
 
@@ -195,6 +195,15 @@ class LabradProtocol(protocol.Protocol):
         self.sendPacket(target, context, n, records)
         return d
 
+    @inlineCallbacks
+    def _sendManagerRequest(self, setting_id=None, data=None, timeout=None):
+        if setting_id is None:
+            records = []
+        else:
+            records = [(setting_id, data)]
+        resp = yield self.sendRequest(C.MANAGER_ID, records, timeout=timeout)
+        returnValue(resp[0][1])
+
     def _cancelTimeout(self, result, timeoutCall):
         """Cancel a pending request timeout call."""
         if timeoutCall.active():
@@ -316,26 +325,109 @@ class LabradProtocol(protocol.Protocol):
             del self.listeners[key]
 
     @inlineCallbacks
-    def authenticate(self, password):
-        """Authenticate to the manager using the given password."""
-        # send login packet
-        resp = yield self.sendRequest(C.MANAGER_ID, [])
-        challenge = resp[0][1] # get password challenge
+    def authenticate(self, password, username=None, headless=False):
+        """Authenticate to the manager using the given credentials."""
 
+        @inlineCallbacks
+        def get_manager_auth_methods():
+            if 'auth-server' in self.manager_features:
+                # Ask the manager what auth methods it supports
+                methods = yield self._sendManagerRequest(101, None)
+            else:
+                # Old managers only support password auth
+                methods = ['password']
+            returnValue(set(methods))
+
+        def require_secure_connection(auth_type):
+            is_secure = hasattr(self.transport, 'getPeerCertificate')
+            is_local_connection = util.is_local_connection(self.transport)
+            if not is_secure and not is_local_connection:
+                raise Exception("cannot use {} auth over an insecure remote "
+                                "connection".format(auth_type))
+
+        # Get username and password from environment if not passed here
+        if username is None:
+            username = C.USERNAME
         if password is None:
-            password = support.get_password(self.host, self.port)
+            password = C.PASSWORD
 
-        # send password response
-        m = hashlib.md5()
-        m.update(challenge)
-        m.update(password)
-        try:
-            resp = yield self.sendRequest(C.MANAGER_ID, [(0L, m.digest())])
-        except Exception:
-            raise errors.LoginFailedError('Incorrect password.')
-        support.cache_password(self.host, self.port, password)
-        self.password = password
-        self.loginMessage = resp[0][1] # get welcome message
+        if password is not None or username is not None:
+            # Use password-based auth
+            if username is None:
+                # Have password; assume root user
+                credential = auth.Password(password=password)
+            elif password is None:
+                # Have username; get password from cache or prompt
+                credential = auth.get_password(
+                        self.host, self.port, user=username, prompt=True)
+            else:
+                # Have username and password; use both
+                if not username:
+                    # Empty username is the root user
+                    credential = auth.Password(password=password)
+                else:
+                    # Some other user; make sure manager supports user auth.
+                    manager_auth_methods = yield get_manager_auth_methods()
+                    if 'username+password' not in manager_auth_methods:
+                        raise Exception('Manager does not support '
+                                        'username+password auth. Cannot log in '
+                                        'as user {}.'.format(username))
+                    credential = auth.Password(username, password)
+
+        else:
+            # Have neither username nor password.
+            # Check manager-supported auth methods; use OAuth if available.
+            manager_auth_methods = yield get_manager_auth_methods()
+            client_auth_methods = {'password', 'username+password', 'oauth_token'}
+            allowed = client_auth_methods & manager_auth_methods
+
+            if 'oauth_token' in allowed:
+                auth_info = yield self._sendManagerRequest(102, 'oauth_token')
+                auth_info = dict(auth_info)
+                credential = oauth.get_token(auth_info['client_id'],
+                                             auth_info['client_secret'],
+                                             headless=headless)
+            elif 'username+password' in allowed:
+                credential = auth.get_username_and_password(
+                        self.host, self.port, prompt=True)
+            else:
+                credential = auth.get_password(
+                        self.host, self.port, user='', prompt=True)
+
+        if isinstance(credential, auth.Password):
+            if not credential.username:
+                # send login packet to get password challenge
+                challenge = yield self._sendManagerRequest()
+
+                # send password response
+                m = hashlib.md5()
+                m.update(challenge)
+                m.update(credential.password)
+                try:
+                    resp = yield self._sendManagerRequest(0, m.digest())
+                except Exception:
+                    raise errors.LoginFailedError('Incorrect password.')
+            else:
+                method = 'username+password'
+                require_secure_connection(method)
+                try:
+                    data = (credential.username, credential.password)
+                    resp = yield self._sendManagerRequest(103, (method, data))
+                except Exception as e:
+                    raise errors.LoginFailedError(str(e))
+            auth.cache_password(self.host, self.port, credential)
+
+        elif isinstance(credential, oauth.OAuthToken):
+            method = 'oauth_token'
+            require_secure_connection(method)
+            try:
+                data = credential.id_token
+                resp = yield self._sendManagerRequest(103, (method, data))
+            except Exception as e:
+                raise errors.LoginFailedError(str(e))
+
+        self.credential = credential
+        self.loginMessage = resp
 
     def loginClient(self, name):
         """Log in as a client by sending our name to the manager.
@@ -370,8 +462,7 @@ class LabradProtocol(protocol.Protocol):
     @inlineCallbacks
     def _doLogin(self, *ident):
         # send identification
-        resp = yield self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)])
-        self.ID = resp[0][1] # get assigned ID
+        self.ID = yield self._sendManagerRequest(0, (1L,) + ident)
 
 
 class MessageContext(object):
@@ -424,19 +515,25 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
     @inlineCallbacks
     def start_tls(p, cert_string=None):
         try:
-            resp = yield p.sendRequest(C.MANAGER_ID, [(1L, ('STARTTLS', host))])
+            cert = yield p._sendManagerRequest(1, ('STARTTLS', host))
         except Exception:
             raise Exception(
                 'Failed sending STARTTLS command to server. You should update '
                 'the manager and configure it to support encryption or else '
                 'disable encryption for clients. See '
                 'https://github.com/labrad/pylabrad/blob/master/CONFIG.md')
-        cert = resp[0][1]
         p.transport.startTLS(crypto.tls_options(host, cert_string=cert_string))
         returnValue(cert)
 
+    @inlineCallbacks
     def ping(p):
-        return p.sendRequest(C.MANAGER_ID, [(2L, 'PING')])
+        resp = yield p._sendManagerRequest(2, 'PING')
+        features = resp.partition(':')[-1]
+        if features:
+            manager_features = set(features.split(','))
+        else:
+            manager_features = set()
+        returnValue(manager_features)
 
     p = yield do_connect()
     is_local_connection = util.is_local_connection(p.transport)
@@ -451,9 +548,10 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
                    'are connecting to a legacy manager.')
             p = yield connect(host, port, tls_mode='off')
             print 'Connected without encryption.'
+            p.manager_features = set()
             returnValue(p)
         try:
-            yield ping(p)
+            manager_features = yield ping(p)
         except Exception:
             print 'STARTTLS failed due to untrusted server certificate:'
             print 'SHA1 Fingerprint={}'.format(crypto.fingerprint(cert))
@@ -472,9 +570,12 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
                 raise
             p = yield do_connect()
             yield start_tls(p, cert)
-            yield ping(p)
+            manager_features = yield ping(p)
             if ans == 's':
                 # save now that we know TLS succeeded,
                 # including hostname verification.
                 crypto.save_cert(host, cert)
+    else:
+        manager_features = yield ping(p)
+    p.manager_features = manager_features
     returnValue(p)

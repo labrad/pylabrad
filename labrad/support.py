@@ -5,73 +5,13 @@ to break the explicit dependency on twisted.
 """
 
 import collections
-import getpass
 import os
 import socket
 import keyword
 
-from labrad import constants
 
 def getNodeName():
     return os.environ.get('LABRADNODE', socket.gethostname().lower())
-
-
-# cache of passwords, keyed by host name and port number
-_password_cache = {}
-
-
-def get_password(host=None, port=None, prompt=True):
-    """Get a password from the environment, cache, or command line prompt.
-
-    To add a password to the cache, use the cache_password function.
-
-    Args:
-        host (str or None): The manager host we want to connect to.
-        port (int or None): The manager port we want to connect to.
-        prompt (bool): Whether to prompt the user to enter a password at the
-            command line if none is found in the cache or environment vars.
-
-    Returns:
-        (str or None): The password for the given host and port. If we did not
-        find a password in the cache or environment vars and prompt was False,
-        will return None.
-    """
-    # create cache entries for the environment password if needed
-    if not _password_cache and constants.PASSWORD is not None:
-        cache_password(host=constants.MANAGER_HOST,
-                       port=constants.MANAGER_PORT,
-                       password=constants.PASSWORD)
-        cache_password(host=constants.MANAGER_HOST,
-                       port=constants.MANAGER_PORT_TLS,
-                       password=constants.PASSWORD)
-
-    if host is None:
-        host = constants.MANAGER_HOST
-    if port is None:
-        port = constants.MANAGER_PORT
-    addr = (host, port)
-    if addr in _password_cache:
-        pw = _password_cache[addr]
-    elif prompt:
-        msg = 'Enter LabRAD password ({}:{}): '.format(host, port)
-        pw = getpass.getpass(msg)
-    else:
-        pw = None
-    return pw
-
-
-def cache_password(host, port, password):
-    """Add a password to the cache, for the given host and port.
-
-    Cached passwords will be used for subsequent labrad connections to the same
-    host and port. See the get_password function.
-
-    Args:
-        host (str): The manager host for this password.
-        port (int): The manager port for this password.
-        password (str): The password to cache.
-    """
-    _password_cache[host, port] = password
 
 
 ALLOWED = 'abcdefghijklmnopqrstuvwxyz1234567890_'

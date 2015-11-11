@@ -55,6 +55,7 @@ MANAGER_PORT = int(os.environ.get('LABRADPORT', 7682))
 MANAGER_TLS = check_tls_mode(os.environ.get('LABRAD_TLS', DEFAULT_TLS))
 MANAGER_PORT_TLS = int(os.environ.get('LABRAD_TLS_PORT', 7643))
 MANAGER_HOST = os.environ.get('LABRADHOST', 'localhost')
+USERNAME = os.environ.get('LABRADUSER', None)
 PASSWORD = os.environ.get('LABRADPASSWORD', None)
 
 # settings IDs on the LabRAD manager
