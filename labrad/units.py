@@ -365,6 +365,24 @@ class WithUnit(object):
 
     __rtruediv__ = __rdiv__
 
+    def __divmod__(self, other):
+        ratio = self/other
+        if not ratio.isDimensionless():
+            raise ValueError("divmod requires commensurate units")
+        if np.iscomplexobj(ratio):
+            raise ValueError("Cannot use floordiv with complex values")
+        q = np.floor(ratio)
+        r = self - q * other
+        return (q,r)
+
+    def __floordiv__(self, other):
+        (q, r) = divmod(self, other)
+        return q
+
+    def __mod__(self, other):
+        (q, r) = divmod(self, other)
+        return r
+
     def __pow__(self, other):
         if isinstance(other, (WithUnit, Unit)) and not other.is_dimensionless:
             raise TypeError('Exponents must be dimensionless')
