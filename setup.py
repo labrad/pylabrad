@@ -15,7 +15,7 @@ Operating System :: OS Independent
 Programming Language :: Python
 Topic :: Scientific/Engineering"""
 
-from distutils.core import setup
+from distutils.core import setup, Extension
 
 doclines = __doc__.split('\n')
 
@@ -46,6 +46,8 @@ setup(
         'labrad.test',
         'labrad.util',
         ],
+    ext_modules = [Extension('labrad.unit_array', sources = ['labrad/unit_array.c'])],
+
     package_data = {
         'labrad': ['LICENSE.txt'],
         'labrad.node': ['*.ini'],
