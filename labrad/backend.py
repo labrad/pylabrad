@@ -30,10 +30,10 @@ class BaseConnection(object):
         return ctx
 
     def connect(self, host=C.MANAGER_HOST, port=None, timeout=C.TIMEOUT,
-                password=None, tls=C.MANAGER_TLS):
+                password=None, tls_mode=C.MANAGER_TLS):
         self.host = host
         self.port = port
-        self.ID = self._connect(password, timeout, tls=tls)
+        self.ID = self._connect(password, timeout, tls_mode=tls_mode)
         self.connected = True
 
     def disconnect(self):
@@ -41,7 +41,7 @@ class BaseConnection(object):
             self._disconnect()
             self.connected = False
 
-    def _connect(self, password=None, timeout=None, tls=C.MANAGER_TLS):
+    def _connect(self, password=None, timeout=None, tls_mode=C.MANAGER_TLS):
         """Implemented by subclass"""
 
     def _disconnect(self):
@@ -60,10 +60,10 @@ try:
     from labrad.wrappers import getConnection
 
     class TwistedConnection(BaseConnection):
-        def _connect(self, password, _timeout, tls):
+        def _connect(self, password, _timeout, tls_mode):
             startReactor()
             self.cxn = self.call(getConnection, self.host, self.port, self.name,
-                                 password, tls=tls).wait()
+                                 password, tls_mode=tls_mode).wait()
             return self.cxn.ID
 
         def _disconnect(self):
@@ -91,15 +91,16 @@ except ImportError:
 
 
 class AsyncoreConnection(BaseConnection):
-    def _connect(self, password, timeout, tls):
-        if tls.lower() == 'on':
+    def _connect(self, password, timeout, tls_mode):
+        tls_mode = C.check_tls_mode(tls_mode)
+        if tls_mode == 'on':
             raise Exception('TLS is not currently supported with the asyncore '
                             'backend')
         self.connected = False
         self.serverCache = {}
         self.settingCache = {}
         if self.port is None:
-            port = C.MANAGER_PORT_TLS if tls.lower() == 'on' else C.MANAGER_PORT
+            port = C.MANAGER_PORT_TLS if tls_mode == 'on' else C.MANAGER_PORT
         else:
             port = self.port
         try:

@@ -28,9 +28,10 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
 from zope.interface import implements
 
-from labrad import constants as C, errors, util
+from labrad import constants as C, crypto, errors, util
 from labrad.interfaces import ILabradProtocol, IMessageContext
 from labrad.stream import packetStream, flattenPacket
+from labrad.support import getPassword
 
 
 class LabradProtocol(protocol.Protocol):
@@ -47,6 +48,7 @@ class LabradProtocol(protocol.Protocol):
         self._messageLock = defer.DeferredLock()
         self.clearCache()
         self.endianness = '>'
+        self.request_handler = None
         # create a generator to assemble the packets
         self.packetStream = packetStream(self.packetReceived, self.endianness)
         self.packetStream.next() # start the packet stream
@@ -203,8 +205,20 @@ class LabradProtocol(protocol.Protocol):
         else:
             self.messageReceived(source, context, records)
 
+    @inlineCallbacks
     def requestReceived(self, source, context, request, records):
         """Process incoming request."""
+        try:
+            if self.request_handler is None:
+                log.msg('server request_handler not set')
+                raise Exception('server request_handler not set')
+            response = yield self.request_handler(source, context, records)
+            self.sendPacket(source, context, -request, response)
+        except Exception as e:
+            # this will only happen if there was a problem while sending,
+            # which usually means a problem flattening the response into
+            # a valid LabRAD packet
+            self.sendPacket(source, context, -request, [(0, e)])
 
     def responseReceived(self, source, context, request, records):
         """Process incoming response."""
@@ -285,21 +299,15 @@ class LabradProtocol(protocol.Protocol):
         else:
             del self.listeners[key]
 
-    # login protocol
-    def loginClient(self, password, name):
-        """Log in as a client."""
-        return self._doLogin(password, name)
-
-    def loginServer(self, password, name, descr, notes):
-        """Log in as a server."""
-        return self._doLogin(password, name, descr, notes)
-
     @inlineCallbacks
-    def _doLogin(self, password, *ident):
-        """Implements the LabRAD login protocol."""
+    def authenticate(self, password):
+        """Authenticate to the manager using the given password."""
         # send login packet
         resp = yield self.sendRequest(C.MANAGER_ID, [])
         challenge = resp[0][1] # get password challenge
+
+        if password is None:
+            password = getPassword()
 
         # send password response
         m = hashlib.md5()
@@ -312,6 +320,38 @@ class LabradProtocol(protocol.Protocol):
         self.password = C.PASSWORD = password # save password, since it worked
         self.loginMessage = resp[0][1] # get welcome message
 
+    def loginClient(self, name):
+        """Log in as a client by sending our name to the manager.
+
+        Args:
+            name (str): The name of this labrad connection. Need not be unique.
+
+        Returns:
+            twisted.internet.defer.Deferred(None): A deferred that will fire
+            after we have logged in.
+        """
+        return self._doLogin(name)
+
+    def loginServer(self, name, descr, notes):
+        """Log in as a server by sending our name and metadata to the manager.
+
+        Args:
+            name (str): The name of this server. Must be unique; login will
+                fail if another server of the same name is already connected.
+            descr (str): A description of this server, which will be exposed
+                to other labrad clients.
+            notes (str): More descriptive information about the server. This
+                field is deprecated; instead we recommend just putting all info
+                into descr.
+
+        Returns:
+            twisted.internet.defer.Deferred(None): A deferred that will fire
+            after we have logged in.
+        """
+        return self._doLogin(name, descr, notes)
+
+    @inlineCallbacks
+    def _doLogin(self, *ident):
         # send identification
         try:
             resp = yield self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)])
@@ -333,5 +373,92 @@ class MessageContext(object):
     def __repr__(self):
         return 'MessageContext(source=%s, ID=%s, target=%s)' % (self.source, self.ID, self.target)
 
-# factory for churning out LabRAD connections
-factory = protocol.ClientCreator(reactor, LabradProtocol)
+
+# factory for creating LabRAD connections
+_factory = protocol.ClientCreator(reactor, LabradProtocol)
+
+
+@inlineCallbacks
+def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
+    """Connect to LabRAD and return a deferred that fires the protocol object.
+
+    Args:
+        host (str): The hostname of the manager.
+        port (int): The tcp port of the manager. If None, use the appropriate
+            default value based on the TLS mode.
+        tls_mode (str): The tls mode to use for this connection. See:
+            `labrad.constants.check_tls_mode`.
+
+    Returns:
+        twisted.internet.defer.Deferred(LabradProtocol): A deferred that will
+        fire with the protocol once the connection is established.
+    """
+    tls_mode = C.check_tls_mode(tls_mode)
+    if port is None:
+        port = C.MANAGER_PORT_TLS if tls_mode == 'on' else C.MANAGER_PORT
+
+    if tls_mode == 'on':
+        tls_options = crypto.tls_options(host)
+        p = yield _factory.connectSSL(host, port, tls_options, timeout=C.TIMEOUT)
+        returnValue(p)
+
+    def do_connect():
+        return _factory.connectTCP(host, port, timeout=C.TIMEOUT)
+
+    @inlineCallbacks
+    def start_tls(p, cert_string=None):
+        try:
+            resp = yield p.sendRequest(C.MANAGER_ID, [(1L, ('STARTTLS', host))])
+        except Exception:
+            raise Exception(
+                'Failed sending STARTTLS command to server. You should update '
+                'the manager and configure it to support encryption or else '
+                'disable encryption for clients. See '
+                'https://github.com/labrad/pylabrad/blob/master/CONFIG.md')
+        cert = resp[0][1]
+        p.transport.startTLS(crypto.tls_options(host, cert_string=cert_string))
+        returnValue(cert)
+
+    def ping(p):
+        return p.sendRequest(C.MANAGER_ID, [(2L, 'PING')])
+
+    p = yield do_connect()
+    is_local_connection = util.is_local_connection(p.transport)
+    if ((tls_mode == 'starttls-force') or
+        (tls_mode == 'starttls' and not is_local_connection)):
+        try:
+            cert = yield start_tls(p)
+        except Exception:
+            # TODO: remove this retry. This is a temporary fix to support
+            # compatibility until TLS is fully deployed.
+            print ('STARTTLS failed; will retry without encryption in case we '
+                   'are connecting to a legacy manager.')
+            p = yield connect(host, port, tls_mode='off')
+            print 'Connected without encryption.'
+            returnValue(p)
+        try:
+            yield ping(p)
+        except Exception:
+            print 'STARTTLS failed due to untrusted server certificate:'
+            print 'SHA1 Fingerprint={}'.format(crypto.fingerprint(cert))
+            print
+            while True:
+                ans = raw_input(
+                        'Accept server certificate for host "{}"? (accept just '
+                        'this [O]nce; [S]ave and always accept this cert; '
+                        '[R]eject) '.format(host))
+                ans = ans.lower()
+                if ans in ['o', 's', 'r']:
+                    break
+                else:
+                    print 'Invalid input:', ans
+            if ans == 'r':
+                raise
+            p = yield do_connect()
+            yield start_tls(p, cert)
+            yield ping(p)
+            if ans == 's':
+                # save now that we know TLS succeeded,
+                # including hostname verification.
+                crypto.save_cert(host, cert)
+    returnValue(p)

@@ -512,9 +512,9 @@ class Client(HasDynamicAttrs):
         return self._backend.connected
 
     def connect(self, host, port=None, timeout=C.TIMEOUT, password=None,
-                tls=C.MANAGER_TLS):
+                tls_mode=C.MANAGER_TLS):
         self._backend.connect(host, port=port, timeout=timeout,
-                              password=password, tls=tls)
+                              password=password, tls_mode=tls_mode)
 
     def disconnect(self):
         self._backend.disconnect()

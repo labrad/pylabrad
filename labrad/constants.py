@@ -24,11 +24,11 @@ import labrad.crypto
 
 DEFAULT_TLS = 'starttls' if labrad.crypto.TLS else 'off'
 
-def check_tls_mode(tls):
+def check_tls_mode(tls_mode):
     """Check that provided tls mode is valid and convert to canonical form.
 
     Args:
-        tls (string): One of 'on', 'off', 'starttls', or 'starttls-force'.
+        tls_mode (string): One of 'on', 'off', 'starttls', or 'starttls-force'.
             If 'on', we use TLS for the initial session establishment.
             If 'off', no TLS is used (for connecting to a legacy manager that
             does not support TLS). If 'starttls', the connection is initially
@@ -43,11 +43,11 @@ def check_tls_mode(tls):
     Raises:
         ValueError: an invalid tls mode was specified
     """
-    tls = tls.lower()
-    if tls not in ['on', 'off', 'starttls', 'starttls-force']:
+    tls_mode = tls_mode.lower()
+    if tls_mode not in ['on', 'off', 'starttls', 'starttls-force']:
         raise ValueError("tls mode must be one of 'on', 'off', 'starttls', or "
-                         "'starttls-force'. got: '{}'".format(tls))
-    return tls
+                         "'starttls-force'. got: '{}'".format(tls_mode))
+    return tls_mode
 
 # defaults for the labrad manager
 MANAGER_ID = 1

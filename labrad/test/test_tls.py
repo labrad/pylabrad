@@ -77,7 +77,7 @@ def run_manager(tls_required, port=7778, tls_port=7779, startup_timeout=20):
             start = time.time()
             while True:
                 try:
-                    labrad.connect(port=tls_port, tls='on')
+                    labrad.connect(port=tls_port, tls_mode='on')
                 except Exception, e:
                     last_error = e
                 else:
@@ -97,17 +97,17 @@ def run_manager(tls_required, port=7778, tls_port=7779, startup_timeout=20):
 
 def test_connect_with_starttls():
     with run_manager(tls_required=True) as m:
-        with labrad.connect(port=m.port, tls='starttls-force') as cxn:
+        with labrad.connect(port=m.port, tls_mode='starttls-force') as cxn:
             pass
 
 def test_connect_with_optional_starttls():
     with run_manager(tls_required=False) as m:
-        with labrad.connect(port=m.port, tls='off') as cxn:
+        with labrad.connect(port=m.port, tls_mode='off') as cxn:
             pass
 
 def test_connect_with_tls():
     with run_manager(tls_required=True) as m:
-        with labrad.connect(port=m.tls_port, tls='on') as cxn:
+        with labrad.connect(port=m.tls_port, tls_mode='on') as cxn:
             pass
 
 
@@ -117,19 +117,19 @@ def test_connect_with_tls():
 def test_expect_starttls_use_off():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
-            with labrad.connect(port=m.port, tls='off') as cxn:
+            with labrad.connect(port=m.port, tls_mode='off') as cxn:
                 pass
 
 def test_expect_tls_use_off():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
-            with labrad.connect(port=m.tls_port, tls='off') as cxn:
+            with labrad.connect(port=m.tls_port, tls_mode='off') as cxn:
                 pass
 
 def test_expect_tls_use_starttls():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
-            with labrad.connect(port=m.tls_port, tls='off') as cxn:
+            with labrad.connect(port=m.tls_port, tls_mode='off') as cxn:
                 pass
 
 

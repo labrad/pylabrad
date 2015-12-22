@@ -91,7 +91,7 @@ from twisted.plugin import getPlugins
 from zope.interface import Interface, implements
 
 import labrad
-from labrad import util, types as T, constants as C
+from labrad import protocol, util, types as T, constants as C
 from labrad.server import ILabradServer, LabradServer, setting
 import labrad.support
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
@@ -429,8 +429,8 @@ def createPythonServerCls(plugin):
     return cls
 
 
-class Node(MultiService):
-    """Parent Service that keeps the node running.
+class Node(object):
+    """Parent class that keeps the node running.
 
     If the manager is stopped or we lose the network connection,
     this service attempts to restart it so that we will come
@@ -438,47 +438,41 @@ class Node(MultiService):
     """
     reconnectDelay = 10
 
-    def __init__(self, name, host, port, tls=C.MANAGER_TLS):
-        MultiService.__init__(self)
-        self.name = name
+    def __init__(self, nodename, host, port, password, tls_mode=C.MANAGER_TLS):
+        self.nodename = nodename
         self.host = host
         self.port = port
-        self.tls = tls
+        self.password = password
+        self.tls_mode = tls_mode
 
-    def startService(self):
-        MultiService.startService(self)
-        self.startConnection()
+    @inlineCallbacks
+    def run(self):
+        """Run the node in a loop, reconnecting after connection loss."""
+        log = logging.getLogger('labrad.node')
+        while True:
+            print 'Connecting to {}:{}...'.format(self.host, self.port)
+            try:
+                p = yield protocol.connect(self.host, self.port, self.tls_mode)
+                yield p.authenticate(self.password)
+                node = NodeServer(self.nodename, self.host, self.port,
+                                  self.password)
+                yield node.startup(p)
+            except Exception:
+                log.error('Node failed to start', exc_info=True)
+            else:
+                try:
+                    yield node.onShutdown()
+                except Exception:
+                    log.error('Error during node shutdown', exc_info=True)
 
-    def startConnection(self):
-        """Attempt to start the node and connect to LabRAD."""
-        print 'Connecting to %s:%d...' % (self.host, self.port)
-        node = NodeServer(self.name, self.host, self.port)
-        node.configure_tls(self.host, self.tls)
-        node.onStartup().addErrback(self._error)
-        node.onShutdown().addCallbacks(self._disconnected, self._error)
-        self.cxn = TCPClient(self.host, self.port, node)
-        self.addService(self.cxn)
+            ## hack: manually clear the internal message dispatcher
+            dispatcher.connections.clear()
+            dispatcher.senders.clear()
+            dispatcher._boundMethods.clear()
 
-    def _disconnected(self, data):
-        print 'Node disconnected from manager.'
-        return self._reconnect()
-
-    def _error(self, failure):
-        print failure.getErrorMessage()
-        return self._reconnect()
-
-    def _reconnect(self):
-        """Clean up from the last run and reconnect."""
-        ## hack: manually clearing the dispatcher...
-        dispatcher.connections.clear()
-        dispatcher.senders.clear()
-        dispatcher._boundMethods.clear()
-        ## end hack
-        if hasattr(self, 'cxn'):
-            self.removeService(self.cxn)
-            del self.cxn
-        reactor.callLater(self.reconnectDelay, self.startConnection)
-        print 'Will try to reconnect in %d seconds...' % self.reconnectDelay
+            yield util.wakeupCall(0)
+            print 'Will try to reconnect in {} seconds...'.format(self.reconnectDelay)
+            yield util.wakeupCall(self.reconnectDelay)
 
 
 class NodeConfig(object):
@@ -617,12 +611,13 @@ class NodeServer(LabradServer):
 
     name = 'node %LABRADNODE%'
 
-    def __init__(self, nodename, host, port):
+    def __init__(self, nodename, host, port, password):
         LabradServer.__init__(self)
         self.nodename = nodename
         self.name = 'node %s' % nodename
         self.host = host
         self.port = port
+        self.password = password
         self.servers = {}
         self.instances = {}
         self.starters = {}
@@ -948,8 +943,9 @@ def makeService(options):
     name = options['name']
     host = options['host']
     port = int(options['port'])
-    tls = C.check_tls_mode(options['tls'])
-    return Node(name, host, port, tls)
+    password = labrad.support.getPassword()
+    tls_mode = C.check_tls_mode(options['tls'])
+    return Node(name, host, port, password, tls_mode)
 
 
 def setup_logging(options):
@@ -1000,7 +996,7 @@ def main():
     setup_logging(config)
     logging.getLogger('labrad.node').info('Starting')
     service = makeService(config)
-    service.startService()
+    service.run()
     reactor.run()
 
 if __name__ == '__main__':

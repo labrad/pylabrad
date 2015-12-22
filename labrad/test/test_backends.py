@@ -8,19 +8,19 @@ from labrad.errors import LoginFailedError
 class AsyncoreBackendTests(unittest.TestCase):
     def testConnection(self):
         cxn = backend.AsyncoreConnection()
-        cxn.connect(tls='off')
+        cxn.connect(tls_mode='off')
         self.assertTrue(cxn.loop.is_alive())
         cxn.disconnect()
         self.assertFalse(cxn.loop.is_alive())
 
     def testBadHostExceptions(self):
         cxn = backend.AsyncoreConnection()
-        self.assertRaises(LoginFailedError, cxn.connect, host='bad.host.com', timeout=1, tls='off')
+        self.assertRaises(LoginFailedError, cxn.connect, host='bad.host.com', timeout=1, tls_mode='off')
         self.assertFalse(hasattr(cxn, 'loop'))
 
     def testBadPasswordException(self):
         cxn = backend.AsyncoreConnection()
-        self.assertRaises(LoginFailedError, cxn.connect, password='bad password', timeout=1, tls='off')
+        self.assertRaises(LoginFailedError, cxn.connect, password='bad password', timeout=1, tls_mode='off')
         self.assertFalse(cxn.connected)
         # event loop should terminate
         cxn.loop.join(1)
@@ -28,7 +28,7 @@ class AsyncoreBackendTests(unittest.TestCase):
 
     def testRequestCancellation(self):
         cxn = backend.AsyncoreConnection()
-        cxn.connect(tls='off')
+        cxn.connect(tls_mode='off')
         cxn.sendRequest(1, [(1L, None)]).wait()
         future = cxn.sendRequest(1, [(1L, None)])
         self.assertTrue(cxn.loop.is_alive())
@@ -47,7 +47,7 @@ class AsyncoreBackendTests(unittest.TestCase):
         )
 
         cxn = backend.AsyncoreConnection()
-        cxn.connect(tls='off')
+        cxn.connect(tls_mode='off')
         self.assertTrue(cxn.loop.is_alive())
         cxn.sendRequest(1, [(1L, None)]).wait()
         cxn.cxn.queue.put(badPacket)

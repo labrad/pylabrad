@@ -367,8 +367,6 @@ def updateServerOptions(srv, config):
     if hasattr(srv, 'instanceName'):
         srv.instanceName = interpEnvironmentVars(srv.instanceName, env)
 
-    srv.password = config['password']
-
 def runServer(srv, run_reactor=True, stop_reactor=True):
     """Run the given server instance.
 
@@ -381,6 +379,7 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
             server instance shuts down (whether normally or due to an error
             condition. Otherwise, the caller must arrange to call reactor.stop.
     """
+    from labrad import protocol
     from twisted.internet import reactor
 
     config = parseServerOptions(name=srv.name)
@@ -394,14 +393,11 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
     def run(srv):
         host = config['host']
         port = int(config['port'])
-        srv.configure_tls(host, config['tls'])
-        if config['tls'] == 'on':
-            tls_options = crypto.tls_options(host)
-            reactor.connectSSL(host, port, srv, tls_options)
-        else:
-            reactor.connectTCP(host, port, srv)
+        tls_mode = config['tls']
         try:
-            yield srv.onStartup()
+            p = yield protocol.connect(host, port, tls_mode)
+            yield p.authenticate(config['password'])
+            yield srv.startup(p)
             yield srv.onShutdown()
             log.msg('Disconnected cleanly.')
         except Exception as e:
@@ -418,33 +414,28 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
 
 @contextlib.contextmanager
 def syncRunServer(srv, host=C.MANAGER_HOST, port=None, password=None,
-                  tls=C.MANAGER_TLS):
+                  tls_mode=C.MANAGER_TLS):
     """Run a labrad server of the specified class in a synchronous context.
 
     Returns a context manager to be used with python's with statement that
     will yield when the server has started and then shut the server down after
     the context is exited.
     """
+    from labrad import protocol
 
-    tls = C.check_tls_mode(tls)
+    tls_mode = C.check_tls_mode(tls_mode)
 
     if port is None:
-        port = C.MANAGER_PORT_TLS if tls == 'on' else C.MANAGER_PORT
+        port = C.MANAGER_PORT_TLS if tls_mode == 'on' else C.MANAGER_PORT
 
     if password is None:
         password = C.PASSWORD
 
-    srv.password = password
-
     @inlineCallbacks
     def start_server():
-        srv.configure_tls(host, tls)
-        if tls == 'on':
-            tls_options = crypto.tls_options(host)
-            reactor.connectSSL(host, port, srv, tls_options)
-        else:
-            reactor.connectTCP(host, port, srv)
-        yield srv.onStartup()
+        p = yield protocol.connect(host, port, tls_mode)
+        yield p.authenticate(password)
+        yield srv.startup(p)
 
     @inlineCallbacks
     def stop_server():
