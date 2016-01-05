@@ -15,40 +15,39 @@ Operating System :: OS Independent
 Programming Language :: Python
 Topic :: Scientific/Engineering"""
 
-from distutils.core import setup
+import os
+from setuptools import setup, find_packages
 
 doclines = __doc__.split('\n')
 
+with open(os.path.join(os.path.dirname(__file__), 'requirements.txt')) as f:
+    requirements = f.readlines()
+
 setup(
-    name = 'pylabrad',
-    version = '0.93.1',
-    author = 'Matthew Neeley',
-    author_email = 'maffoo@users.sourceforge.net',
-    license = 'http://www.gnu.org/licenses/gpl-2.0.html',
-    platforms = ['ANY'],
-    
-    url = 'http://sourceforge.net/projects/pylabrad/',
-    download_url = '',
-    
-    description = doclines[0],
-    long_description = '\n'.join(doclines[2:]),
-    classifiers = classifications.split('\n'),
-    
-    install_requires = [
-        'twisted>=2.5',
-        'pyOpenSSL'
-    ],
-    provides = ['labrad'],
-    packages = [
-        'labrad',
-        'labrad.node',
-        'labrad.servers',
-        'labrad.test',
-        'labrad.util',
-        ],
-    package_data = {
+    name='pylabrad',
+    author='Matthew Neeley',
+    author_email='mneeley@gmail.com',
+    license='http://www.gnu.org/licenses/gpl-2.0.html',
+    platforms=['ANY'],
+
+    url='https://github.com/labrad/pylabrad/',
+    download_url='',
+
+    description=doclines[0],
+    long_description='\n'.join(doclines[2:]),
+    classifiers=classifications.split('\n'),
+
+    setup_requires=['setuptools_scm'],
+    use_scm_version={
+        'write_to': 'labrad/version.py'
+    },
+
+    install_requires=requirements,
+    provides=['labrad'],
+    packages=find_packages(),
+    package_data={
         'labrad': ['LICENSE.txt'],
         'labrad.node': ['*.ini'],
-        },
-    scripts = [],
-    )
+    },
+    scripts=[],
+)

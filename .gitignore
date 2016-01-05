@@ -1,2 +1,6 @@
 build/
+dist/
+labrad/version.py
+pylabrad.egg-info/
+*.egg
 *.pyc

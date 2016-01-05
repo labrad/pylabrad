@@ -19,10 +19,6 @@ labrad module for python.
 
 from labrad import backend, client, constants
 
-__version__  = '0.93.1'
-__revision__ = '$Revision$'
-__date__     = '$Date$'
-
 def connect(host=constants.MANAGER_HOST, port=None, name=None, **kw):
     """Create a client connection to the labrad manager."""
     cxn = backend.connect(host=host, port=port, name=name, **kw)
