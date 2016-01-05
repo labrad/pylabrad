@@ -5,4 +5,4 @@
 
 rm -r dist/
 python setup.py sdist --format=zip,gztar \
-                bdist_wheel --universal
+                bdist_wheel
