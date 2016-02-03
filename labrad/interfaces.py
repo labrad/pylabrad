@@ -51,55 +51,6 @@ class ILabradClient(Interface):
         """Connect to LabRAD."""
 
 
-class ILabradServer(Interface):
-    """Interface for implementing a LabRAD server."""
-
-    client = Attribute("IClientAsync connection to LabRAD.")
-
-    def initServer():
-        """Initialize the server.
-
-        This will be called after connecting to LabRAD.
-        """
-
-    def stopServer():
-        """Shutdown the server.
-
-        For an orderly shutdown, this will be called before disconnecting
-        from LabRAD, so it should still be possible to make requests.
-        """
-
-    def newContext(ID):
-        """Create a new context object for the given ID.
-
-        By default, we create a dict-like object and set the ID
-        attribute on it.  The object returned from this method
-        will be passed to initContext for initialization.
-        """
-
-    def initContext(context):
-        """Initialize a newly-created context object."""
-
-    def expireContext(context):
-        """Expire a messaging context."""
-
-    def startRequest(context, source):
-        """Start a request from source in the given context.
-
-        By default, this sets the source attribute on the context,
-        so that handlers called for this request can determine where
-        the request originated.  Having set the ID and source attributes,
-        the context object will now implement the IRequestContext interface
-        when it is passed into the request handlers.
-        """
-
-    def serverConnected(ID, name):
-        """Called when a new server connects to LabRAD."""
-
-    def serverDisconnected(ID, name):
-        """Called when a server disconnects from LabRAD."""
-
-
 class IRequestContext(Interface):
     """Sent as the first argument to request handlers.
 

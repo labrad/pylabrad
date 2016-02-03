@@ -92,7 +92,7 @@ from zope.interface import Interface, implements
 
 import labrad
 from labrad import protocol, util, types as T, constants as C
-from labrad.server import ILabradServer, LabradServer, setting
+from labrad.server import LabradServer, setting
 import labrad.support
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 
@@ -389,46 +389,6 @@ def createGenericServerCls(path, filename, conf):
     return cls
 
 
-def createPythonServerCls(plugin):
-    """Create a ServerProcess class representing a python server.
-
-    Options for this server are read from the python object itself,
-    located with the twisted plugin system.
-    """
-    class cls(ServerProcess):
-        pass
-
-    # general information
-    cls.name = plugin.name
-    cls.__doc__ = plugin.__doc__
-    if hasattr(plugin, 'version'):
-        cls.version = plugin.version
-    else:
-        cls.version = '0.0'
-    if hasattr(plugin, 'instanceName'):
-        cls.instancename = plugin.instanceName
-    else:
-        cls.instancename = plugin.name
-    cls.environVars = findEnvironmentVars(cls.instancename)
-    cls.isLocal = len(cls.environVars) > 0
-
-    # startup
-    cls.cmdline = ' '.join([sys.executable, '-m', plugin.__module__])
-    cls.path, cls.filename = os.path.split(sys.modules[plugin.__module__].__file__)
-
-    # shutdown
-    if hasattr(plugin, 'shutdownMessage'):
-        cls.shutdownMode = 'message', plugin.shutdownMessage
-    elif hasattr(plugin, 'shutdownSetting'):
-        cls.shutdownMode = 'setting', plugin.shutdownSetting
-    try:
-        cls.shutdownTimeout = float(plugin.shutdownTimeout)
-    except:
-        pass
-
-    return cls
-
-
 class Node(object):
     """Parent class that keeps the node running.
 
@@ -715,19 +675,6 @@ class NodeServer(LabradServer):
     def refreshServers(self):
         """Refresh the list of available servers."""
         servers = {}
-        # look for python plugins
-        for module in self.config.mods:
-            try:
-                __import__(module)
-                plugins = getPlugins(ILabradServer, sys.modules[module])
-                for plugin in plugins:
-                    s = createPythonServerCls(plugin)
-                    s.client = self.client
-                    if s.name not in servers:
-                        servers[s.name] = s
-            except:
-                logging.error('Error while loading plugins from module "%s":' % module,
-                              exc_info=True)
         # look for .ini files
         for dirname in self.config.dirs:
             for path, dirs, files in os.walk(dirname):
