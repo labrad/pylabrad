@@ -18,7 +18,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from labrad import constants as C
 
 class AsyncManager:
-    """Adapt client to the ILabradManager interface."""
+    """Provide an asynchronous interface to basic manager settings."""
 
     ID = C.MANAGER_ID
 
@@ -96,4 +96,3 @@ class AsyncManager:
         """Subscribe to or stop a named message."""
         packet = [(C.MESSAGE_SUBSCRIBE, (name, long(ID), enable))]
         returnValue((yield self._send(packet)))
-

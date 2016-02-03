@@ -26,18 +26,14 @@ import hashlib
 from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
-from zope.interface import implements
 
 from labrad import constants as C, crypto, errors, util
-from labrad.interfaces import ILabradProtocol, IMessageContext
 from labrad.stream import packetStream, flattenPacket
 from labrad.support import getPassword
 
 
 class LabradProtocol(protocol.Protocol):
     """Receive and send labrad packets."""
-
-    implements(ILabradProtocol)
 
     def __init__(self):
         self.disconnected = False
@@ -362,8 +358,6 @@ class LabradProtocol(protocol.Protocol):
 
 class MessageContext(object):
     """Object to be passed as the first argument to message handlers."""
-
-    implements(IMessageContext)
 
     def __init__(self, source, context, target):
         self.source = source

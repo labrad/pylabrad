@@ -28,12 +28,10 @@ from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionDone, ConnectionLost
 from twisted.python import failure, log
-from twisted.plugin import IPlugin
-from zope.interface import implements
 
 from labrad import constants as C, types as T, util
 from labrad.decorators import setting
-from labrad.interfaces import IClientAsync
+from labrad.wrappers import ClientAsync
 
 
 class Signal(object):
@@ -182,8 +180,6 @@ class Context(object):
 
 class LabradServer(object):
     """A generic LabRAD server."""
-
-    implements(IPlugin)
 
     sendTracebacks = True
     prioritizeWrites = False
@@ -345,7 +341,7 @@ class LabradServer(object):
             self.ID = protocol.ID
             protocol.request_handler = self.request_handler
             protocol.onDisconnect().addBoth(self._connection_lost)
-            self.client = IClientAsync(protocol)
+            self.client = ClientAsync(protocol)
             yield self.client._init()
             yield self._initServer()
             self.started = True

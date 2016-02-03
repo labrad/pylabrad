@@ -20,12 +20,8 @@ from types import MethodType
 
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python.components import registerAdapter
-
-from zope.interface import implements
 
 from labrad import constants as C, crypto, manager, protocol, types as T, util
-from labrad.interfaces import ILabradProtocol, ILabradManager, IClientAsync
 from labrad.support import indent, mangle, extractKey, MultiDict, PacketRecord, PacketResponse, getPassword, hexdump
 
 
@@ -403,7 +399,7 @@ def connectAsync(host=C.MANAGER_HOST, port=None, name="Python Client",
                  password=None, tls_mode=C.MANAGER_TLS):
     """Connect to LabRAD and return a deferred that fires the client object."""
     p = yield getConnection(host, port, name, password, tls_mode=tls_mode)
-    cxn = IClientAsync(p)
+    cxn = ClientAsync(p)
     yield cxn._init()
     cxn.onDisconnect = p.onDisconnect
     returnValue(cxn)
@@ -421,8 +417,6 @@ def runAsync(func, *args, **kw):
 
 class ClientAsync(object):
     """Adapt a LabRAD request protocol object to an asynchronous client."""
-
-    implements(IClientAsync)
 
     def __init__(self, prot):
         self.servers = MultiDict()
@@ -574,8 +568,6 @@ class ClientAsync(object):
     @property
     def _removeListener(self):
         return self._cxn.removeListener
-
-registerAdapter(ClientAsync, ILabradProtocol, IClientAsync)
 
 def wrapAsync(cls, *args, **kw):
     obj = cls(*args, **kw)

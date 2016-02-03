@@ -88,7 +88,6 @@ from twisted.internet.error import ProcessDone, ProcessTerminated
 from twisted.python import usage
 from twisted.python.runtime import platformType
 from twisted.plugin import getPlugins
-from zope.interface import Interface, implements
 
 import labrad
 from labrad import protocol, util, types as T, constants as C
@@ -100,13 +99,9 @@ from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
 
 
-class IServerProcess(Interface):
-    pass
-
-
 class ServerProcess(ProcessProtocol):
     """A class to represent a running server instance."""
-    implements(IServerProcess)
+
     timeout = 20
     shutdownTimeout = 5
 
