@@ -35,8 +35,7 @@ configuration keys are:
                     that contain a file called '.nodeignore' will be skipped,
                     along with all their subdirs.
   extensions (*s): what files to look at, e.g. ['.ini', '.py', '.exe']
-  packages (*s): python packages to be scanned for servers using twisted's
-                 plugin system (this feature is deprecated and will be removed).
+  autostart (*s): list of servers to be autostarted
 
 Changes required on the server:
 
@@ -87,7 +86,6 @@ from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.error import ProcessDone, ProcessTerminated
 from twisted.python import usage
 from twisted.python.runtime import platformType
-from twisted.plugin import getPlugins
 
 import labrad
 from labrad import protocol, util, types as T, constants as C
@@ -438,8 +436,6 @@ class NodeConfig(object):
             runnable servers.
         exts (list(string)): a list of file extensions that will be included
             when searching for servers.
-        mods (list(string)): a list of python modules that will be searched for
-            runnable servers using twisted's plugin mechanism. TODO: remove this
         autostart (list(string)): a list of servers that will be automatically
             started when the node launches.
     """
@@ -476,7 +472,7 @@ class NodeConfig(object):
 
         # load defaults (creating them if necessary)
         create = '__default__' not in dirs
-        defaults = ([], ['labrad.servers'], ['.ini', '.py'], [])
+        defaults = ([], ['.ini', '.py'], [])
         defaults = yield self._load('__default__', create, defaults)
 
         # load this node (creating config if necessary)
@@ -496,9 +492,9 @@ class NodeConfig(object):
 
     def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
-        self.dirs, self.mods, self.extensions, self.autostart = config
-        print 'config updated: dirs={}, modules={}, extensions={}, autostart={}'.format(
-                self.dirs, self.mods, self.extensions, self.autostart)
+        self.dirs, self.extensions, self.autostart = config
+        print 'config updated: dirs={}, extensions={}, autostart={}'.format(
+                self.dirs, self.extensions, self.autostart)
         if triggerRefresh:
             self.parent.refreshServers()
 
@@ -510,27 +506,23 @@ class NodeConfig(object):
             p.cd(['', 'Nodes', nodename], True)
         if create:
             p.set('directories', defaults[0])
-            p.set('packages', defaults[1])
-            p.set('extensions', defaults[2])
-            p.set('autostart', defaults[3])
+            p.set('extensions', defaults[1])
+            p.set('autostart', defaults[2])
         p.get('directories', '*s', key='dirs')
-        p.get('packages', '*s', key='mods')
         p.get('extensions', '*s', key='exts')
         p.get('autostart', '*s', True, [], key='autostart')
         ans = yield p.send()
         def remove_empties(strs):
             return [s for s in strs if s]
         dirs = remove_empties(ans.dirs)
-        mods = remove_empties(ans.mods)
         exts = remove_empties(ans.exts)
         autostart = sorted(remove_empties(ans.autostart))
-        returnValue((dirs, mods, exts, autostart))
+        returnValue((dirs, exts, autostart))
 
     def _save(self):
         """Save the current configuration to the registry."""
         p = self._packet()
         p.set('directories', self.dirs)
-        p.set('packages', self.mods)
         p.set('extensions', self.extensions)
         return p.send()
 
