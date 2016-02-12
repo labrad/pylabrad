@@ -3,12 +3,16 @@
 Provides a backend connection that underlies the wrapper client object.
 """
 
+from __future__ import absolute_import
+
 import asyncore
 import hashlib
 import socket
 import sys
 import threading
 import Queue
+
+from concurrent.futures import Future
 
 from labrad import constants as C
 from labrad.errors import LoginFailedError
@@ -63,18 +67,21 @@ try:
         def _connect(self, password, _timeout, tls_mode):
             startReactor()
             self.cxn = self.call(getConnection, self.host, self.port, self.name,
-                                 password, tls_mode=tls_mode).wait()
+                                 password, tls_mode=tls_mode).result()
             return self.cxn.ID
 
         def _disconnect(self):
-            self.call(self.cxn.disconnect).wait()
+            self.call(self.cxn.disconnect).result()
 
         def call(self, func, *args, **kw):
             f = Future()
+            @defer.inlineCallbacks
             def wrapped():
-                d = defer.maybeDeferred(func, *args, **kw)
-                d.addCallbacks(lambda result: f.callback(result),
-                               lambda failure: f.errback(failure))
+                try:
+                    result = yield defer.maybeDeferred(func, *args, **kw)
+                    f.set_result(result)
+                except Exception as e:
+                    f.set_exception(e)
             reactor.callFromThread(wrapped)
             return f
 
@@ -82,7 +89,7 @@ try:
             return self.call(self.cxn.sendRequest, target, records, *args, **kw)
 
         def sendMessage(self, target, records, *args, **kw):
-            return self.call(self.cxn.sendMessage, target, records, *args, **kw).wait()
+            return self.call(self.cxn.sendMessage, target, records, *args, **kw).result()
 
     backends['twisted'] = TwistedConnection
 
@@ -128,7 +135,7 @@ class AsyncoreConnection(BaseConnection):
 
     def login(self, password, *ident):
         # send login packet
-        resp = self.sendRequest(C.MANAGER_ID, []).wait()
+        resp = self.sendRequest(C.MANAGER_ID, []).result()
         challenge = resp[0][1] # get password challenge
 
         # send password response
@@ -138,14 +145,14 @@ class AsyncoreConnection(BaseConnection):
         m.update(challenge)
         m.update(password)
         try:
-            resp = self.sendRequest(C.MANAGER_ID, [(0L, m.digest())]).wait()
+            resp = self.sendRequest(C.MANAGER_ID, [(0L, m.digest())]).result()
         except Exception:
             raise LoginFailedError('Incorrect password.')
         self.loginMessage = resp[0][1] # get welcome message
 
         # send identification
         try:
-            resp = self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)]).wait()
+            resp = self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)]).result()
         except Exception:
             raise LoginFailedError('Bad identification.')
         return resp[0][1] # get assigned ID
@@ -282,7 +289,7 @@ class AsyncoreProtocol(asyncore.dispatcher):
         finally:
             self.flushCommands()
             for d in self.requests.values():
-                d.errback(reason)
+                d.set_exception(reason)
 
     def readable(self):
         return True
@@ -350,9 +357,9 @@ class AsyncoreProtocol(asyncore.dispatcher):
         errors = [r[1] for r in records if isinstance(r[1], Exception)]
         if errors:
             # fail on the first error
-            future.errback(errors[0])
+            future.set_exception(errors[0])
         else:
-            future.callback(records)
+            future.set_result(records)
 
 
 class Failure(object):
@@ -367,57 +374,6 @@ class Failure(object):
             raise self.value
         else:
             raise self.exctype, self.value
-
-class Future(object):
-
-    def __init__(self):
-        self.ready = Queue.Queue()
-        self.done = False
-        self.result = None
-        self.callbacks = []
-
-    def addCallback(self, f, *args, **kw):
-        if self.done:
-            self.result = f(self.result, *args, **kw)
-        else:
-            self.callbacks.append((f, args, kw))
-        return self
-
-    def callback(self, result):
-        self.result = result
-        self.ready.put(self)
-
-    def errback(self, error=None):
-        if not hasattr(error, 'raiseException'):
-            error = Failure(error)
-        self.result = error
-        self.ready.put(self)
-
-    def wait(self):
-        if self.done:
-            return self.result
-        while True:
-            f = self.ready.get()
-            f.done = True
-            result = f.result
-            if hasattr(result, 'raiseException'):
-                # this can be a Twisted Failure or our
-                # own Failure class, as defined above
-                # If any Future in the queue fails,
-                # we immediately bail.
-                result.raiseException()
-            else:
-                for func, args, kw in f.callbacks:
-                    result = func(result, *args, **kw)
-                f.result = result
-            if f is self:
-                return result
-
-    def __repr__(self):
-        if self.done:
-            return '<Future: result=%r>' % (self.result,)
-        else:
-            return '<Future: pending...>'
 
 
 def connect(host=C.MANAGER_HOST, port=None, name=None, backend=None, **kw):
@@ -472,7 +428,7 @@ class ManagerService:
 
     def _send(self, packet, *args, **kw):
         """Send a request to the manager and wait for the result."""
-        return self.cxn.sendRequest(C.MANAGER_ID, packet, *args, **kw).wait()
+        return self.cxn.sendRequest(C.MANAGER_ID, packet, *args, **kw).result()
 
     def _getIDList(self, setting, data=None):
         resp = self._send([(setting, data)])
