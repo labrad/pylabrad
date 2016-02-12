@@ -244,15 +244,15 @@ def firstToFire(n=2):
     first.addCallback(lambda result: result[0])
     return first, heads
 
+@inlineCallbacks
 def maybeTimeout(deferred, timeout, timeoutResult):
     """Takes a deferred and returns a new deferred that might timeout."""
-    td = defer.Deferred()
-    reactor.callLater(timeout, td.callback, timeoutResult)
-    d = defer.DeferredList([deferred, td], fireOnOneCallback=True,
-                                           fireOnOneErrback=True,
-                                           consumeErrors=True)
-    d.addCallback(lambda (result, index): result)
-    return d
+    td = wakeupCall(timeout, timeoutResult)
+    result, _index = yield defer.DeferredList([deferred, td],
+                                              fireOnOneCallback=True,
+                                              fireOnOneErrback=True,
+                                              consumeErrors=True)
+    returnValue(result)
 
 class DeferredSignal(object):
     """An object that can create multiple deferreds on demand.

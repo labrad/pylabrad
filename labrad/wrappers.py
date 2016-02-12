@@ -42,6 +42,7 @@ class AsyncSettingWrapper(object):
         self.ID = ID
         self.__doc__, self.accepts, self.returns, self.notes = info
 
+    @inlineCallbacks
     def __call__(self, *args, **kw):
         """Send a request to this setting."""
         tag = extractKey(kw, 'tag', None) or self.accepts
@@ -50,9 +51,8 @@ class AsyncSettingWrapper(object):
         elif len(args) == 1:
             args = args[0]
         flat = T.flatten(args, tag)
-        d = self._server._send([(self.ID, flat)], **kw)
-        d.addCallback(lambda r: r[0][1])
-        return d
+        r = yield self._server._send([(self.ID, flat)], **kw)
+        returnValue(r[0][1])
 
     @inlineCallbacks
     def connect(self, handler, context=(0, 0),
@@ -155,13 +155,13 @@ class AsyncPacketWrapper(object):
         self._kw = kw
         self.settings = SettingBinder(self)
 
+    @inlineCallbacks
     def send(self, **kw):
         """Send this packet to the server."""
         # drop keys from records before sending
         records = [(rec.ID, rec.flat) for rec in self._packet]
-        d = self._server._send(records, **dict(self._kw, **kw))
-        d.addCallback(PacketResponse, self._server, self._packet)
-        return d
+        r = yield self._server._send(records, **dict(self._kw, **kw))
+        returnValue(PacketResponse(r, self._server, self._packet))
 
     def _bind(self, method):
         """Bind a method to this instance."""
@@ -569,8 +569,8 @@ class ClientAsync(object):
     def _removeListener(self):
         return self._cxn.removeListener
 
+@inlineCallbacks
 def wrapAsync(cls, *args, **kw):
     obj = cls(*args, **kw)
-    d = obj.refresh()
-    d.addCallback(lambda _: obj)
-    return d
+    yield obj.refresh()
+    returnValue(obj)
