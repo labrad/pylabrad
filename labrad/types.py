@@ -1249,8 +1249,9 @@ class LRList(LRType):
                 # Make sure it is unflattened so endian conversion happens
                 L.aslist
         if isinstance(L, ndarray):
-            if self.elem <= LRValue() and self.elem.unit != '':
-                msg = "Can't flatten ndarray to %s"%(self,)
+            if (self.elem <= LRValue() and
+                    not (self.elem.unit is None or self.elem.unit == '')):
+                msg = "Can't flatten ndarray to {}".flatten(self)
                 raise TypeError(msg)
             return self.__flatten_array__(L, endianness)
         if isinstance(L, U.ValueArray):

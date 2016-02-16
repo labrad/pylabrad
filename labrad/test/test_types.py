@@ -351,5 +351,11 @@ class LabradTypesTests(unittest.TestCase):
         self.assertEquals(T.unflatten(foo.bytes, 'y'), 'foo bar')
         self.assertEquals(T.unflatten(*T.flatten('foo bar', ['y'])), 'foo bar')
 
+    def testFlattenIntArrayToValueArray(self):
+        x = np.array([1, 2, 3, 4], dtype='int64')
+        flat = T.flatten(x, '*v')
+        y = T.unflatten(*flat)
+        self.assertTrue(np.all(x == y))
+
 if __name__ == "__main__":
     unittest.main()
