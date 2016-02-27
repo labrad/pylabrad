@@ -357,5 +357,59 @@ class LabradTypesTests(unittest.TestCase):
         y = T.unflatten(*flat)
         self.assertTrue(np.all(x == y))
 
+    def testCanFlattenFlatData(self):
+        x = ('this is a test', -42, [False, True])
+        flat = T.flatten(x)
+        self.assertEquals(T.parseTypeTag(flat.tag), T.parseTypeTag('si*b'))
+        flat2 = T.flatten(x)
+        self.assertEquals(flat2, flat)
+        flat3 = T.flatten(x, 'si*b')
+        self.assertEquals(flat3, flat)
+        with self.assertRaises(T.FlatteningError):
+            T.flatten(x, 'sv')
+
+    def testCanFlattenListOfPartialFlatData(self):
+        x1 = ('this is a test', -42, [False, True])
+        piece1 = T.flatten(x1)
+        x2 = ('this is also a test', -43, [False, True, True, True])
+        piece2 = T.flatten(x2)
+
+        not_flattened = [x1, x2]
+        partially_flattened = [piece1, piece2]
+        tag = '*(si*b)'
+
+        expected = T.flatten(not_flattened)
+
+        flat1 = T.flatten(partially_flattened)
+        self.assertEquals(flat1, expected)
+
+        flat2 = T.flatten(partially_flattened, tag)
+        self.assertEquals(flat2, expected)
+
+        with self.assertRaises(T.FlatteningError):
+            T.flatten(partially_flattened, '*(si)')
+
+    def testCanFlattenClusterOfPartialFlatData(self):
+        x1 = ('this is a test', -42, [False, True])
+        piece1 = T.flatten(x1)
+        x2 = ('this is also a test', -43, [False, True, True, True])
+        piece2 = T.flatten(x2)
+
+        not_flattened = (('1', x1), ('2', x2, False))
+        partially_flattened = (('1', piece1), ('2', piece2, False))
+        tag = '((s(si*b)) (s(si*b)b))'
+
+        expected = T.flatten(not_flattened)
+
+        flat1 = T.flatten(partially_flattened)
+        self.assertEquals(flat1, expected)
+
+        flat2 = T.flatten(partially_flattened, tag)
+        self.assertEquals(flat2, expected)
+
+        with self.assertRaises(T.FlatteningError):
+            T.flatten(partially_flattened, '*(s(si*b))')
+
+
 if __name__ == "__main__":
     unittest.main()

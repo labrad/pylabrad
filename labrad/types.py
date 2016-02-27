@@ -252,6 +252,10 @@ def getType(obj):
         return obj.__lrtype__()
 
     t = type(obj)
+
+    if t == FlatData:
+        return parseTypeTag(obj.tag)
+
     # handle classic classes
     if t == InstanceType:
         t = obj.__class__
@@ -322,25 +326,10 @@ def flatten(obj, types=None, endianness='>'):
     check the registry of flattening functions, to see whether one exists
     for the object type, or a superclass.
     """
-    if isinstance(obj, FlatData):
-        # if types were specified, make sure this data conforms to one of them
-        if types is not None:
-            if not isinstance(types, list):
-                types = [types]
-            t = parseTypeTag(obj.tag)
-            if not any(t <= parseTypeTag(tag) for tag in types):
-                raise FlatteningError(obj, t)
-        return obj
     if hasattr(obj, '__lrflatten__'):
         s, t = obj.__lrflatten__(endianness)
-    else:
-        s, t = _flatten_to(obj, types, endianness)
-    return FlatData(s, t)
+        return FlatData(s, t)
 
-def _flatten_to(obj, types, endianness):
-    """
-    Flatten obj in the case that it has no __lrflatten__ method.
-    """
     if types is None:
         types = []
     if not isinstance(types, list):
@@ -350,48 +339,46 @@ def _flatten_to(obj, types, endianness):
     if not len(types):
         # if there are no type suggestions, just try to
         # flatten to the default type
-        s, t = t.__flatten__(obj, endianness)
-    else:
-        # check the list of allowed types for one compatible
-        # with obj's type
-        foundCompatibleType = False
-        for tt in types:
-            # If obj has a type which is more specific than one of the
-            # allowed types, use obj's type. This covers cases where
-            # an allowed type is 'v' and obj's type is 'v[Hz]'.
-            if t <= tt:
-                foundCompatibleType = True
-                break
-            # If one of the required types is more specific than obj's
-            # type, use that. This covers cases where we're trying to
-            # flatten something like ([],[1,2]) and an allowed type is
-            # eg. (*v*i).
-            elif tt <= t:
-                t = tt
-                foundCompatibleType = True
-                break
-        if foundCompatibleType:
-            try:
-                s, t = t.__flatten__(obj, endianness)
-            except Exception, e:
-                raise FlatteningError(obj, t)
+        return t.flatten(obj, endianness)
+
+    # check the list of allowed types for one compatible
+    # with obj's type
+    foundCompatibleType = False
+    for tt in types:
+        # If obj has a type which is more specific than one of the
+        # allowed types, use obj's type. This covers cases where
+        # an allowed type is 'v' and obj's type is 'v[Hz]'.
+        if t <= tt:
+            foundCompatibleType = True
+            break
+        # If one of the required types is more specific than obj's
+        # type, use that. This covers cases where we're trying to
+        # flatten something like ([],[1,2]) and an allowed type is
+        # eg. (*v*i).
+        elif tt <= t:
+            t = tt
+            foundCompatibleType = True
+            break
+    if foundCompatibleType:
+        try:
+            return t.flatten(obj, endianness)
+        except Exception, e:
+            raise FlatteningError(obj, t)
+
+    # Since we haven't found anything compatible, just try to
+    # flatten to any of the suggested types. This covers cases
+    # such as an allowed type 'v[]' and obj=4. In this case, the
+    # class representing 'v[]', namely LRValue(''), will handle
+    # coercion of obj to the appropriate type.
+    for t in types:
+        try:
+            return t.flatten(obj, endianness)
+        except Exception:
+            pass
         else:
-            # Since we haven't found anything compatible, just try to
-            # flatten to any of the suggested types. This covers cases
-            # such as an allowed type 'v[]' and obj=4. In this case, the
-            # class representing 'v[]', namely LRValue(''), will handle
-            # coercion of obj to the appropriate type.
-            s = None
-            for t in types:
-                try:
-                    s, t = t.__flatten__(obj, endianness)
-                except Exception:
-                    pass
-                else:
-                    break
-            if s is None:
-                raise FlatteningError(obj, types)
-    return s, t
+            break
+
+    raise FlatteningError(obj, types)
 
 
 # Evaluation functions
@@ -538,6 +525,31 @@ class LRType(object):
         returns a tuple of (python object, rest of string).
         """
         raise NotImplementedError
+
+    def flatten(self, data, endianness):
+        """Flatten an object to this Labrad type.
+
+        This method deals with the case where incoming data has already been
+        flattened. In that case, we check that the FlatData's type matches,
+        otherwise for not-yet-flattened data we defer the real work to the
+        __flatten__ method.
+
+        Args:
+            data (object or FlatData): If a FlatData is given, we just check
+                that its type matches our type type and then return the already-
+                flattened data. Otherwise, we call __flatten__.
+            endianness (str): '<' for little- or '>' for big-endian.
+
+        Returns:
+            FlatData: The flattened data consisting of data and type tag.
+        """
+        if isinstance(data, FlatData):
+            if not parseTypeTag(data.tag) <= self:
+                raise FlatteningError(data, self)
+            # TODO: need to check that obj has correct endianness
+            return data
+        s, t = self.__flatten__(data, endianness)
+        return FlatData(s, t)
 
     def __flatten__(self, data, endianness):
         """
@@ -934,16 +946,16 @@ class LRCluster(LRType):
             items = []
             for t, elem in zip(self.items, c):
                 if t == LRAny():
-                    s, t = flatten(elem, endianness=endianness)
-                    strs.append(s)
-                    items.append(t)
+                    flat = flatten(elem, endianness=endianness)
+                    strs.append(flat.bytes)
+                    items.append(flat.tag)
                 else:
-                    s, _ = t.__flatten__(elem, endianness) # _ -> t ?
-                    strs.append(s)
-                    items.append(t)
+                    flat = t.flatten(elem, endianness)
+                    strs.append(flat.bytes)
+                    items.append(flat.tag)
             self.items = items # warning: type mutated here
             return ''.join(strs), self
-        return ''.join(t.__flatten__(elem, endianness)[0] for t, elem in zip(self.items, c)), self
+        return ''.join(t.flatten(elem, endianness).bytes for t, elem in zip(self.items, c)), self
 
 registerTypeFunc(tuple, LRCluster.__lrtype__)
 
@@ -1037,12 +1049,12 @@ registerTypeFunc(tuple, LRCluster.__lrtype__)
 #                    strs.append(s)
 #                    items.append(t)
 #                else:
-#                    s = t.__flatten__(elem, endianness)
-#                    strs.append(s)
-#                    items.append(t)
+#                    flat = t.flatten(elem, endianness)
+#                    strs.append(flat.bytes)
+#                    items.append(flat.tag)
 #            self.items = items # warning: type mutated here
 #            return ''.join(strs)
-#        return ''.join(t.__flatten__(elem, endianness) for t, elem in zip(self.items, c))
+#        return ''.join(t.flatten(elem, endianness) for t, elem in zip(self.items, c))
 
 
 class LRList(LRType):
@@ -1265,7 +1277,7 @@ class LRList(LRType):
             if len(ls) != lengths[n]:
                 raise Exception('List is not rectangular.')
             if n+1 == self.depth:
-                return ''.join(self.elem.__flatten__(e, endianness)[0] for e in ls)
+                return ''.join(self.elem.flatten(e, endianness).bytes for e in ls)
             else:
                 return ''.join(flattenNDlist(row, n+1) for row in ls)
         flat = flattenNDlist(L)

@@ -25,7 +25,8 @@ from labrad import constants as C, types as T
 from labrad.backend import ManagerService
 from labrad.concurrent import map_future, MutableFuture
 from labrad.errors import Error
-from labrad.support import mangle, indent, PrettyMultiDict, PacketRecord, PacketResponse, hexdump
+from labrad.support import (mangle, indent, PrettyMultiDict, FlatPacket,
+                            PacketRecord, PacketResponse, hexdump)
 
 class NotFoundError(Error):
     code = 10
@@ -339,7 +340,21 @@ class PacketWrapper(HasDynamicAttrs):
         self._refresh()
         return self._attrs
 
-    _staticAttrs = ['settings', 'send', 'send_future']
+    def to_cluster(self, context=None):
+        """Get a representation of this packet as a flattenable cluster.
+
+        This method returns a representation of this packet as a cluster of
+        (context, name, records), where records is itself a cluster of
+        (setting name, value), one for each setting record in the packet.
+        """
+        if context is None:
+            context = self._kw.get('context', self._server._ctx)
+            if context is None:
+                context = (self._server._cxn.ID, 0)
+        records = tuple((rec.name, rec.flat) for rec in self._packet)
+        return FlatPacket(context, self._server.name, records)
+
+    _staticAttrs = ['settings', 'send', 'send_future', 'to_cluster']
 
     def _getAttrs(self):
         """Grab the list of the server's attributes."""
@@ -356,7 +371,8 @@ class PacketWrapper(HasDynamicAttrs):
             elif len(args) == 1:
                 args = args[0]
             flat = T.flatten(args, tag)
-            rec = PacketRecord(ID=s.ID, data=args, tag=tag, flat=flat, key=key)
+            rec = PacketRecord(ID=s.ID, data=args, tag=tag, flat=flat, key=key,
+                               name=name)
             self._packet.append(rec)
             return self
         return wrapped
@@ -389,7 +405,7 @@ class PacketWrapper(HasDynamicAttrs):
         a possibly truncated repr of the data for this setting.
         """
         key_str = "" if rec.key is None else " (key=%s)" % (rec.key,)
-        prefix = '%s%s: ' % (self._server.settings[rec.ID].name, key_str)
+        prefix = '%s%s: ' % (rec.name, key_str)
         data_str = self._dataStr(str(rec.data)) if short else self._dataRepr(str(rec.data))
         data_str = data_str.replace('\n', '\n' + ' '*len(prefix))
         return prefix + data_str

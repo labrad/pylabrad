@@ -21,8 +21,9 @@ from types import MethodType
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from labrad import constants as C, crypto, manager, protocol, types as T, util
-from labrad.support import indent, mangle, extractKey, MultiDict, PacketRecord, PacketResponse, getPassword, hexdump
+from labrad import constants as C, manager, protocol, types as T
+from labrad.support import (indent, mangle, extractKey, MultiDict, PacketRecord,
+                            PacketResponse, hexdump)
 
 
 class AsyncSettingWrapper(object):
@@ -128,7 +129,8 @@ class AsyncPacketWrapper(object):
                 elif len(args) == 1:
                     args = args[0]
                 flat = T.flatten(args, tag)
-                rec = PacketRecord(ID=setting.ID, data=args, tag=tag, flat=flat, key=key)
+                rec = PacketRecord(ID=setting.ID, data=args, tag=tag, flat=flat,
+                                   key=key, name=setting.name)
                 self._packet.append(rec)
                 return self
             wrapped.name = setting.name

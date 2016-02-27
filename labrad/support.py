@@ -145,7 +145,12 @@ class PrettyMultiDict(MultiDict):
         return '\n'.join(sorted(self.keys()))
 
 
-PacketRecord = collections.namedtuple('PacketRecord', ['ID', 'data', 'tag', 'flat', 'key'])
+PacketRecord = collections.namedtuple('PacketRecord', ['ID', 'data', 'tag',
+                                                       'flat', 'key', 'name'])
+
+
+FlatPacket = collections.namedtuple('FlatPacket', ['context', 'name',
+                                                   'records'])
 
 
 class PacketResponse(object):
