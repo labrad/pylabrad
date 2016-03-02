@@ -14,16 +14,15 @@ import Queue
 
 from concurrent.futures import Future
 
-from labrad import constants as C
+from labrad import constants as C, support
 from labrad.errors import LoginFailedError
 from labrad.stream import packetStream, flattenPacket, flattenRecords
-from labrad.support import getNodeName, getPassword
 
 backends = {}
 
 class BaseConnection(object):
     def __init__(self, name=None):
-        self.name = name or 'Python Client (%s)' % getNodeName()
+        self.name = name or 'Python Client ({})'.format(support.getNodeName())
         self._connected = threading.Event()
         self._nextContext = 1
 
@@ -166,7 +165,7 @@ class AsyncoreConnection(BaseConnection):
 
         # send password response
         if password is None:
-            password = getPassword()
+            password = support.get_password(self.host, self.port)
         m = hashlib.md5()
         m.update(challenge)
         m.update(password)
@@ -174,6 +173,8 @@ class AsyncoreConnection(BaseConnection):
             resp = self.sendRequest(C.MANAGER_ID, [(0L, m.digest())]).result()
         except Exception:
             raise LoginFailedError('Incorrect password.')
+        support.cache_password(self.host, self.port, password)
+        self.password = password
         self.loginMessage = resp[0][1] # get welcome message
 
         # send identification

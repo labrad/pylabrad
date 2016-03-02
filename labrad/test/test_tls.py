@@ -39,7 +39,7 @@ def temp_tls_dirs():
 
 
 # Manager Info class returned by the run_manager cont
-ManagerInfo = collections.namedtuple('ManagerInfo', ['port', 'tls_port'])
+ManagerInfo = collections.namedtuple('ManagerInfo', ['port', 'tls_port', 'password'])
 
 
 @contextlib.contextmanager
@@ -65,8 +65,10 @@ def run_manager(tls_required, port=7778, tls_port=7779, startup_timeout=20):
         Info about the running manager.
     """
     with temp_tls_dirs() as (cert_path, key_path):
+        password = 'DummyPassword'
         manager = subprocess.Popen([
                 'labrad',
+                '--password={}'.format(password),
                 '--port={}'.format(port),
                 '--tls-port={}'.format(tls_port),
                 '--tls-required={}'.format(tls_required),
@@ -77,7 +79,8 @@ def run_manager(tls_required, port=7778, tls_port=7779, startup_timeout=20):
             start = time.time()
             while True:
                 try:
-                    labrad.connect(port=tls_port, tls_mode='on')
+                    labrad.connect(port=tls_port, tls_mode='on',
+                                   password=password)
                 except Exception, e:
                     last_error = e
                 else:
@@ -88,7 +91,7 @@ def run_manager(tls_required, port=7778, tls_port=7779, startup_timeout=20):
                                     'last_error={}'
                                     .format(startup_timeout, last_error))
                 time.sleep(0.5)
-            yield ManagerInfo(port, tls_port)
+            yield ManagerInfo(port, tls_port, password)
         finally:
             manager.kill()
 
@@ -97,17 +100,20 @@ def run_manager(tls_required, port=7778, tls_port=7779, startup_timeout=20):
 
 def test_connect_with_starttls():
     with run_manager(tls_required=True) as m:
-        with labrad.connect(port=m.port, tls_mode='starttls-force') as cxn:
+        with labrad.connect(port=m.port, tls_mode='starttls-force',
+                            password=m.password) as cxn:
             pass
 
 def test_connect_with_optional_starttls():
     with run_manager(tls_required=False) as m:
-        with labrad.connect(port=m.port, tls_mode='off') as cxn:
+        with labrad.connect(port=m.port, tls_mode='off',
+                            password=m.password) as cxn:
             pass
 
 def test_connect_with_tls():
     with run_manager(tls_required=True) as m:
-        with labrad.connect(port=m.tls_port, tls_mode='on') as cxn:
+        with labrad.connect(port=m.tls_port, tls_mode='on',
+                            password=m.password) as cxn:
             pass
 
 
@@ -117,19 +123,22 @@ def test_connect_with_tls():
 def test_expect_starttls_use_off():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
-            with labrad.connect(port=m.port, tls_mode='off') as cxn:
+            with labrad.connect(port=m.port, tls_mode='off',
+                                password=m.password) as cxn:
                 pass
 
 def test_expect_tls_use_off():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
-            with labrad.connect(port=m.tls_port, tls_mode='off') as cxn:
+            with labrad.connect(port=m.tls_port, tls_mode='off',
+                                password=m.password) as cxn:
                 pass
 
 def test_expect_tls_use_starttls():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
-            with labrad.connect(port=m.tls_port, tls_mode='off') as cxn:
+            with labrad.connect(port=m.tls_port, tls_mode='off',
+                                password=m.password) as cxn:
                 pass
 
 

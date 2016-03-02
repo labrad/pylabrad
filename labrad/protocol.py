@@ -27,9 +27,8 @@ from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
 
-from labrad import constants as C, crypto, errors, util
+from labrad import constants as C, crypto, errors, support, util
 from labrad.stream import packetStream, flattenPacket
-from labrad.support import getPassword
 
 
 class LabradProtocol(protocol.Protocol):
@@ -50,6 +49,20 @@ class LabradProtocol(protocol.Protocol):
         self.packetStream.next() # start the packet stream
 
         self.onDisconnect = util.DeferredSignal()
+
+    def set_address(self, host, port):
+        """Store host and port of remote endpoint in protocol object.
+
+        This is called by the connect function below after successfully
+        establishing a connection. The host and port are used to cache our
+        credentials after we authenticate successfully.
+
+        Args:
+            host (str): The hostname we are connected to.
+            port (int): The TCP port number we are connected to.
+        """
+        self.host = host
+        self.port = port
 
     # network events
     def connectionMade(self):
@@ -303,7 +316,7 @@ class LabradProtocol(protocol.Protocol):
         challenge = resp[0][1] # get password challenge
 
         if password is None:
-            password = getPassword()
+            password = support.get_password(self.host, self.port)
 
         # send password response
         m = hashlib.md5()
@@ -313,7 +326,8 @@ class LabradProtocol(protocol.Protocol):
             resp = yield self.sendRequest(C.MANAGER_ID, [(0L, m.digest())])
         except Exception:
             raise errors.LoginFailedError('Incorrect password.')
-        self.password = C.PASSWORD = password # save password, since it worked
+        support.cache_password(self.host, self.port, password)
+        self.password = password
         self.loginMessage = resp[0][1] # get welcome message
 
     def loginClient(self, name):
@@ -394,10 +408,14 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
     if tls_mode == 'on':
         tls_options = crypto.tls_options(host)
         p = yield _factory.connectSSL(host, port, tls_options, timeout=C.TIMEOUT)
+        p.set_address(host, port)
         returnValue(p)
 
+    @inlineCallbacks
     def do_connect():
-        return _factory.connectTCP(host, port, timeout=C.TIMEOUT)
+        p = yield _factory.connectTCP(host, port, timeout=C.TIMEOUT)
+        p.set_address(host, port)
+        returnValue(p)
 
     @inlineCallbacks
     def start_tls(p, cert_string=None):

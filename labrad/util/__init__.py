@@ -23,7 +23,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import blockingCallFromThread
 from twisted.python import log, reflect, util
 
-from labrad import constants as C, crypto, thread
+from labrad import constants as C, crypto, support, thread
 from labrad.support import getNodeName
 from labrad.util.unwrap import unwrap
 
@@ -330,7 +330,7 @@ def parseServerOptions(name, exit_on_failure=True, options=None):
             ['node', 'd', getNodeName(), 'Node name.'],
             ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
             ['port', 'p', None, 'Manager port.', int],
-            ['password', 'w', C.PASSWORD, 'Login password.'],
+            ['password', 'w', None, 'Login password.'],
             ['tls', 's', C.MANAGER_TLS,
              'TLS mode for connecting to manager (on/starttls/off)']]
 
@@ -338,6 +338,10 @@ def parseServerOptions(name, exit_on_failure=True, options=None):
     config['tls'] = C.check_tls_mode(config['tls'])
     try:
         config.parseOptions(options=options)
+        if config['password'] is None:
+            config['password'] = support.get_password(host=config['host'],
+                                                      port=config['port'],
+                                                      prompt=False)
         if config['port'] is None:
             tls_on = config['tls'] == 'on'
             config['port'] = C.MANAGER_PORT_TLS if tls_on else C.MANAGER_PORT

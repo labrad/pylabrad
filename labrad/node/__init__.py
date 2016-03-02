@@ -877,7 +877,7 @@ def makeService(options):
     name = options['name']
     host = options['host']
     port = int(options['port'])
-    password = labrad.support.getPassword()
+    password = labrad.support.get_password(host, port)
     tls_mode = C.check_tls_mode(options['tls'])
     return Node(name, host, port, password, tls_mode)
 
