@@ -22,9 +22,9 @@ Contains a blocking client connection to labrad.
 import warnings
 
 from labrad import constants as C, types as T
-from labrad.backend import ManagerService
 from labrad.concurrent import map_future, MutableFuture
 from labrad.errors import Error
+from labrad.manager import ManagerService
 from labrad.support import (mangle, indent, PrettyMultiDict, FlatPacket,
                             PacketRecord, PacketResponse, hexdump)
 

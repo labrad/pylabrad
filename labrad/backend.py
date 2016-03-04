@@ -14,7 +14,7 @@ import Queue
 
 from concurrent.futures import Future
 
-from labrad import constants as C
+from labrad import constants as C, types as T
 from labrad.errors import LoginFailedError
 from labrad.stream import packetStream, flattenPacket, flattenRecords
 from labrad.support import getNodeName, getPassword
@@ -386,56 +386,4 @@ def connect(host=C.MANAGER_HOST, port=None, name=None, backend=None, **kw):
     cxn = backends[backend](name)
     cxn.connect(host, port, **kw)
     return cxn
-
-
-class ManagerService:
-    """Wraps a backend connection to provide a basic synchronous interface to the Manager."""
-    def __init__(self, cxn):
-        self.cxn = cxn
-
-    def getServersList(self):
-        """Get list of connected servers."""
-        return self._getIDList(C.SERVERS_LIST)
-
-    def getServerInfo(self, serverID):
-        """Get information about a server."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
-        resp = self._send(packet)
-        descr, notes = resp[0][1]
-        settings = self._reorderIDList(resp[1][1])
-        return (descr, notes, settings)
-
-    def getSettingsList(self, serverID):
-        """Get list of settings for a server."""
-        return self._getIDList(C.SETTINGS_LIST, serverID)
-
-    def getSettingInfo(self, serverID, settingID):
-        """Get information about a setting."""
-        packet = [(C.HELP, (long(serverID), long(settingID)))]
-        resp = self._send(packet)
-        description, accepts, returns, notes = resp[0][1]
-        return (description, accepts, returns, notes)
-
-    def getSettingInfoByName(self, serverID, settingName):
-        """Get information about a setting using its name."""
-        packet = [(C.HELP, (long(serverID), settingName)),
-                  (C.LOOKUP, (long(serverID), settingName))]
-        resp = self._send(packet)
-        description, accepts, returns, notes = resp[0][1]
-        ID = resp[1][1][1]
-        return (description, accepts, returns, notes, ID)
-
-    def _send(self, packet, *args, **kw):
-        """Send a request to the manager and wait for the result."""
-        return self.cxn.sendRequest(C.MANAGER_ID, packet, *args, **kw).result()
-
-    def _getIDList(self, setting, data=None):
-        resp = self._send([(setting, data)])
-        names = self._reorderIDList(resp[0][1])
-        return names
-
-    def _reorderIDList(self, L):
-        return [(name, ID) for ID, name in L]
-
 

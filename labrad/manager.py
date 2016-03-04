@@ -15,7 +15,102 @@
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from labrad import constants as C
+from labrad import constants as C, types as T
+
+
+def _reorder_id_list(ids_and_names):
+    """Reorder lists of (id, name) pairs to follow pylabrad (name, id) style."""
+    return [(name, ID) for ID, name in ids_and_names]
+
+
+def _id_or_name(value):
+    """Flatten a value that can be a string name or unsigned int id."""
+    return T.flatten(value, ['w', 's'])
+
+
+class ManagerService:
+    """Wraps a backend connection to provide a basic synchronous interface to the Manager."""
+    def __init__(self, cxn):
+        self.cxn = cxn
+
+    def _send(self, packet, *args, **kw):
+        """Send a request to the manager and wait for the result."""
+        return self.cxn.sendRequest(C.MANAGER_ID, packet, *args, **kw).result()
+
+    def _getIDList(self, setting, data=None):
+        resp = self._send([(setting, data)])
+        names = _reorder_id_list(resp[0][1])
+        return names
+
+    def getServersList(self):
+        """Get list of connected servers."""
+        return self._getIDList(C.SERVERS_LIST)
+
+    def getServerInfo(self, server):
+        """Get information about a server.
+
+        Args:
+            server (int or str): Name or ID of server.
+
+        Returns:
+            (str, str, list[(str, int)]): information about the server,
+            consisting of description, notes, and a list of setting names and
+            IDs.
+        """
+        packet = [(C.HELP, _id_or_name(server)),
+                  (C.SETTINGS_LIST, _id_or_name(server))]
+        resp = self._send(packet)
+        descr, notes = resp[0][1]
+        settings = _reorder_id_list(resp[1][1])
+        return (descr, notes, settings)
+
+    def getSettingsList(self, server):
+        """Get list of settings for a server.
+
+        Args:
+            server (int or str): name or id of server.
+
+        Returns:
+            (list[(str, int)]): List of (name, id) pairs, one for each setting.
+        """
+        return self._getIDList(C.SETTINGS_LIST, _id_or_name(server))
+
+    def getSettingInfo(self, server, setting):
+        """Get information about a setting.
+
+        Args:
+            server (int or str): Name or ID of server.
+            setting (int or str): Name or ID of setting.
+
+        Returns:
+            (str, list[str], list[str], str): information about the setting,
+            consisting of description, list of accepted types, list of return
+            types, and additional notes.
+        """
+        packet = [(C.HELP, (_id_or_name(server), _id_or_name(setting)))]
+        resp = self._send(packet)
+        description, accepts, returns, notes = resp[0][1]
+        return (description, accepts, returns, notes)
+
+    def getSettingInfoByName(self, server, setting):
+        """Get information about a setting using its name.
+
+        Args:
+            server (int or str): Name or ID of the server.
+            setting (int or str): Name of ID of the setting.
+
+        Returns:
+            (str, list[str], list[str], str, int): information about the
+            setting, consisting of description, list of accepted types, list of
+            return types, additional notes, and the numeric ID.
+        """
+        packet = [(C.HELP, (_id_or_name(server), _id_or_name(setting))),
+                  (C.LOOKUP, (_id_or_name(server), _id_or_name(setting)))]
+        resp = self._send(packet)
+        description, accepts, returns, notes = resp[0][1]
+        ID = resp[1][1][1]
+        return (description, accepts, returns, notes, ID)
+
 
 class AsyncManager:
     """Provide an asynchronous interface to basic manager settings."""
@@ -32,35 +127,33 @@ class AsyncManager:
     @inlineCallbacks
     def _getIDList(self, setting, data=None):
         resp = yield self._send([(setting, data)])
-        names = self._reorderIDList(resp[0][1])
+        names = _reorder_id_list(resp[0][1])
         returnValue(names)
-
-    def _reorderIDList(self, L):
-        return [(name, ID) for ID, name in L]
 
     def getServersList(self):
         """Get a list of connected servers."""
         return self._getIDList(C.SERVERS_LIST)
 
     @inlineCallbacks
-    def getServerInfo(self, serverID):
+    def getServerInfo(self, server):
         """Get information about a server."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
+        packet = [(C.HELP, _id_or_name(server)),
+                  (C.SETTINGS_LIST, _id_or_name(server))]
         resp = yield self._send(packet)
         descr, notes = resp[0][1]
-        settings = self._reorderIDList(resp[1][1])
+        settings = _reorder_id_list(resp[1][1])
         returnValue((descr, notes, settings))
 
     @inlineCallbacks
-    def getServerInfoWithSettings(self, serverID):
+    def getServerInfoWithSettings(self, server):
         """Get information about a server, including all of its settings."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
+        packet = [(C.HELP, _id_or_name(server)),
+                  (C.SETTINGS_LIST, _id_or_name(server))]
         resp = yield self._send(packet)
         descr, notes = resp[0][1]
         settings = resp[1][1]
-        packet = [(C.HELP, (long(serverID), long(ID))) for ID, name in settings]
+        packet = [(C.HELP, (_id_or_name(server), _id_or_name(ID)))
+                  for ID, name in settings]
         resp = yield self._send(packet)
         settingList = []
         for s, r in zip(settings, resp):
@@ -69,23 +162,23 @@ class AsyncManager:
             settingList.append((name, ID, (descr, accepts, returns, notes)))
         returnValue((descr, notes, settingList))
 
-    def getSettingsList(self, serverID):
+    def getSettingsList(self, server):
         """Get a list of settings for a server."""
-        return self._getIDList(C.SETTINGS_LIST, serverID)
+        return self._getIDList(C.SETTINGS_LIST, _id_or_name(server))
 
     @inlineCallbacks
-    def getSettingInfo(self, serverID, settingID):
+    def getSettingInfo(self, server, setting):
         """Get information about a setting."""
-        packet = [(C.HELP, (long(serverID), long(settingID)))]
+        packet = [(C.HELP, (_id_or_name(server), _id_or_name(setting)))]
         resp = yield self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         returnValue((description, accepts, returns, notes))
 
     @inlineCallbacks
-    def getSettingInfoByName(self, serverID, settingName):
+    def getSettingInfoByName(self, server, setting):
         """Get information about a setting using its name."""
-        packet = [(C.HELP, (long(serverID), settingName)),
-                  (C.LOOKUP, (long(serverID), settingName))]
+        packet = [(C.HELP, (_id_or_name(server), _id_or_name(setting))),
+                  (C.LOOKUP, (_id_or_name(server), _id_or_name(setting)))]
         resp = yield self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         ID = resp[1][1][1]
@@ -94,5 +187,5 @@ class AsyncManager:
     @inlineCallbacks
     def subscribeToNamedMessage(self, name, ID, enable=True):
         """Subscribe to or stop a named message."""
-        packet = [(C.MESSAGE_SUBSCRIBE, (name, long(ID), enable))]
+        packet = [(C.MESSAGE_SUBSCRIBE, (name, _id_or_name(ID), enable))]
         returnValue((yield self._send(packet)))
