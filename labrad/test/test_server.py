@@ -7,6 +7,7 @@ import labrad
 from labrad.server import LabradServer, setting
 from labrad import util
 
+
 def test_server_expire_context_method_is_called():
     """Ensure that server's expireContext method is called when client disconnects."""
     queue = Queue.Queue()
@@ -28,6 +29,22 @@ def test_server_expire_context_method_is_called():
             cxn.testserver.echo('hello, world!', context=request_context)
         expired_context = queue.get(block=True, timeout=1)
         assert expired_context == request_context
+
+
+def test_server_init_failure_is_propagated():
+
+    class InitError(Exception):
+        pass
+
+    class DyingServer(LabradServer):
+        name = "Dying Server"
+        def initServer(self):
+            raise InitError()
+
+    with pytest.raises(InitError):
+        with util.syncRunServer(DyingServer()):
+            pass
+
 
 if __name__ == '__main__':
     pytest.main(['-v', __file__])

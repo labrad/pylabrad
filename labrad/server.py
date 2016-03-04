@@ -350,6 +350,7 @@ class LabradServer(object):
             log.err("connection failed, disconnecting")
             traceback.print_exc()
             self.disconnect(e)
+            raise
 
     # Network events
     # these methods are called by network events from twisted
