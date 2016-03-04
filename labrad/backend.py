@@ -36,6 +36,9 @@ class BaseConnection(object):
                 password=None, tls_mode=C.MANAGER_TLS):
         self.host = host
         self.port = port
+        self.timeout = timeout
+        self.tls_mode = tls_mode
+        self.password = password
         self.ID = self._connect(password, timeout, tls_mode=tls_mode)
 
     @property
@@ -45,6 +48,14 @@ class BaseConnection(object):
     def disconnect(self):
         if self.connected:
             self._disconnect()
+
+    def spawn(self):
+        """Start a new independent backend connection to the same manager."""
+        cls = self.__class__
+        inst = cls(name=self.name)
+        inst.connect(host=self.host, port=self.port, timeout=self.timeout,
+                     password=self.password, tls_mode=self.tls_mode)
+        return inst
 
     def _connect(self, password=None, timeout=None, tls_mode=C.MANAGER_TLS):
         """Implemented by subclass"""

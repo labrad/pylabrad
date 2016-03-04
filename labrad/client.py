@@ -456,7 +456,7 @@ class Client(HasDynamicAttrs):
             return []
         return self._mgr.getServersList()
 
-    _staticAttrs = ['servers', 'connect', 'disconnect', 'context']
+    _staticAttrs = ['servers', 'connect', 'disconnect', 'context', 'spawn']
     _wrapAttr = ServerWrapper
 
     @property
@@ -495,6 +495,10 @@ class Client(HasDynamicAttrs):
 
     def context(self):
         return self._backend.context()
+
+    def spawn(self):
+        """Start a new independent connection to the same manager."""
+        return Client(self._backend.spawn())
 
     def _send(self, target, records, *args, **kw):
         """Send a packet over this connection."""
