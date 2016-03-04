@@ -362,20 +362,6 @@ class AsyncoreProtocol(asyncore.dispatcher):
             future.set_result(records)
 
 
-class Failure(object):
-    def __init__(self, error=None):
-        if error is None:
-            self.exctype, self.value = sys.exc_info()[:2]
-        else:
-            self.exctype, self.value = None, error
-
-    def raiseException(self):
-        if self.exctype is None:
-            raise self.value
-        else:
-            raise self.exctype, self.value
-
-
 def connect(host=C.MANAGER_HOST, port=None, name=None, backend=None, **kw):
     """Create a backend connection to labrad"""
     if backend is None:
