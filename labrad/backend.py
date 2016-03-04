@@ -24,7 +24,7 @@ backends = {}
 class BaseConnection(object):
     def __init__(self, name=None):
         self.name = name or 'Python Client (%s)' % getNodeName()
-        self.connected = False
+        self._connected = threading.Event()
         self._nextContext = 1
 
     def context(self):
@@ -38,12 +38,14 @@ class BaseConnection(object):
         self.host = host
         self.port = port
         self.ID = self._connect(password, timeout, tls_mode=tls_mode)
-        self.connected = True
+
+    @property
+    def connected(self):
+        return self._connected.is_set()
 
     def disconnect(self):
         if self.connected:
             self._disconnect()
-            self.connected = False
 
     def _connect(self, password=None, timeout=None, tls_mode=C.MANAGER_TLS):
         """Implemented by subclass"""
@@ -57,6 +59,7 @@ class BaseConnection(object):
     def sendMessage(self, target, records, *args, **kw):
         """Implemented by subclass"""
 
+
 try:
     from twisted.internet import defer, reactor
 
@@ -65,15 +68,35 @@ try:
 
     class TwistedConnection(BaseConnection):
         def _connect(self, password, _timeout, tls_mode):
+            @defer.inlineCallbacks
+            def _connect_deferred():
+                cxn = yield getConnection(self.host, self.port, self.name,
+                                          password, tls_mode=tls_mode)
+                self._connected.set()
+
+                # Setup a coroutine that will clear the connected flag when the
+                # connection is lost. We launch this but do not yield to wait
+                # for the result because we want this to happen asynchronously
+                # in the background.
+                @defer.inlineCallbacks
+                def handle_disconnect():
+                    try:
+                        yield cxn.onDisconnect()
+                    except Exception:
+                        pass
+                    self._connected.clear()
+                handle_disconnect()
+
+                defer.returnValue(cxn)
             startReactor()
-            self.cxn = self.call(getConnection, self.host, self.port, self.name,
-                                 password, tls_mode=tls_mode).result()
+            self.cxn = self.call(_connect_deferred).result()
             return self.cxn.ID
 
         def _disconnect(self):
             self.call(self.cxn.disconnect).result()
 
         def call(self, func, *args, **kw):
+            """Run func in the twisted reactor; return result as a future."""
             f = Future()
             @defer.inlineCallbacks
             def wrapped():
@@ -103,7 +126,6 @@ class AsyncoreConnection(BaseConnection):
         if tls_mode == 'on':
             raise Exception('TLS is not currently supported with the asyncore '
                             'backend')
-        self.connected = False
         self.serverCache = {}
         self.settingCache = {}
         if self.port is None:
@@ -114,13 +136,17 @@ class AsyncoreConnection(BaseConnection):
             sock = socket.create_connection((self.host, port),
                                             timeout or 5)
             socketMap = {}
-            self.cxn = AsyncoreProtocol(sock, map=socketMap)
+            self.cxn = AsyncoreProtocol(sock,
+                                        connected=self._connected,
+                                        map=socketMap)
             self.loop = threading.Thread(target=asyncore.loop,
                 kwargs={'timeout':0.01, 'map': socketMap})
             self.loop.daemon = True
             self.loop.start()
             try:
-                return self.login(password, self.name)
+                ID = self.login(password, self.name)
+                self._connected.set()
+                return ID
             except Exception, e:
                 self.disconnect()
                 raise
@@ -246,11 +272,12 @@ backends['asyncore'] = AsyncoreConnection
 class AsyncoreProtocol(asyncore.dispatcher):
     """Receive and send labrad packets."""
 
-    def __init__(self, socket, **kw):
+    def __init__(self, socket, connected, **kw):
         asyncore.dispatcher.__init__(self, socket, **kw)
 
+        self.connected = connected
         self.alive = True
-        self.lock = threading.Condition()
+        self.lock = threading.Lock()
         self.nextRequest = 1
         self.requests = {}
         self.pool = set()
@@ -263,13 +290,10 @@ class AsyncoreProtocol(asyncore.dispatcher):
 
     def enqueue(self, target, context, flatrecs, future):
         """Called from another thread to enqueue a packet"""
-        self.lock.acquire()
-        try:
+        with self.lock:
             if not self.alive:
                 raise Exception('not connected')
             self.queue.put((target, context, flatrecs, future))
-        finally:
-            self.lock.release()
 
     def drop(self):
         self.queue.put(None)
@@ -281,9 +305,9 @@ class AsyncoreProtocol(asyncore.dispatcher):
         self.terminate(Exception('Connection lost'))
 
     def terminate(self, reason):
-        self.lock.acquire()
-        self.alive = False
-        self.lock.release()
+        with self.lock:
+            self.alive = False
+        self.connected.clear()
         try:
             self.close()
         finally:
