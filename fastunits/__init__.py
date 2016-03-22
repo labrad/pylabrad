@@ -129,6 +129,9 @@ class Unit(object):
     def __deepcopy__(self, memo):
         return self
 
+    def __reduce__(self):
+        return (Unit, (str(self),) )
+    
     @property
     def name(self):
         return str(self)
@@ -167,9 +170,16 @@ class Unit(object):
     def isDimensionless(self):
         return self._value.isDimensionless()
 
+    def isCompatible(self, other):
+        self._value.base_units == other._value.base_units
+        
     def isAngle(self):
-        return self._value.base_units == _unit_cache['rad'].base_units
+        return self._value.base_units == _unit_cache['rad']._value.base_units
 
+    is_angle = property(isAngle)
+
+
+    
 # The next two methods are called from the C implementation
 # of Value() to implement the parts of the API that interact
 # with Unit objects (in particular, the cache of known unit
@@ -302,7 +312,7 @@ NON_SI_UNITS = [
     ('mi', 'mile', 'foot', 5280, 1, 0),
     (None, 'acre', 'mi^2', 1, 640, 0),
     ('d', 'day', 's', 864, 1, 2),
-    ('hr', 'hour', 's', 36, 1, 2),
+    ('h', 'hour', 's', 36, 1, 2),
     ('min', 'minute', 's', 6, 1, 1),
     ('yr', 'year', 'day', 365.242, 0, 0),
     ('deg', 'degree', 'rad', math.pi/180.0, 0, 0),
@@ -357,10 +367,29 @@ for (short_name, long_name, base, numer, denom, exp10) in PREFIXABLE_NON_SI_UNIT
 # special handling for logarithmic units), but this could be used for
 # domain specific units that don't need any special conversions.
 
+def addNonSI(name=None, prefixable=False, long_name=None):
+    base = None
+    if name:
+        base = Unit._new_base_unit(name)
+    if long_name and not name:
+        base = Unit._new_derived(long_name)
+    if long_name and name:
+        Unit._new_derived_unit(long_name, 1, 1, 0, base)
+    if not base:
+        raise ValueError("Must provide either name or long_name")
+    
+    if prefixable:
+       for short_prefix, long_prefix, power in zip(SI_PREFIX_SHORT, SI_PREFIX_LONG, SI_PREFIX_POWER):
+            if name:
+                Unit._new_derived_unit(short_prefix+name, 1, 1, power, base)
+            if long_name:
+                Unit._new_derived_unit(long_prefix+long_name, 1, 1, power, base)
+
 OTHER_BASE_UNITS = [
     'dB', 'dBm']
 for name in OTHER_BASE_UNITS:
-    Unit._new_base_unit(name)
+    addNonSI(name)
+
 
 # Make all the unit objects module variables.
 for k,v in _unit_cache.items():
@@ -368,3 +397,45 @@ for k,v in _unit_cache.items():
 
 degC = OffsetUnit._new_raw('degC', 1.0, 273.15*K)
 degF = OffsetUnit._new_raw('degF', 1.0, 459.67*degR)
+
+constants = {}
+def _set_constants():
+    pi = math.pi
+    _c = constants
+    _c['c'] = Value(299792458., 'm/s')
+    _c['mu0'] = Value(4.e-7*pi, 'N/A^2')                  # permeability of vacuum
+    _c['eps0'] = 1/_c['mu0']/_c['c']**2                       # permittivity of vacuum
+    _c['G'] = Value(6.67259e-11, 'm^3/kg/s^2')         # gravitational constant
+    _c['hplanck'] = Value(6.62606957e-34, 'J*s')               # Planck constant
+    _c['hbar'] = _c['hplanck']/(2*pi)                   # Planck constant / 2pi
+    _c['e'] = Value(1.60217733e-19, 'C')                 # elementary charge
+    _c['me'] = Value(9.1093897e-31, 'kg')                 # electron mass
+    _c['mp'] = Value(1.6726231e-27, 'kg')                 # proton mass
+    _c['Nav'] = Value(6.0221367e23, '1/mol')                 # Avogadro number
+    _c['k'] = Value(1.380658e-23, 'J/K')                 # Boltzmann constant
+    _c['Bohr'] = 4*pi*_c['eps0']*_c['hbar']**2/_c['me']/_c['e']**2        # Bohr radius
+    _c['Hartree'] = _c['me']*_c['e']**4/16/pi**2/_c['eps0']**2/_c['hbar']**2 # Wavenumbers/inverse cm
+
+_set_constants()
+'''
+rootHz  = sqrtHz = Hz**0.5                 # for power spectral density
+tsp     = 4.92892159375*ml   # teaspoon
+tbsp    = 3*tsp              # tablespoon
+floz    = 2*tbsp             # fluid ounce
+cup     = 8*floz             # cup
+pint    = 16*floz            # pint
+qt      = 2*pint             # quart
+galUS   = 4*qt               # US gallon
+galUK   = 4.54609*l          # British gallon
+amu     = 1.6605402e-27*kg   # atomic mass units
+oz      = 28.349523125*g     # ounce
+lb      = 16*oz              # pound
+ton     = 2000*lb            # ton
+Ken     = k*K                # Kelvin as energy unit
+cali    = 4.1868*J           # international calorie
+kcali   = 1000*cali          # international kilocalorie
+psi     = 6894.75729317*Pa   # pounds per square inch
+degR    = (5./9.)*K          # degrees Rankine
+bohr_magneton = 9.2740096820e-24 * J/T # Bohr magneton
+'''
+    

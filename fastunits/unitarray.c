@@ -368,7 +368,7 @@ rational_power(PyObject *a, long *numer, long *denom)
 	return 0;
     x = floor(12*d + 0.5);
     if ( fabs(12*d - x) < 1e-5 ) {
-	long tmp = gcd(x, 12);
+	long tmp = gcd(12, x);
 	*numer = x/tmp;
 	*denom = 12/tmp;
 	
@@ -594,20 +594,31 @@ lookup_unit_val(PyObject *unit_obj)
 static PyObject *
 value_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
-    PyObject *val, *unit, *unit_val=0, *result;
+    PyObject *val, *unit=0, *unit_val=0, *result;
     char *kwlist[] = {"number", "unit", 0};
     int rv;
 
     rv = PyArg_ParseTupleAndKeywords(args, kwds, "O|O", kwlist, &val, &unit);
+
     if(!rv)
 	return 0;
     if(!unit)
 	return (PyObject *)value_wrap(val);
 
     unit_val = (PyObject *)lookup_unit_val(unit);
-    if(!unit_val)
+
+    if (PyList_Check(val)) 
+	val = PyArray_EnsureArray(val);
+    else
+	Py_INCREF(val);    
+
+    if(!unit_val || !val) {
+	Py_XDECREF(unit_val);
+	Py_XDECREF(val);
 	return 0;
+    }
     result = PyNumber_Multiply(val, unit_val);
+    Py_XDECREF(val);
     Py_XDECREF(unit_val);
     return result;
 }
@@ -1254,6 +1265,16 @@ value_array(WithUnitObject *self, PyObject *ignore)
     return PyArray_EnsureArray(self->value);
 }
 
+static PyObject *
+value_reduce(WithUnitObject *self, PyObject *ignore)
+{
+    PyObject *unitstr, *rv;
+
+    unitstr = unit_array_str(self->display_units);
+    rv = Py_BuildValue("O(ON)", &WithUnitType, self->value, unitstr);
+    return rv;
+
+}
 static PyNumberMethods WithUnitNumberMethods = {
     value_add,			/* nb_add */
     value_sub,			/* nb_subtract */
@@ -1281,9 +1302,10 @@ static
 PyObject *
 value_richcompare(PyObject *a, PyObject *b, int op)
 {
-    WithUnitObject *left, *right, *diff;
+    WithUnitObject *left, *right;
+    PyObject *new_left, *new_right, *ratio_obj;
+    double ratio, factor_l, factor_r;
     PyObject *rv;
-    PyObject *zero;
 
     left = value_wrap(a);
     right = value_wrap(b);
@@ -1305,16 +1327,28 @@ value_richcompare(PyObject *a, PyObject *b, int op)
 	 PyErr_SetString(UnitMismatchError, "UnitArray comparison requires equivalent units");
 	 return 0;
      }
-     diff = (WithUnitObject *)value_sub((PyObject *)left, (PyObject *)right);
+     factor_l = factor_to_double(left->unit_factor);
+     factor_r = factor_to_double(right->unit_factor);
+     if (factor_l < factor_r) {
+	 ratio = factor_ratio_double(right->unit_factor, left->unit_factor);
+	 ratio_obj = PyFloat_FromDouble(ratio);
+	 new_right = PyNumber_Multiply((PyObject *)right->value, ratio_obj);
+	 new_left = left->value;
+	 Py_XDECREF(ratio_obj);
+	 Py_INCREF(new_left);
+     } else {
+	 ratio = factor_ratio_double(left->unit_factor, right->unit_factor);
+	 ratio_obj = PyFloat_FromDouble(ratio);
+	 new_left = PyNumber_Multiply((PyObject *)left->value, ratio_obj);
+	 new_right = right->value;
+	 Py_XDECREF(ratio_obj);
+	 Py_INCREF(new_right);
+     }
+     
      Py_DECREF(left);
      Py_DECREF(right);
-     if (!diff)
-	 return 0;
 
-     zero = PyFloat_FromDouble(0.0);
-     rv = PyObject_RichCompare(diff->value, zero, op);
-     Py_XDECREF(diff);
-     Py_XDECREF(zero);
+     rv = PyObject_RichCompare(new_left, new_right, op);
      return rv;
 }
 
@@ -1407,6 +1441,38 @@ value_numer(WithUnitObject *self, void *ignore)
 	return PyFloat_FromDouble(self->unit_factor.ratio);
 }
 
+static PyObject *
+valuearray_ndim(WithUnitObject *self, void *ignore)
+{
+    int ndim = PyArray_NDIM((PyArrayObject *)self->value);
+    return PyInt_FromLong(ndim);
+}
+
+static PyObject *
+valuearray_shape(WithUnitObject *self, void *ignore)
+{
+    int i;
+    int ndim = PyArray_NDIM((PyArrayObject *)self->value);
+    npy_intp *dims = PyArray_DIMS((PyArrayObject *)self->value);
+    PyObject *result;
+
+    result = PyTuple_New(ndim);
+    if (!result)
+	return 0;
+    for(i=0; i<ndim; i++)
+	PyTuple_SetItem(result, i, PyInt_FromLong(dims[i]));
+    return result;
+}
+
+static PyObject *
+valuearray_dtype(WithUnitObject *self, void *ignore)
+{
+    PyObject *result;
+    result = (PyObject *)PyArray_DTYPE((PyArrayObject *)self->value);
+
+    Py_XINCREF(result);
+    return result;
+}
 /* __getitem__ is unfortunately overloaded for ValueArrays, so we have
  * to detect whether key is a unit or an index / slice object.  */
 
@@ -1548,6 +1614,7 @@ static PyMethodDef WithUnit_methods[] = {
     {"__deepcopy__", (PyCFunction)value_copy, METH_VARARGS, "Copy function"},
     {"__complex__", (PyCFunction)value_complex, METH_NOARGS, "@returns: quantity converted to a bare complex number"},
     {"__array__", (PyCFunction)value_array, METH_VARARGS, "@returns: quantity converted to a numpy array"},
+    {"__reduce__", (PyCFunction)value_reduce, METH_NOARGS, "@returns: tuple used by pickling protocol"},
     {0}
 };
 
@@ -1565,6 +1632,16 @@ static PyGetSetDef WithUnit_getset[] = {
     {"numer", (getter)value_numer, NULL, "Numerator part of ratio between base and display units (int or float)", 0}, 
     {NULL}};
 
+static PyGetSetDef ValueArray_getset[] = {
+    {"dtype", (getter)valuearray_dtype, NULL, "dtype of underlying numpy array", 0},
+    {"ndim", (getter)valuearray_ndim, NULL, "number of dimensions", 0},
+    {"shape", (getter)valuearray_shape, NULL, "Shape of underlying numpy array", 0},
+    {NULL}};
+
+//static PyMethodDef ValueArray_methods[] = {
+//   {"allclose", (PyCFunction)valuearray_allclose, METH_VARARGS, "True if arrays are equal within tolerance.  See numpy.allclose"}
+//    {0}};
+
 static PyMappingMethods WithUnitMappingMethods = {
     0,			/* mp_length */
     (binaryfunc)value_getitem,	/* mp_subscript */
@@ -1574,7 +1651,7 @@ static PyMappingMethods WithUnitMappingMethods = {
 static PyTypeObject WithUnitType = {
     PyObject_HEAD_INIT(NULL) 
     0,			       /* ob_size */
-    "WithUnit",		       /* tp_name */
+    "fastunits.WithUnit",		       /* tp_name */
     sizeof(WithUnitObject),    /* tp_basicsize */
     0,                         /* tp_itemsize */
     (destructor)value_dealloc, /* tp_dealloc */
@@ -1616,7 +1693,7 @@ static PyTypeObject WithUnitType = {
 static PyTypeObject ValueType = {
     PyObject_HEAD_INIT(NULL) 
     0,			      /* ob_size */
-    "Value",		      /* tp_name */
+    "fastunits.Value",		      /* tp_name */
     sizeof(WithUnitObject),   /* tp_basicsize*/
     0                         /* tp_itemsize*/
 };
@@ -1624,7 +1701,7 @@ static PyTypeObject ValueType = {
 static PyTypeObject ComplexType = {
     PyObject_HEAD_INIT(NULL) 
     0,			      /* ob_size */
-    "Complex",		      /* tp_name */
+    "fastunits.Complex",		      /* tp_name */
     sizeof(WithUnitObject),   /* tp_basicsize*/
     0                         /* tp_itemsize*/
 };
@@ -1632,7 +1709,7 @@ static PyTypeObject ComplexType = {
 static PyTypeObject ValueArrayType = {
     PyObject_HEAD_INIT(NULL) 
     0,			          /* ob_size */
-    "ValueArray",		  /* tp_name */
+    "fastunits.ValueArray",		  /* tp_name */
     sizeof(WithUnitObject),       /* tp_basicsize*/
     0                             /* tp_itemsize*/
 };
@@ -1653,6 +1730,7 @@ initunitarray(void)
     ComplexType.tp_base = &WithUnitType;
     ComplexType.tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES;
     ValueArrayType.tp_base = &WithUnitType;
+    ValueArrayType.tp_getset = ValueArray_getset;
     ValueArrayType.tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES;
 
     if (PyType_Ready(&ValueType) < 0)
