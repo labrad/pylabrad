@@ -16,7 +16,7 @@ Programming Language :: Python
 Topic :: Scientific/Engineering"""
 
 import os
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 
 doclines = __doc__.split('\n')
 
@@ -50,4 +50,6 @@ setup(
         'labrad.node': ['*.ini'],
     },
     scripts=[],
+    ext_modules=[Extension("fastunits.unitarray", 
+                             sources = ["fastunits/unitarray.c"])]
 )
