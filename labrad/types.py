@@ -29,15 +29,13 @@ and return types have been registered), we can do even better.
 from __future__ import absolute_import
 
 import collections
+import datetime
+import itertools
 import re
+import struct
 import sys
-from struct import pack, unpack
 import time
 from types import InstanceType
-import datetime  # required for evalLRData
-from datetime import timedelta, datetime as dt
-from itertools import chain, imap
-from operator import itemgetter
 import warnings
 
 import labrad.units as U
@@ -614,14 +612,14 @@ class LRInt(LRType, Singleton):
     tag = 'i'
     width = 4
     def __unflatten__(self, s, endianness):
-        return unpack(endianness + 'i', s.get(4))[0]
+        return struct.unpack(endianness + 'i', s.get(4))[0]
 
     def __flatten__(self, n, endianness):
         if not isinstance(n, (int, long, np.integer)):
             raise FlatteningError(n, self)
         if n >= 0x80000000 or n < -0x80000000:
             raise ValueError("out of range for type i: {0}".format(n))
-        return pack(endianness + 'i', n), self
+        return struct.pack(endianness + 'i', n), self
 
 registerType(int, LRInt())
 registerType(np.int32, LRInt())
@@ -633,14 +631,14 @@ class LRWord(LRType, Singleton):
     tag = 'w'
     width = 4
     def __unflatten__(self, s, endianness):
-        return long(unpack(endianness + 'I', s.get(4))[0])
+        return long(struct.unpack(endianness + 'I', s.get(4))[0])
 
     def __flatten__(self, n, endianness):
         if not isinstance(n, (int, long, np.integer)):
             raise FlatteningError(n, self)
         if n > 0xFFFFFFFF or n < 0:
             raise ValueError("out of range for type w: {0}".format(n))
-        return pack(endianness + 'I', n), self
+        return struct.pack(endianness + 'I', n), self
 
 registerType(long, LRWord())
 registerType(np.uint32, LRWord())
@@ -653,12 +651,12 @@ class LRStr(LRType, Singleton):
     isFixedWidth = False
 
     def __width__(self, s, endianness):
-        width = unpack(endianness + 'i', s.get(4))[0]
+        width = struct.unpack(endianness + 'i', s.get(4))[0]
         s.skip(width)
         return 4 + width
 
     def __unflatten__(self, s, endianness):
-        n = unpack(endianness + 'i', s.get(4))[0]
+        n = struct.unpack(endianness + 'i', s.get(4))[0]
         return s.get(n)
 
     def __flatten__(self, s, endianness):
@@ -666,7 +664,7 @@ class LRStr(LRType, Singleton):
             s = s.encode('UTF-8')
         if not isinstance(s, str):
             raise FlatteningError(s, self)
-        return pack(endianness + 'I', len(s)) + s, self
+        return struct.pack(endianness + 'I', len(s)) + s, self
 
 registerType(str, LRStr())
 registerType(unicode, LRStr())
@@ -677,18 +675,18 @@ class LRBytes(LRType, Singleton):
     isFixedWidth = False
 
     def __width__(self, s, endianness):
-        width = unpack(endianness + 'i', s.get(4))[0]
+        width = struct.unpack(endianness + 'i', s.get(4))[0]
         s.skip(width)
         return 4 + width
 
     def __unflatten__(self, s, endianness):
-        n = unpack(endianness + 'i', s.get(4))[0]
+        n = struct.unpack(endianness + 'i', s.get(4))[0]
         return s.get(n)
 
     def __flatten__(self, s, endianness):
         if not isinstance(s, str):
             raise FlatteningError(s, self)
-        return pack(endianness + 'I', len(s)) + s, self
+        return struct.pack(endianness + 'I', len(s)) + s, self
 
 # Since bytes is an alias for str in python 2.7, don't enable this
 # until we are ready to cut over.
@@ -696,8 +694,9 @@ class LRBytes(LRType, Singleton):
 
 def timeOffset():
     now = time.time()
-    return (dt(1904, 1, 1) - dt.utcfromtimestamp(now)
-                           + dt.fromtimestamp(now))
+    return (datetime.datetime(1904, 1, 1)
+            - datetime.datetime.utcfromtimestamp(now)
+            + datetime.datetime.fromtimestamp(now))
 
 class LRTime(LRType, Singleton):
     """A timestamp in LabRAD format.
@@ -711,18 +710,18 @@ class LRTime(LRType, Singleton):
     width = 16
 
     def __unflatten__(self, s, endianness):
-        secs, us = unpack(endianness + 'QQ', s.get(16))
+        secs, us = struct.unpack(endianness + 'QQ', s.get(16))
         us = float(us) / pow(2, 64) * pow(10, 6)
-        t = timeOffset() + timedelta(seconds=secs, microseconds=us)
+        t = timeOffset() + datetime.timedelta(seconds=secs, microseconds=us)
         return t
 
     def __flatten__(self, t, endianness):
         diff = t - timeOffset()
         secs = diff.days * (60 * 60 * 24) + diff.seconds
         us = long(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
-        return pack(endianness + 'QQ', secs, us), self
+        return struct.pack(endianness + 'QQ', secs, us), self
 
-registerType(dt, LRTime())
+registerType(datetime.datetime, LRTime())
 
 '''
 class LRFloat(LRType, Singleton):
@@ -730,10 +729,10 @@ class LRFloat(LRType, Singleton):
     width = 8
 
     def __unflatten__(self, s, endianness):
-        return unpack(endianness + 'd', s.get(8)[0])
+        return struct.unpack(endianness + 'd', s.get(8)[0])
 
     def __flatten__(self, f, endianness):
-        return pack(endianness + 'd', f)
+        return struct.pack(endianness + 'd', f)
 
 registerType(float, LRFloat)
 '''
@@ -796,7 +795,7 @@ class LRValue(LRType):
         return self.unit is not None
 
     def __unflatten__(self, s, endianness):
-        v = unpack(endianness + 'd', s.get(8))[0]
+        v = struct.unpack(endianness + 'd', s.get(8))[0]
         if self.unit is not None:
             v = Value(v, self.unit)
         return v
@@ -824,7 +823,7 @@ class LRValue(LRType):
         # data has correct type tag, eg. 'v[]' instead of 'v'.
         if self.unit is None:
             self.unit = ''
-        return pack(endianness + 'd', float(v)), self
+        return struct.pack(endianness + 'd', float(v)), self
 
     def __check_units__(self, v):
         # TODO: implement full labrad unit conversion semantics in pylabrad
@@ -848,7 +847,7 @@ class LRComplex(LRValue):
     width = 16
 
     def __unflatten__(self, s, endianness):
-        real, imag = unpack(endianness + 'dd', s.get(16))
+        real, imag = struct.unpack(endianness + 'dd', s.get(16))
         c = complex(real, imag)
         if self.unit is not None:
             c = Complex(c, self.unit)
@@ -859,7 +858,7 @@ class LRComplex(LRValue):
         c = complex(c)
         if self.unit is None:
             self.unit = ''
-        return pack(endianness + 'dd', c.real, c.imag), self
+        return struct.pack(endianness + 'dd', c.real, c.imag), self
 
     @classmethod
     def __lrtype__(cls, c):
@@ -1083,7 +1082,7 @@ class LRList(LRType):
 
     def __width__(self, s, endianness):
         n, elem = self.depth, self.elem
-        dims = unpack(endianness + ('i'*n), s.get(4*n))
+        dims = struct.unpack(endianness + ('i'*n), s.get(4*n))
         size = reduce(lambda x, y: x*y, dims)
         if elem is None:
             width = 0
@@ -1122,7 +1121,7 @@ class LRList(LRType):
 
         def iterND(ls):
             if len(ls) and isinstance(ls[0], list):
-                return chain(*(iterND(i) for i in ls))
+                return itertools.chain(*(iterND(i) for i in ls))
             else:
                 return iter(ls)
 
@@ -1187,7 +1186,7 @@ class LRList(LRType):
     def __unflatten__(self, s, endianness):
         """Unflatten to numpy array if possible, or else nested python list."""
         n, elem = self.depth, self.elem
-        dims = unpack(endianness + ('i'*n), s.get(4*n))
+        dims = struct.unpack(endianness + ('i'*n), s.get(4*n))
         size = np.prod(dims)
 
         # Attempt to unflatten as numpy array.
@@ -1257,14 +1256,14 @@ class LRList(LRType):
                 return ''.join(flattenNDlist(row, n+1) for row in ls)
         flat = flattenNDlist(L)
         lengths = [l or 0 for l in lengths]
-        return pack(endianness + ('i' * len(lengths)), *lengths) + flat, self
+        return struct.pack(endianness + ('i' * len(lengths)), *lengths) + flat, self
 
     def __flatten_array__(self, a, endianness):
         """Flatten numpy array to LabRAD list."""
         shape = a.shape[:self.depth]
         if len(shape) != self.depth:
             raise Exception("Bad array shape.")
-        dims = pack(endianness + ('i' * len(shape)), *shape)
+        dims = struct.pack(endianness + ('i' * len(shape)), *shape)
         if self.elem == LRAny():
             self.elem = self.__lrtype_array__(a).elem
 
@@ -1283,7 +1282,7 @@ class LRList(LRType):
                     raise Exception("Narrowing typecast loses information while flattening numpy array: dtype={0}, wanted_dtype={1}".format(a.dtype, wanted_dtype))
                 a = a_cast
         else:
-            elems = imap(itemgetter(0), (flatten(i, endianness=endianness) for i in a.flat))
+            elems = (flatten(i, endianness=endianness).bytes for i in a.flat)
             return dims + ''.join(elems), self
         return dims + a.tostring(), self
 
