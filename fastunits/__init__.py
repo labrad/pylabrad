@@ -40,7 +40,7 @@ class Unit(object):
     def _new_from_value(cls, val):
         if not isinstance(val, unitarray.WithUnit):
             raise RuntimeError("Need Value type to create unit")
-        if val.value != 1.0:
+        if val._value != 1.0:
             raise RuntimeError("Cannot create unit from a value not of unit magnitude")
         obj = object.__new__(cls)
         obj._value = val
@@ -156,7 +156,7 @@ class Unit(object):
         if self._value.base_units != other._value.base_units:
             raise TypeError("incompabile units '%s', '%s'" % (self.name, other.name))
         ratio = self._value / other._value
-        return ratio.inBaseUnits().value
+        return ratio.inBaseUnits()._value
 
     def converstionTupleTo(self, other):
         """Deprecated.
@@ -204,7 +204,10 @@ def _value_unit(self):
     v = WithUnit._new_raw(1, numer=self.numer, denom=self.denom, exp10=self.exp10, base_units=self.base_units, display_units=self.display_units)
     return Unit._new_from_value(v)
 
-WithUnit._set_py_func(_value_unit, Unit, _unit_cache)
+def allclose(self, other, *args, **kw):
+    return np.allclose(self._value, other[self.unit], *args, **kw)
+
+WithUnit._set_py_func(_value_unit, Unit, _unit_cache, allclose)
 
 
 class OffsetUnit(object):

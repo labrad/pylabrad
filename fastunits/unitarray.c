@@ -1473,6 +1473,7 @@ valuearray_dtype(WithUnitObject *self, void *ignore)
     Py_XINCREF(result);
     return result;
 }
+
 /* __getitem__ is unfortunately overloaded for ValueArrays, so we have
  * to detect whether key is a unit or an index / slice object.  */
 
@@ -1590,15 +1591,16 @@ static PyObject *
 value_set_py_func(PyTypeObject *t, PyObject *args)
 {
     int rv;
-    PyObject *f1, *f2, *o3;
+    PyObject *f1, *f2, *o3, *f4;
 
-    rv = PyArg_ParseTuple(args, "OOO", &f1, &f2, &o3);
+    rv = PyArg_ParseTuple(args, "OOOO", &f1, &f2, &o3, &f4);
     if(!rv)
 	return 0;
     
     PyDict_SetItemString(t->tp_dict, "unit", f1);
     PyModule_AddObject(module, "_unit_from_str", f2);
     unit_cache = o3;
+    PyDict_SetItemString(t->tp_dict, "allclose", f4);
     Py_INCREF(unit_cache);
 
     Py_RETURN_NONE;
@@ -1619,7 +1621,7 @@ static PyMethodDef WithUnit_methods[] = {
 };
 
 static PyMemberDef WithUnit_members[] = {
-    {"value", T_OBJECT_EX, offsetof(WithUnitObject, value), READONLY, "Floating point value"},
+    {"_value", T_OBJECT_EX, offsetof(WithUnitObject, value), READONLY, "Floating point value"},
     {"base_units", T_OBJECT_EX, offsetof(WithUnitObject, base_units), READONLY, "Units in base units"},
     {"display_units", T_OBJECT_EX, offsetof(WithUnitObject, display_units), READONLY, "Units for display"},
     {"denom", T_LONGLONG, offsetof(WithUnitObject, unit_factor.denom), READONLY, "Denominator of ratio between base and display units (0 means numer is float)"},
