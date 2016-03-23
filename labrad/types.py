@@ -38,13 +38,15 @@ import datetime  # required for evalLRData
 from datetime import timedelta, datetime as dt
 from itertools import chain, imap
 from operator import itemgetter
-import functools
+import warnings
 
 import labrad.units as U
 from labrad.units import Value, Complex
 
 import numpy as np
-from numpy import ndarray, array, dtype, fromstring
+
+
+SYSTEM_BYTE_ORDER = '<' if sys.byteorder == 'little' else '>'
 
 
 # helper classes
@@ -1183,46 +1185,35 @@ class LRList(LRType):
         return type(self.elem) != LRNone and self.elem.isFullySpecified()
 
     def __unflatten__(self, s, endianness):
-        data = s.get(self.__width__(Buffer(s), endianness))
-        elem = self.elem
-        for t in self.ARRAY_TYPES:
-            if elem is not None and elem <= t:
-                return self.__unflattenAsArray__(data, endianness)
-        else:
-            return LazyList(data, self, endianness)
-
-        """Unflatten to nested python list."""
-        # get list dimensions
-        n = self.depth
-        dims = unpack(endianness + ('i'*n), s.get(4*n))
-        size = reduce(lambda x, y: x*y, dims)
-        if self.elem is None or size == 0:
-            return nestedList([], n-1)
-        def unflattenNDlist(s, dims):
-            if len(dims) == 1:
-                return [unflatten(s, self.elem, endianness) for _ in xrange(dims[0])]
-            else:
-                return [unflattenNDlist(s, dims[1:]) for _ in xrange(dims[0])]
-        return unflattenNDlist(s, dims)
-
-    def __unflattenAsArray__(self, data, endianness):
-        """
-        Unflatten to numpy array.
-
-        This code is mostly copied from LazyList on 14 July 2014.
-        A useful pursuit would be to refactor the common bits.
-        """
+        """Unflatten to numpy array if possible, or else nested python list."""
         n, elem = self.depth, self.elem
-        s = Buffer(data)
         dims = unpack(endianness + ('i'*n), s.get(4*n))
         size = np.prod(dims)
 
+        # Attempt to unflatten as numpy array.
+        for t in self.ARRAY_TYPES:
+            if elem is not None and elem <= t:
+                return self._unflatten_as_array(s, endianness, elem, dims, size)
+
+        # Unflatten as nested python list.
+        if self.elem is None or size == 0:
+            result = nestedList([], n-1)
+        else:
+            def unflattenNDlist(s, dims):
+                if len(dims) == 1:
+                    return [unflatten(s, self.elem, endianness) for _ in xrange(dims[0])]
+                else:
+                    return [unflattenNDlist(s, dims[1:]) for _ in xrange(dims[0])]
+            result = unflattenNDlist(s, dims)
+        return LazyList(result)
+
+    def _unflatten_as_array(self, s, endianness, elem, dims, size):
+        """Unflatten to numpy array."""
         def make(t, width):
-            sys_byte_order = '<' if sys.byteorder == 'little' else '>'
-            x = fromstring(s.get(size*width), dtype=dtype(t))
-            if endianness != sys_byte_order:
-                x.byteswap(True) # inplace
-            return x
+            a = np.fromstring(s.get(size*width), dtype=np.dtype(t))
+            if endianness != SYSTEM_BYTE_ORDER:
+                a.byteswap(True) # inplace
+            return a
 
         if elem == LRBool(): a = make('bool', 1)
         elif elem == LRInt(): a = make('i4', 4)
@@ -1244,23 +1235,7 @@ class LRList(LRType):
 
         Lists must be homogeneous and rectangular.
         """
-        if isinstance(L, LazyList) and not hasattr(L, '_list'):
-            # if we get a LazyList that hasn't been unflattened,
-            # we can just return the original data unchanged
-            # if  it has been unflattened, though, then it may
-            # have been changed since lists are mutable, so we
-            # can't take this shortcut
-            #
-            # Note: the array returned by the asarray property
-            # is mutable but does not write-back to the list.
-            # That means if you mutate the array, then flatten
-            # the lazy list, the changes will not be reflected.
-            if L._endianness == endianness:
-                return L._data, self
-            else:
-                # Make sure it is unflattened so endian conversion happens
-                L.aslist
-        if isinstance(L, ndarray):
+        if isinstance(L, np.ndarray):
             if (self.elem <= LRValue() and
                     not (self.elem.unit is None or self.elem.unit == '')):
                 msg = "Can't flatten ndarray to {}".flatten(self)
@@ -1300,7 +1275,7 @@ class LRList(LRType):
             if wanted_dtype == 'u4':
                 if a.dtype in ['<i8', '>i8']:
                     a = a.astype(endianness + 'u4')
-            wanted_dtype = dtype(endianness + wanted_dtype)
+            wanted_dtype = np.dtype(endianness + wanted_dtype)
             if a.dtype != wanted_dtype:
                 a_cast = a.astype(wanted_dtype)
                 # make sure values don't change in a narrowing cast
@@ -1327,7 +1302,7 @@ _known_dtypes = {
 }
 
 registerTypeFunc(list, LRList.__lrtype__)
-registerTypeFunc(ndarray, LRList.__lrtype_array__)
+registerTypeFunc(np.ndarray, LRList.__lrtype_array__)
 registerTypeFunc(U.ValueArray, LRList.__lrtype_ValueArray__)
 registerTypeFunc(U.DimensionlessArray, LRList.__lrtype_array__)
 
@@ -1448,112 +1423,27 @@ class Word(int):
 class LazyList(list):
     """A proxy object for LabRAD lists.
 
-    LazyList will be unflattened as needed when list methods are called,
-    or can alternately be unflattened as a numpy array, bypassing the slow
-    step of creating a large python list.
+    List unflattening is not actually done lazily; this class is kept just to
+    provide the stub methods below, which now emit deprecation warnings when
+    called. This class will be removed in a future release.
     """
-    def __init__(self, data, tag, endianness):
-        self._data = data
-        self._lrtype = parseTypeTag(tag)
-        self._unflattened = False
-        self._endianness = endianness
-
-    def __lrtype__(self):
-        return self._lrtype
-
-    @property
-    def elem(self):
-        return self._lrtype.elem
 
     @property
     def aslist(self):
-        self._unflattenList()
+        warnings.warn("LazyList.aslist is deprecated. List unflattening is no "
+                      "longer lazy, so this is not needed.")
         return list(self)
 
     @property
     def astuple(self):
-        return tuple(self.aslist)
+        warnings.warn("LazyList.astuple is deprecated. Use tuple() instead.")
+        return tuple(self)
 
     @property
     def asarray(self):
-        self._unflattenArray()
-        return self._array
+        warnings.warn("LazyList.asarray is deprecated. Use np.asarray() instead.")
+        return np.ndarray(self)
 
-    def _unflattenList(self):
-        """Unflatten to nested python list."""
-        if self._unflattened:
-            return
-
-        self._unflattened = True
-
-        s = Buffer(self._data)
-        n, elem = self._lrtype.depth, self._lrtype.elem
-        dims = unpack(self._endianness + ('i'*n), s.get(4*n))
-        size = reduce(lambda x, y: x*y, dims)
-
-        if elem is None or size == 0:
-            self.extend(nestedList([], n-1))
-        else:
-            def unflattenND(dims):
-                if len(dims) == 1:
-                    return [unflatten(s, elem, self._endianness) for _ in xrange(dims[0])]
-                else:
-                    return [unflattenND(dims[1:]) for _ in xrange(dims[0])]
-            self.extend(unflattenND(dims))
-        self._list = True
-
-    def _unflattenArray(self):
-        """Unflatten to numpy array."""
-        if hasattr(self, '_array'):
-            return self._array
-        if hasattr(self, '_list'):
-            self._array = array(list(self))
-            return self._array
-
-        s = Buffer(self._data)
-        n, elem = self._lrtype.depth, self._lrtype.elem
-        dims = unpack(self._endianness + ('i'*n), s.get(4*n))
-        size = np.prod(dims)
-
-        def make(t, width):
-            sys_byte_order = '<' if sys.byteorder == 'little' else '>'
-            x = fromstring(s.get(size*width), dtype=dtype(t))
-            if self._endianness != sys_byte_order:
-                x.byteswap(True) # inplace
-            return x
-
-        if elem == LRBool(): a = make('u1', 1)
-        elif elem == LRInt(): a = make('i4', 4)
-        elif elem == LRWord(): a = make('u4', 4)
-        elif elem <= LRValue(): a = make('f8', 8)
-        elif elem <= LRComplex(): a = make('c16', 16)
-        else:
-            a = array([unflatten(s, elem, self._endianness) for _ in xrange(size)])
-        a.shape = dims + a.shape[1:] # handle clusters as elements
-        self._array = a
-        return self._array
-
-
-# attributes of the LazyList class will be wrapped so
-# that when called, the LazyList will be unflattened
-_listAttrs = [
-    '__add__', '__contains__', '__delitem__', '__delslice__', '__eq__', '__ge__',
-    '__getitem__', '__getslice__', '__gt__', '__iadd__', '__imul__',
-    '__iter__', '__le__', '__len__', '__lt__', '__mul__', '__ne__', '__repr__',
-    '__reversed__', '__rmul__', '__setitem__', '__setslice__', '__str__',
-    'append', 'count', 'extend', 'index', 'insert', 'pop', 'remove',
-    'reverse', 'sort']
-
-def _wrap(attr):
-    func = getattr(list, attr)
-    @functools.wraps(func, assigned=['__name__', '__doc__'])
-    def wrapped(self, *args, **kw):
-        self._unflattenList()
-        return func(self, *args, **kw)
-    return wrapped
-
-for attr in _listAttrs:
-    setattr(LazyList, attr, _wrap(attr))
 
 # errors
 
