@@ -363,10 +363,7 @@ class LabradProtocol(protocol.Protocol):
     @inlineCallbacks
     def _doLogin(self, *ident):
         # send identification
-        try:
-            resp = yield self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)])
-        except Exception:
-            raise errors.LoginFailedError('Bad identification (Server of same name already running?)')
+        resp = yield self.sendRequest(C.MANAGER_ID, [(0L, (1L,) + ident)])
         self.ID = resp[0][1] # get assigned ID
 
 
