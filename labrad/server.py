@@ -199,7 +199,7 @@ class LabradServer(object):
 
     # request handling
     @inlineCallbacks
-    def request_handler(self, source, context, records):
+    def request_handler(self, source, context, flat_records):
         """Handle an incoming request.
 
         If this is a new context, we create a context object and a lock
@@ -225,11 +225,11 @@ class LabradServer(object):
         response = []
         try:
             yield self.startRequest(c.data, source)
-            for ID, data in records:
+            for ID, flat_data in flat_records:
                 c.check() # make sure this context hasn't expired
                 try:
                     setting = self.settings[ID]
-                    result = yield setting.handleRequest(self, c.data, data)
+                    result = yield setting.handleRequest(self, c.data, flat_data)
                     response.append((ID, result, setting.returns))
                 except Exception, e:
                     response.append((ID, self._getTraceback(e)))
@@ -256,10 +256,11 @@ class LabradServer(object):
         return T.Error(msg, code)
 
     # registering setting and signal handlers
-    def _findSettingHandlers(self):
+    @classmethod
+    def _findSettingHandlers(cls):
         """Find all settings defined for this server."""
         # this is an ad-hoc test; we really should check for the IRequestHandler interface
-        members = [getattr(self, name) for name in dir(self)]
+        members = [getattr(cls, name) for name in dir(cls)]
         handlers = [m for m in members if hasattr(m, 'handleRequest')]
         return sorted(handlers, key=attrgetter('ID'))
 
@@ -371,11 +372,11 @@ class LabradServer(object):
                 self.addSignal(s, p)
             else:
                 self.addSetting(s, p)
+
         yield p.send()
 
         # do server-specific initialization
         yield self.initServer()
-
         # make sure we shut down gracefully when reactor quits or a remote message is fired
         self._shutdownID = reactor.addSystemEventTrigger('before', 'shutdown', self._stopServer)
         self._cxn.addListener(self._stopServer, ID=987654321)

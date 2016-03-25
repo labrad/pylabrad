@@ -30,8 +30,8 @@ mac = '01:23:45:67:89:ab'
 eth = 1
 
 packets = [(mac, mac, eth, '\x00'*44) for _ in range(9000)]
-data, t = types.flatten(packets)
+data, t, endianness = types.flatten(packets)
 
 timeIt(extract, packets)
-data, t = timeIt(types.flatten, packets)
-timeIt(types.unflatten, data, t)
+data, t, endianness = timeIt(types.flatten, packets)
+timeIt(types.unflatten, data, t, endianness)

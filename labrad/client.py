@@ -46,6 +46,9 @@ class SettingWrapper(object):
     method. Calling this object directly will send a request and block until
     the result is available. Calling the .future method will send a request and
     return a future with which to get the result later.
+
+    The keyword argument unflatten=False will suppress the normal unflattening
+    and return a FlatData object.
     """
     def __init__(self, server, name, pyName, ID):
         self.name = self.__name__ = self._labrad_name = name
@@ -320,7 +323,10 @@ class PacketWrapper(HasDynamicAttrs):
         self._kw = kw
 
     def send(self, wait=True, **kw):
-        """Send this packet to the server and wait for the result."""
+        """Send this packet to the server and wait for the result.
+
+        Using the keyword argument unflatten=False will suppress the
+        default unflattening and return FlatData objects"""
         if not wait:
             warnings.warn("Sending packets with wait=False is deprecated. "
                           "Use packet.send_future(...) instead.")

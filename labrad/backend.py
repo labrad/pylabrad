@@ -380,7 +380,7 @@ class AsyncoreProtocol(asyncore.dispatcher):
         data = self.recv(4096)
         self.stream.send(data)
 
-    def handleResponse(self, _source, _context, request, records):
+    def handleResponse(self, _source, _context, request, flat_records):
         n = -request # reply has request number negated
         if n not in self.requests:
             # probably a response for a request that has already
@@ -390,6 +390,7 @@ class AsyncoreProtocol(asyncore.dispatcher):
         future = self.requests[n]
         del self.requests[n]
         self.pool.add(n)
+        records = [(ID, flat_data.unflatten()) for ID, flat_data in flat_records]
         errors = [r[1] for r in records if isinstance(r[1], Exception)]
         if errors:
             # fail on the first error

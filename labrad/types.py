@@ -295,8 +295,20 @@ def unflatten(s, t, endianness='>'):
     return t.__unflatten__(s, endianness)
 
 
-FlatData = collections.namedtuple('FlatData', ['bytes', 'tag'])
+class FlatData(collections.namedtuple('FlatDataBase', ['bytes', 'tag', 'endianness'])):
+    """FlatData represents unflattened data.
 
+    Attributes:
+
+        bytes:      The data as intended to be transmitted over the wire
+        tag:        The LabRAD data type in the form of an LRType object.
+        endianness: The endiannes of the connection. '>' for big endian
+                    and '<' for little endian.  Little endian is deprecated.
+    """
+    __slots__ = ()
+    def unflatten(self, endianness='>'):
+        return unflatten(self.bytes, self.tag, self.endianness)
+    
 def flatten(obj, types=None, endianness='>'):
     """Flatten python data into labrad data.
 
@@ -328,7 +340,7 @@ def flatten(obj, types=None, endianness='>'):
     """
     if hasattr(obj, '__lrflatten__'):
         s, t = obj.__lrflatten__(endianness)
-        return FlatData(s, t)
+        return FlatData(s, t, endianness)
 
     if types is None:
         types = []
@@ -546,10 +558,15 @@ class LRType(object):
         if isinstance(data, FlatData):
             if not parseTypeTag(data.tag) <= self:
                 raise FlatteningError(data, self)
-            # TODO: need to check that obj has correct endianness
+            # TODO: @ejeffrey This is not an error, and we should
+            # instead unflatten + flatten the data, possibly with a
+            # warning, but I want to treat it as an error until this
+            # is all working.
+            if data.endianness != endianness:
+                raise RuntimeError("Flattened data provided with wrong endianness")
             return data
         s, t = self.__flatten__(data, endianness)
-        return FlatData(s, t)
+        return FlatData(s, t, endianness)
 
     def __flatten__(self, data, endianness):
         """
@@ -935,6 +952,14 @@ class LRCluster(LRType):
     def __unflatten__(self, s, endianness):
         """Unflatten items into a python tuple."""
         return tuple(unflatten(s, t, endianness) for t in self.items)
+
+    def partial_unflatten(self, s, endianness):
+        """Unflatten a cluster into a tuple of FlatData objects"""
+        s = Buffer(s)
+        s2 = Buffer(s)
+        item_sizes = [item.__width__(s, endianness) for item in self.items]
+        return tuple(FlatData(s2.get(item_size), item, endianness)
+                     for (item, item_size) in zip(self.items, item_sizes))
 
     def __flatten__(self, c, endianness):
         """Flatten python tuple to LabRAD cluster."""
@@ -1371,7 +1396,7 @@ class LRError(LRType):
         msg = getattr(E, 'msg', repr(E))
         payload = getattr(E, 'payload', None)
         t = LRCluster(LRInt(), LRStr(), self.payload)
-        s, t = flatten((int(code), str(msg), payload), t, endianness)
+        s, t, _ = flatten((int(code), str(msg), payload), t, endianness)
         self.payload = t.items[2]
         return s, self
 
@@ -1407,7 +1432,7 @@ class Error(Exception):
         return LRError(getType(self.payload))
 
     def __lrflatten__(self, endianness):
-        s, t = flatten((self.code, self.msg, self.payload), endianness=endianness)
+        s, t, _ = flatten((self.code, self.msg, self.payload), endianness=endianness)
         return s, LRError(t.items[2])
 
 class Int(int):

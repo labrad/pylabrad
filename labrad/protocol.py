@@ -26,6 +26,7 @@ import hashlib
 from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
+import labrad.types as T
 
 from labrad import constants as C, crypto, errors, support, util
 from labrad.stream import packetStream, flattenPacket
@@ -102,7 +103,7 @@ class LabradProtocol(protocol.Protocol):
         self.sendPacket(target, context, 0, records)
 
     @inlineCallbacks
-    def sendRequest(self, target, records, context=(0, 0), timeout=None):
+    def sendRequest(self, target, records, context=(0, 0), timeout=None, unflatten=True):
         """Send a request to the given target server.
 
         Returns a deferred that will fire the resulting data packet when
@@ -114,7 +115,7 @@ class LabradProtocol(protocol.Protocol):
         requests to the same server or settings.
         """
         target, records = yield self._lookupNames(target, records)
-        resp = yield self._sendRequestNoLookup(target, records, context, timeout)
+        resp = yield self._sendRequestNoLookup(target, records, context, timeout, unflatten)
         returnValue(resp)
 
     @inlineCallbacks
@@ -170,7 +171,10 @@ class LabradProtocol(protocol.Protocol):
         self._serverCache = {}
         self._settingCache = {}
 
-    def _sendRequestNoLookup(self, target, records, context=(0, 0), timeout=None):
+    def unflattenResponse(self, response_records):
+        return [(ID, data.unflatten()) for (ID, data) in response_records]
+
+    def _sendRequestNoLookup(self, target, records, context=(0, 0), timeout=None, unflatten=True):
         """Send a request without doing any lookups of server or setting IDs."""
         if self.disconnected:
             raise Exception('Already disconnected.')
@@ -186,6 +190,8 @@ class LabradProtocol(protocol.Protocol):
                                             errors.RequestTimeoutError())
             d.addBoth(self._cancelTimeout, timeoutCall)
         d.addBoth(self._finishRequest, n)
+        if unflatten:
+            d.addCallback(self.unflattenResponse)
         self.sendPacket(target, context, n, records)
         return d
 
@@ -215,13 +221,13 @@ class LabradProtocol(protocol.Protocol):
             self.messageReceived(source, context, records)
 
     @inlineCallbacks
-    def requestReceived(self, source, context, request, records):
+    def requestReceived(self, source, context, request, flat_records):
         """Process incoming request."""
         try:
             if self.request_handler is None:
                 log.msg('server request_handler not set')
                 raise Exception('server request_handler not set')
-            response = yield self.request_handler(source, context, records)
+            response = yield self.request_handler(source, context, flat_records)
             self.sendPacket(source, context, -request, response)
         except Exception as e:
             # this will only happen if there was a problem while sending,
@@ -229,30 +235,31 @@ class LabradProtocol(protocol.Protocol):
             # a valid LabRAD packet
             self.sendPacket(source, context, -request, [(0, e)])
 
-    def responseReceived(self, source, context, request, records):
+    def responseReceived(self, source, context, request, flat_records):
         """Process incoming response."""
         if -request in self.requests: # reply has request number negated
             d = self.requests[-request]
-            errors = [r[1] for r in records if isinstance(r[1], Exception)]
+            errors = [r[1].unflatten() for r in flat_records if isinstance(r[1].tag, T.LRError)]
             if errors:
                 # fail on the first error
                 d.errback(errors[0])
             else:
-                d.callback(records)
+                d.callback(flat_records)
         else:
             # probably a response for a request that has already
             # timed out.  If not, something bad has happened.
             log.msg('Invalid response: %s, %s, %s, %s' % \
                     (source, context, request, records))
 
-    def messageReceived(self, source, context, records):
+    def messageReceived(self, source, context, flat_records):
         """Process incoming messages."""
-        self._messageLock.run(self._dispatchMessage, source, context, records)
+        self._messageLock.run(self._dispatchMessage, source, context, flat_records)
 
     @inlineCallbacks
-    def _dispatchMessage(self, source, context, records):
+    def _dispatchMessage(self, source, context, flat_records):
         """Dispatch a message to all matching listeners."""
-        for ID, data in records:
+        for ID, flat_data in flat_records:
+            data = flat_data.unflatten()
             msgCtx = MessageContext(source, context, ID)
             keys = ((s, c, i) for s in (source, None)
                               for c in (context, None)

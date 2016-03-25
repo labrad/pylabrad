@@ -177,3 +177,18 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(pts3.keys(), ['3'])
         self.assertEqual(pts4.keys(), ['4'])
 
+    def test_server_calls(self):
+        """Make sure that server settings can call other settings directly.
+        """
+        cxn = self.cxn()
+
+        ts = cxn.python_test_server
+
+        ts.set_reversed("bar", "foo")
+        self.assertEqual(ts.get("foo"), "bar")
+
+        ts.echo_delay(T.Value(0.1, 's'))
+        self.assertEquals(ts.delayed_echo_wrapper(1), 1)
+
+if __name__ == "__main__":
+    unittest.main()

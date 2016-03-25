@@ -92,6 +92,15 @@ class TestServer(LabradServer):
             c['delay'] = delay
         return c['delay']
 
+    @setting(42, "Delayed Echo Wrapper", data='?', returns='?')
+    def delayed_echo_wrapper(self, c, data):
+        """Echo a packet after a delay just like delayed_echo.
+
+        This tests calling a coroutine from another coroutine.
+        """
+        rv = yield self.delayed_echo(c, data)
+        returnValue(rv)
+
     @setting(40, "Speed", speed='v[m/s]', returns='v[m/s]')
     def speed(self, c, speed=None):
         """Get or set the speed."""
@@ -161,17 +170,23 @@ class TestServer(LabradServer):
         """Get a random LabRAD type tag."""
         return str(hydrant.randType())
 
-    @setting(100, "Set", key='s', value='?', returns='')
+    @setting(100, "Set", unflatten=False, key='s', value='?', returns='')
     def set(self, c, key, value):
-        c['dict'][key] = value
+        c['dict'][key.unflatten()] = value
 
     @setting(101, "Get", key='s', returns='?')
     def get(self, c, key):
+        print "getting tag: %s, value: %s" % (key, c['dict'][key])
         return c['dict'][key]
 
     @setting(102, "Keys", returns='*s')
     def keys(self, c):
         return sorted(c['dict'].keys())
+
+    @setting(103, "Set Reversed", value='?', key='s', unflatten=False)
+    def set_reversed(self, c, value, key):
+        """Same as self.set() with argument order reversed."""
+        self.set(c, key, value)
 
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')

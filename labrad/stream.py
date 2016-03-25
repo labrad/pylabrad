@@ -42,7 +42,7 @@ def unflattenRecords(data, endianness='>'):
     s = T.Buffer(data)
     while len(s):
         ID, tag, data = T.unflatten(s, RECORD_TYPE, endianness)
-        rec = ID, T.unflatten(data, tag, endianness)
+        rec = ID, T.FlatData(data, T.parseTypeTag(tag), endianness)
         records.append(rec)
     return records
 
