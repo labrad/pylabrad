@@ -382,6 +382,28 @@ def createGenericServerCls(path, filename, conf):
     return cls
 
 
+def version_tuple(version):
+    """Get a tuple from a version string that can be used for comparison.
+
+    Version strings are typically of the form A.B.C-X where A, B and C
+    are numbers, and X is extra text denoting dev status (e.g. alpha or beta).
+    Given this structure, we cannot just use string comparison to get the order
+    of versions; instead we parse the version into a tuple
+
+    ((int(A), int(B), int(C)), version)
+
+    If we cannot parse the numeric part, we just use the empty tuple for the
+    first entry, and for such tuples the comparison will just fall back to
+    alphabetic comparison on the full versions string.
+    """
+    numstr, _, _extra = version.partition('-')
+    try:
+        nums = tuple(int(n) for n in numstr.split('.'))
+    except Exception:
+        nums = ()
+    return (nums, version)
+
+
 class Node(object):
     """Parent class that keeps the node running.
 
@@ -661,7 +683,13 @@ class NodeServer(LabradServer):
 
     def refreshServers(self):
         """Refresh the list of available servers."""
-        servers = {}
+        # configs is a nested map from name to version to list of classes.
+        #
+        # This allows us to deal with cases where there are many definitions
+        # for different server versions, and possibly also redundant defitions
+        # for the same version.
+        configs = {}
+
         # look for .ini files
         for dirname in self.config.dirs:
             for path, dirs, files in os.walk(dirname):
@@ -693,13 +721,39 @@ class NodeServer(LabradServer):
                                 continue
                         s = createGenericServerCls(path, f, conf)
                         s.client = self.client
-                        if s.name not in servers:
-                            servers[s.name] = s
-                    except:
+                        if s.name not in configs:
+                            configs[s.name] = {}
+                        versions = configs.setdefault(s.name, {})
+                        classes = versions.setdefault(s.version, [])
+                        classes.append(s)
+                    except Exception:
                         fname = os.path.join(path, f)
                         logging.error('Error while loading config file "%s":' % fname,
                                   exc_info=True)
-        self.servers = servers
+
+        servers_dict = {}
+        for versions in configs.values():
+            for servers in versions.values():
+                if len(servers) > 1:
+                    conflicting_files = [s.filename for s in servers]
+                    s = servers[0]
+                    logging.warning(
+                        'Found redundant server configs with same name and '
+                        'version; will use {}. name={}, version={}, '
+                        'conflicting_files={}'
+                        .format(s.filename, s.name, s.version,
+                                conflicting_files))
+
+            servers = [ss[0] for ss in versions.values()]
+            servers.sort(key=lambda s: version_tuple(s.version))
+            if len(servers) > 1:
+                # modify server name for all but the latest version
+                for s in servers[:-1]:
+                    s.name = '{}-{}'.format(s.name, s.version)
+
+            for s in servers:
+                servers_dict[s.name] = s
+        self.servers = servers_dict
         # send a message with the current server list
         dispatcher.send('status', servers=self.status())
 
