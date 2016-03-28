@@ -29,7 +29,8 @@ To run the test suite, you'll need to have `pytest` installed, then run `py.test
 ## Building and Updating
 
 Packages for pylabrad are distributed through [PyPI](https://pypi.python.org/pypi/pylabrad).
-The best way to install pylabrad is using pip: `pip install pylabrad`
+The best way to install pylabrad is using pip: `pip install pylabrad`.
+If installing using git and including in `PYTHONPATH`, note that versions 0.95.0 or later require the `futures` python package.
 
 For contributors who need to build and upload new packages, do the following:
 
