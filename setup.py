@@ -15,6 +15,7 @@ Operating System :: OS Independent
 Programming Language :: Python
 Topic :: Scientific/Engineering"""
 
+import numpy as np
 import os
 from setuptools import setup, find_packages, Extension
 
@@ -45,6 +46,7 @@ setup(
     install_requires=requirements,
     provides=['labrad'],
     packages=find_packages(),
+    include_dirs = [np.get_include()],
     package_data={
         'labrad': ['LICENSE.txt'],
         'labrad.node': ['*.ini'],
