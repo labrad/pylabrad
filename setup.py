@@ -16,6 +16,7 @@ Programming Language :: Python
 Topic :: Scientific/Engineering"""
 
 from distutils.core import setup, Extension
+import numpy as np
 
 doclines = __doc__.split('\n')
 
@@ -39,6 +40,8 @@ setup(
         'pyOpenSSL'
     ],
     provides = ['labrad'],
+    include_dirs = [np.get_include()],
+
     packages = [
         'labrad',
         'labrad.node',
