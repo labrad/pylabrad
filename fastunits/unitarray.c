@@ -85,9 +85,16 @@ least_terms(int *a, int *b)
     }
     for(;;) {
 	z = x%y;
-	if (z==1)
-	    return;
+	if (z==1) {
+	    if (*b < 0) {
+		*a = -*a;
+		*b = -*b;
+		return;
+	    }
+	}
 	if (z==0) {
+	    if ((y<0) ^ (*b<0)) // Make sure denominator is positive
+		y = -y;
 	    *a /= y;
 	    *b /= y;
 	    return;
@@ -388,11 +395,15 @@ unit_array_pow_frac(UnitArray *obj, int numer, int denom)
     result =  (UnitArray *)(&UnitArrayType)->tp_alloc(&UnitArrayType, obj->ob_size);
     result->ob_size = obj->ob_size;
     for (idx=0; idx<obj->ob_size; idx++) {
+	int new_numer, new_denom;
+
 	result->data[idx].name = obj->data[idx].name;
 	Py_INCREF(result->data[idx].name);
-	result->data[idx].numer = obj->data[idx].numer * numer;
-	result->data[idx].denom = obj->data[idx].denom * denom;
-	least_terms(&result->data[idx].numer, &result->data[idx].denom);
+	new_numer = obj->data[idx].numer * numer;
+	new_denom = obj->data[idx].denom * denom;
+	least_terms(&new_numer, &new_denom);
+	result->data[idx].numer = new_numer;
+	result->data[idx].denom = new_denom;
     }
     return result;
 }
@@ -1517,6 +1528,26 @@ value_getitem(PyObject *obj, PyObject *key)
     return result;
 }
 
+/* These methods are needed to support the sequence protocol so we can iterate. 
+ * They are only defined for ValueArrays not regular Value / Complex objects. 
+ */
+
+static Py_ssize_t
+value_array_len(WithUnitObject *self)
+{
+    return PySequence_Size(self->value);
+}
+
+static PyObject *
+value_array_get(WithUnitObject *self, Py_ssize_t i)
+{
+    PyObject *item=0;
+    item = PySequence_GetItem(self->value, i);
+    if(!item)
+	return 0;
+    return (PyObject *)value_create(item, self->unit_factor, self->base_units, self->display_units);
+}
+
 static PyObject *
 value_in_units_of(PyObject *self, PyObject *unit)
 {
@@ -1673,6 +1704,14 @@ static PyMappingMethods WithUnitMappingMethods = {
     (objobjargproc)value_setitem,     	/* mp_ass_subscript */
 };
 
+static PySequenceMethods ValueArraySequenceMethods = {
+    (lenfunc)value_array_len,        /* sq_length */
+    0,                               /* sq_concat */
+    0,                               /* sq_len */
+    (ssizeargfunc)value_array_get,   /* sq_item */
+    0                                /* ... */
+};
+
 static PyTypeObject WithUnitType = {
     PyObject_HEAD_INIT(NULL) 
     0,			       /* ob_size */
@@ -1757,6 +1796,7 @@ initunitarray(void)
     ValueArrayType.tp_base = &WithUnitType;
     ValueArrayType.tp_getset = ValueArray_getset;
     ValueArrayType.tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES;
+    ValueArrayType.tp_as_sequence = &ValueArraySequenceMethods;
 
     if (PyType_Ready(&ValueType) < 0)
 	return;
