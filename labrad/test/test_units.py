@@ -18,8 +18,6 @@ import numpy as np
 import sys
 import os
 import cPickle
-if __name__ == "__main__":
-    sys.path.insert(0, os.path.abspath('../..'))
 from labrad import units
 ValueArray = units.ValueArray
 Value = units.Value
@@ -256,5 +254,20 @@ class LabradUnitsTests(unittest.TestCase):
         self.assertEqual((1*ts)['tshirt/h'], 3600.0)
         self.assertEqual(str(ts), 'tshirt/s')
 
+    def testIter(self):
+        data = np.arange(5) * units.ns
+        for x in data:
+            self.assertIsInstance(x, units.Value)
+        with self.assertRaises(TypeError):
+            for x in 5*units.kg:
+                pass
+            
+    def testIsCompatible(self):
+        x = 5*units.ns
+        self.assertTrue(x.isCompatible('s'))
+        self.assertFalse(x.isCompatible(units.kg))
+        with self.assertRaises(Exception):
+            x.isCompatible(4)
+        
 if __name__ == "__main__":
     unittest.main()
