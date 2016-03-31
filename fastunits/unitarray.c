@@ -1379,6 +1379,7 @@ value_repr(WithUnitObject *obj)
     PyObject *result;
     PyObject *unit_repr_s;
     PyObject *value_repr_s;
+    const char *name_ptr=0;
 
     value_repr_s = PyObject_Str(obj->value);
     unit_repr_s = unit_array_str(obj->display_units);
@@ -1387,7 +1388,12 @@ value_repr(WithUnitObject *obj)
 	Py_XDECREF(value_repr_s);
 	return 0;
     }
-    result = PyString_FromFormat("%s(%s, \"%s\")", obj->ob_type->tp_name, PyString_AsString(value_repr_s), PyString_AsString(unit_repr_s));
+    name_ptr = strrchr(obj->ob_type->tp_name, '.');
+    if(!name_ptr)
+	name_ptr = obj->ob_type->tp_name;
+    else
+	name_ptr ++;
+    result = PyString_FromFormat("%s(%s, \"%s\")", name_ptr, PyString_AsString(value_repr_s), PyString_AsString(unit_repr_s));
     Py_DECREF(value_repr_s);
     Py_DECREF(unit_repr_s);
     return result;
@@ -1531,6 +1537,22 @@ value_in_units_of(PyObject *self, PyObject *unit)
     return result;
 }
 
+static PyObject *
+value_is_compatible(WithUnitObject *self, PyObject *unit)
+{
+    WithUnitObject *unit_val=0;
+    int rv;
+    
+    unit_val = lookup_unit_val(unit);
+    if(!unit_val)
+	return 0;
+    rv = PyObject_RichCompareBool((PyObject *)self->base_units, (PyObject *)unit_val->base_units, Py_EQ);
+    Py_XDECREF(unit_val);
+    if (rv)
+	Py_RETURN_TRUE;
+    Py_RETURN_FALSE;
+}
+
 /*
  * Python hash functions need to always return the same value for any
  * two objects that compare equal.  In our case, this means that
@@ -1610,6 +1632,7 @@ static PyMethodDef WithUnit_methods[] = {
     {"inBaseUnits", (PyCFunction)value_in_base_units, METH_NOARGS, "@returns: the same quantity converted to base units,  i.e. SI units in most cases"},
     {"isDimensionless", (PyCFunction)value_is_dimensionless, METH_NOARGS, "returns true if the value is dimensionless"},
     {"inUnitsOf", (PyCFunction)value_in_units_of, METH_O, "Convert to the specified units"},
+    {"isCompatible", (PyCFunction)value_is_compatible, METH_O, "Check if the value is compatible with the specified unit"},
     {"_new_raw", (PyCFunction)value_new_raw, METH_VARARGS | METH_KEYWORDS | METH_CLASS, "Create value unit from factor and UnitArray objects"},
     {"_set_py_func", (PyCFunction)value_set_py_func, METH_VARARGS | METH_CLASS, "Internal method: setup proxy object for python calls"},
     {"__copy__", (PyCFunction)value_copy, METH_NOARGS, "Copy function"},
