@@ -1501,7 +1501,29 @@ valuearray_size(WithUnitObject *self, void *ignore)
 
     return PyInt_FromLong(result);
 }
- 
+
+static PyObject *
+valuearray_dot(WithUnitObject *self, PyObject *b)
+{
+    factor_t result_factor;
+    UnitArray *base_units=0, *display_units=0;
+    PyObject *result_value=0, *result=0;
+    
+    WithUnitObject *other = value_wrap(b);
+    if(!other)
+	return 0;
+    result_value = PyObject_CallMethod(self->value, "dot", "O", other->value);
+    result_factor = factor_mul(self->unit_factor, other->unit_factor);
+    base_units = (UnitArray *)PyNumber_Multiply((PyObject *)self->base_units, (PyObject *)other->base_units);
+    display_units = (UnitArray *)PyNumber_Multiply((PyObject *)self->display_units, (PyObject *)other->display_units);
+
+    if(result_value && base_units && display_units) 
+	result = (PyObject *)value_create(result_value, result_factor, base_units, display_units);
+    Py_XDECREF(base_units);
+    Py_XDECREF(display_units);
+    Py_XDECREF(result_value);
+    return result;
+}
 /* __getitem__ is unfortunately overloaded for ValueArrays, so we have
  * to detect whether key is a unit or an index / slice object.  */
 
@@ -1743,6 +1765,7 @@ static PyMethodDef WithUnit_methods[] = {
     {"isDimensionless", (PyCFunction)value_is_dimensionless, METH_NOARGS, "returns true if the value is dimensionless"},
     {"inUnitsOf", (PyCFunction)value_in_units_of, METH_O, "Convert to the specified units"},
     {"isCompatible", (PyCFunction)value_is_compatible, METH_O, "Check if the value is compatible with the specified unit"},
+    {"isCompatible", (PyCFunction)value_is_compatible, METH_O, "Check if the value is compatible with the specified unit"},
     {"_new_raw", (PyCFunction)value_new_raw, METH_VARARGS | METH_KEYWORDS | METH_CLASS, "Create value unit from factor and UnitArray objects"},
     {"_set_py_func", (PyCFunction)value_set_py_func, METH_VARARGS | METH_CLASS, "Internal method: setup proxy object for python calls"},
     {"__copy__", (PyCFunction)value_copy, METH_NOARGS, "Copy function"},
@@ -1767,7 +1790,7 @@ static PyGetSetDef WithUnit_getset[] = {
     {"numer", (getter)value_numer, NULL, "Numerator part of ratio between base and display units (int or float)", 0}, 
     {NULL}};
 
-#define VALUE_ARRAY_METHODDEF(meth) {#meth, (PyCFunction)value_array_ ## meth, METH_VARARGS | METH_KEYWORDS, "See numpy function for details"}
+#define VALUE_ARRAY_METHODDEF(meth) {#meth, (PyCFunction)value_array_ ## meth, METH_VARARGS | METH_KEYWORDS, "See numpy function numpy." #meth " for details"}
 
 static PyMethodDef ValueArray_methods[] = {
     VALUE_ARRAY_METHODDEF(transpose),
@@ -1794,7 +1817,8 @@ static PyMethodDef ValueArray_methods[] = {
     VALUE_ARRAY_METHODDEF(conjugate),
     VALUE_ARRAY_METHODDEF(choose),
     VALUE_ARRAY_METHODDEF(reshape),
-    VALUE_ARRAY_METHODDEF(resize)
+    VALUE_ARRAY_METHODDEF(resize),
+    {"dot", (PyCFunction)valuearray_dot, METH_O, "Array dot product / matrix product"},
 };
     
 static PyGetSetDef ValueArray_getset[] = {
