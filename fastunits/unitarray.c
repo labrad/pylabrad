@@ -509,6 +509,8 @@ value_create(PyObject *data, factor_t factor, UnitArray *base_units, UnitArray *
     WithUnitObject *result;
     PyTypeObject *target_type;
 
+    if(!data) /* This generally means something generated an exception previously. */
+	return 0;
     if (PyFloat_Check(data)) {
 	val = data;
 	target_type = &ValueType;
@@ -1491,6 +1493,15 @@ valuearray_dtype(WithUnitObject *self, void *ignore)
     return result;
 }
 
+static PyObject *
+valuearray_size(WithUnitObject *self, void *ignore)
+{
+    npy_intp result;
+    result = PyArray_SIZE((PyArrayObject *)self->value);
+
+    return PyInt_FromLong(result);
+}
+ 
 /* __getitem__ is unfortunately overloaded for ValueArrays, so we have
  * to detect whether key is a unit or an index / slice object.  */
 
@@ -1659,6 +1670,74 @@ value_set_py_func(PyTypeObject *t, PyObject *args)
     Py_RETURN_NONE;
 }
 
+/* Value Array methods with 1 array argument:
+ * 
+ * T, conj, real, imag,									properties, call and add units
+ * cumprod,cumsum,compress,diagonal,flatten,max,mean,min,prod,sum,trace,transpose	call and add units
+ * all,argmax,argmin,argpartition,argsort,nonzero					call and return
+ * astype,base,byteswap,byteswap,flags,round,floor,ceil					do not implement
+ * clip,fill,flat,var,dot		Special case
+ */
+
+#define VALUE_ARRAY_METHOD_UNIT_RESULT(meth) static PyObject * value_array_ ## meth (WithUnitObject *self, PyObject *args, PyObject *kw) \
+                                                 { \
+						     PyObject *meth = PyObject_GetAttrString(self->value, #meth); \
+						     PyObject *tmp=0;\
+						     if (meth) \
+							 tmp = PyObject_Call(meth, args, kw); \
+						     Py_XDECREF(meth);\
+						     if (!tmp)\
+							 return 0;\
+						     return (PyObject *)value_create(tmp, self->unit_factor, self->base_units, self->display_units);\
+						 }
+
+VALUE_ARRAY_METHOD_UNIT_RESULT(transpose);
+VALUE_ARRAY_METHOD_UNIT_RESULT(cumprod);
+VALUE_ARRAY_METHOD_UNIT_RESULT(cumsum);
+VALUE_ARRAY_METHOD_UNIT_RESULT(compress);
+VALUE_ARRAY_METHOD_UNIT_RESULT(diagonal);
+VALUE_ARRAY_METHOD_UNIT_RESULT(flatten);
+VALUE_ARRAY_METHOD_UNIT_RESULT(max);
+VALUE_ARRAY_METHOD_UNIT_RESULT(min);
+VALUE_ARRAY_METHOD_UNIT_RESULT(mean);
+VALUE_ARRAY_METHOD_UNIT_RESULT(std);
+VALUE_ARRAY_METHOD_UNIT_RESULT(prod);
+VALUE_ARRAY_METHOD_UNIT_RESULT(sum);
+VALUE_ARRAY_METHOD_UNIT_RESULT(trace);
+VALUE_ARRAY_METHOD_UNIT_RESULT(conj);
+VALUE_ARRAY_METHOD_UNIT_RESULT(conjugate);
+VALUE_ARRAY_METHOD_UNIT_RESULT(choose);
+VALUE_ARRAY_METHOD_UNIT_RESULT(reshape);
+VALUE_ARRAY_METHOD_UNIT_RESULT(resize);
+
+#define VALUE_ARRAY_ATTR(attr) static PyObject * value_array_ ## attr (WithUnitObject *self, PyObject *ignore) \
+                               {\
+				   PyObject *tmp = PyObject_GetAttrString(self->value, #attr); \
+				   if (!tmp)\
+				       return 0;\
+				   return (PyObject *)value_create(tmp, self->unit_factor, self->base_units, self->display_units);\
+			       }
+VALUE_ARRAY_ATTR(real)
+VALUE_ARRAY_ATTR(imag)
+VALUE_ARRAY_ATTR(T)
+
+
+#define VALUE_ARRAY_METHOD(meth) static PyObject * value_array_ ## meth (WithUnitObject *self, PyObject *args, PyObject *kw) \
+                                 { \
+				     PyObject *meth = PyObject_GetAttrString(self->value, #meth);\
+				     if (!meth)\
+					 return 0;\
+				     return PyObject_Call(meth, args, kw);	\
+				 }
+
+VALUE_ARRAY_METHOD(all)
+VALUE_ARRAY_METHOD(any)
+VALUE_ARRAY_METHOD(argmin)
+VALUE_ARRAY_METHOD(argmax)
+VALUE_ARRAY_METHOD(argpartition)
+VALUE_ARRAY_METHOD(argsort)
+VALUE_ARRAY_METHOD(nonzero) 
+
 static PyMethodDef WithUnit_methods[] = {
     {"inBaseUnits", (PyCFunction)value_in_base_units, METH_NOARGS, "@returns: the same quantity converted to base units,  i.e. SI units in most cases"},
     {"isDimensionless", (PyCFunction)value_is_dimensionless, METH_NOARGS, "returns true if the value is dimensionless"},
@@ -1688,15 +1767,46 @@ static PyGetSetDef WithUnit_getset[] = {
     {"numer", (getter)value_numer, NULL, "Numerator part of ratio between base and display units (int or float)", 0}, 
     {NULL}};
 
+#define VALUE_ARRAY_METHODDEF(meth) {#meth, (PyCFunction)value_array_ ## meth, METH_VARARGS | METH_KEYWORDS, "See numpy function for details"}
+
+static PyMethodDef ValueArray_methods[] = {
+    VALUE_ARRAY_METHODDEF(transpose),
+    VALUE_ARRAY_METHODDEF(cumprod),
+    VALUE_ARRAY_METHODDEF(cumsum),
+    VALUE_ARRAY_METHODDEF(compress),
+    VALUE_ARRAY_METHODDEF(diagonal),
+    VALUE_ARRAY_METHODDEF(flatten),
+    VALUE_ARRAY_METHODDEF(max),
+    VALUE_ARRAY_METHODDEF(min),
+    VALUE_ARRAY_METHODDEF(mean),
+    VALUE_ARRAY_METHODDEF(std),
+    VALUE_ARRAY_METHODDEF(prod),
+    VALUE_ARRAY_METHODDEF(sum),
+    VALUE_ARRAY_METHODDEF(trace),
+    VALUE_ARRAY_METHODDEF(all),
+    VALUE_ARRAY_METHODDEF(any),
+    VALUE_ARRAY_METHODDEF(argmin),
+    VALUE_ARRAY_METHODDEF(argmax),
+    VALUE_ARRAY_METHODDEF(argpartition),
+    VALUE_ARRAY_METHODDEF(argsort),
+    VALUE_ARRAY_METHODDEF(nonzero),
+    VALUE_ARRAY_METHODDEF(conj),
+    VALUE_ARRAY_METHODDEF(conjugate),
+    VALUE_ARRAY_METHODDEF(choose),
+    VALUE_ARRAY_METHODDEF(reshape),
+    VALUE_ARRAY_METHODDEF(resize)
+};
+    
 static PyGetSetDef ValueArray_getset[] = {
     {"dtype", (getter)valuearray_dtype, NULL, "dtype of underlying numpy array", 0},
     {"ndim", (getter)valuearray_ndim, NULL, "number of dimensions", 0},
     {"shape", (getter)valuearray_shape, NULL, "Shape of underlying numpy array", 0},
+    {"size", (getter)valuearray_size, NULL, "Overall size of array", 0},
+    {"real", (getter)value_array_real, NULL, "Real part", 0},
+    {"imag", (getter)value_array_imag, NULL, "Imaginary part", 0},
+    {"T", (getter)value_array_T, NULL, "Transpose", 0},
     {NULL}};
 
-//static PyMethodDef ValueArray_methods[] = {
-//   {"allclose", (PyCFunction)valuearray_allclose, METH_VARARGS, "True if arrays are equal within tolerance.  See numpy.allclose"}
-//    {0}};
 
 static PyMappingMethods WithUnitMappingMethods = {
     0,			/* mp_length */
@@ -1795,6 +1905,7 @@ initunitarray(void)
     ComplexType.tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES;
     ValueArrayType.tp_base = &WithUnitType;
     ValueArrayType.tp_getset = ValueArray_getset;
+    ValueArrayType.tp_methods = ValueArray_methods;
     ValueArrayType.tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES;
     ValueArrayType.tp_as_sequence = &ValueArraySequenceMethods;
 
