@@ -183,7 +183,7 @@ class Setting(object):
             return self.func(server, c, flat_data)
 
     def getRegistrationInfo(self):
-        return (long(self.ID), self.name, self.description,
+        return (self.ID, self.name, self.description,
                 self.accepts, self.returns, self.notes)
 
 
@@ -357,7 +357,7 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         # register this setting to be remotely callable
         f.description, f.notes = util.parseSettingDoc(f.__doc__)
         def getRegistrationInfo():
-            return (long(f.ID), f.name, f.description,
+            return (f.ID, f.name, f.description,
                     f.accepts, f.returns, f.notes)
         f.getRegistrationInfo = getRegistrationInfo
 

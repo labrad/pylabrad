@@ -15,7 +15,7 @@
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from labrad import constants as C
+from labrad import constants as C, types as T
 
 class AsyncManager:
     """Provide an asynchronous interface to basic manager settings."""
@@ -40,13 +40,13 @@ class AsyncManager:
 
     def getServersList(self):
         """Get a list of connected servers."""
-        return self._getIDList(C.SERVERS_LIST)
+        return self._getIDList(T.flatten(C.SERVERS_LIST, 'w'))
 
     @inlineCallbacks
     def getServerInfo(self, serverID):
         """Get information about a server."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
+        packet = [(C.HELP, T.flatten(serverID, 'w')),
+                  (C.SETTINGS_LIST, T.flatten(serverID, 'w'))]
         resp = yield self._send(packet)
         descr, notes = resp[0][1]
         settings = self._reorderIDList(resp[1][1])
@@ -55,12 +55,12 @@ class AsyncManager:
     @inlineCallbacks
     def getServerInfoWithSettings(self, serverID):
         """Get information about a server, including all of its settings."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
+        packet = [(C.HELP, T.flatten(serverID, 'w')),
+                  (C.SETTINGS_LIST, T.flatten(serverID, 'w'))]
         resp = yield self._send(packet)
         descr, notes = resp[0][1]
         settings = resp[1][1]
-        packet = [(C.HELP, (long(serverID), long(ID))) for ID, name in settings]
+        packet = [(C.HELP, T.flatten((serverID, ID), 'ww')) for ID, name in settings]
         resp = yield self._send(packet)
         settingList = []
         for s, r in zip(settings, resp):
@@ -71,12 +71,12 @@ class AsyncManager:
 
     def getSettingsList(self, serverID):
         """Get a list of settings for a server."""
-        return self._getIDList(C.SETTINGS_LIST, serverID)
+        return self._getIDList(C.SETTINGS_LIST, T.flatten(serverID, 'w'))
 
     @inlineCallbacks
     def getSettingInfo(self, serverID, settingID):
         """Get information about a setting."""
-        packet = [(C.HELP, (long(serverID), long(settingID)))]
+        packet = [(C.HELP, T.flatten((serverID, settingID), 'ww'))]
         resp = yield self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         returnValue((description, accepts, returns, notes))
@@ -84,8 +84,8 @@ class AsyncManager:
     @inlineCallbacks
     def getSettingInfoByName(self, serverID, settingName):
         """Get information about a setting using its name."""
-        packet = [(C.HELP, (long(serverID), settingName)),
-                  (C.LOOKUP, (long(serverID), settingName))]
+        packet = [(C.HELP, T.flatten((serverID, settingName), 'ws')),
+                  (C.LOOKUP, T.flatten((serverID, settingName), 'ws'))]
         resp = yield self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         ID = resp[1][1][1]
@@ -94,5 +94,5 @@ class AsyncManager:
     @inlineCallbacks
     def subscribeToNamedMessage(self, name, ID, enable=True):
         """Subscribe to or stop a named message."""
-        packet = [(C.MESSAGE_SUBSCRIBE, (name, long(ID), enable))]
+        packet = [(C.MESSAGE_SUBSCRIBE, T.flatten((name, ID, enable), 'swb'))]
         returnValue((yield self._send(packet)))

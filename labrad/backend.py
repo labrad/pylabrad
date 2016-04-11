@@ -8,13 +8,12 @@ from __future__ import absolute_import
 import asyncore
 import hashlib
 import socket
-import sys
 import threading
 import Queue
 
 from concurrent.futures import Future
 
-from labrad import constants as C, support
+from labrad import constants as C, support, types as T
 from labrad.errors import LoginFailedError
 from labrad.stream import packetStream, flattenPacket, flattenRecords
 
@@ -418,12 +417,12 @@ class ManagerService:
 
     def getServersList(self):
         """Get list of connected servers."""
-        return self._getIDList(C.SERVERS_LIST)
+        return self._getIDList(T.flatten(C.SERVERS_LIST, 'w'))
 
     def getServerInfo(self, serverID):
         """Get information about a server."""
-        packet = [(C.HELP, long(serverID)),
-                  (C.SETTINGS_LIST, long(serverID))]
+        packet = [(C.HELP, T.flatten(serverID, 'w')),
+                  (C.SETTINGS_LIST, T.flatten(serverID, 'w'))]
         resp = self._send(packet)
         descr, notes = resp[0][1]
         settings = self._reorderIDList(resp[1][1])
@@ -431,19 +430,19 @@ class ManagerService:
 
     def getSettingsList(self, serverID):
         """Get list of settings for a server."""
-        return self._getIDList(C.SETTINGS_LIST, serverID)
+        return self._getIDList(C.SETTINGS_LIST, T.flatten(serverID, 'w'))
 
     def getSettingInfo(self, serverID, settingID):
         """Get information about a setting."""
-        packet = [(C.HELP, (long(serverID), long(settingID)))]
+        packet = [(C.HELP, T.flatten((serverID, settingID), 'ww'))]
         resp = self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         return (description, accepts, returns, notes)
 
     def getSettingInfoByName(self, serverID, settingName):
         """Get information about a setting using its name."""
-        packet = [(C.HELP, (long(serverID), settingName)),
-                  (C.LOOKUP, (long(serverID), settingName))]
+        packet = [(C.HELP, T.flatten((serverID, settingName), 'ws')),
+                  (C.LOOKUP, T.flatten((serverID, settingName), 'ws'))]
         resp = self._send(packet)
         description, accepts, returns, notes = resp[0][1]
         ID = resp[1][1][1]
