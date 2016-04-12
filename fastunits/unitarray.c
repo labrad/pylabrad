@@ -1243,6 +1243,30 @@ value_pow(PyObject *a, PyObject *b, PyObject *c)
 }
 
 static PyObject *
+value_int(PyObject *obj)
+{
+    PyObject *f, *i;
+    f = PyNumber_Float(obj);
+    if (!f)
+	return 0;
+    i = PyNumber_Int(f);
+    Py_DECREF(f);
+    return i;
+}
+
+static PyObject *
+value_long(PyObject *obj)
+{
+    PyObject *f, *l;
+    f = PyNumber_Float(obj);
+    if (!f)
+	return 0;
+    l = PyNumber_Int(f);
+    Py_DECREF(f);
+    return l;
+}
+
+static PyObject *
 value_float(PyObject *obj)
 {
     WithUnitObject *self = (WithUnitObject *)obj;
@@ -1302,7 +1326,8 @@ static PyNumberMethods WithUnitNumberMethods = {
     (inquiry)value_nz,	       	/* nb_nonzero (Used by PyObject_IsTrue) */
     0,0,0,0,0,0,       		/* nb_* bitwise */
     0,				/* nb_coerce */
-    0,0,			/* nb_* integer coercions */
+    value_int,                  /* nb_int */
+    value_long,			/* nb_long coercions */
     value_float,		/* nb_float */
     0,0,			/* nb_* oct and hex conversions */
     0,0,0,0,0,0,0,0,0,0,0,	/* nb_inplace_* */
