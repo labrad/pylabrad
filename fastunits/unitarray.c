@@ -1819,6 +1819,7 @@ static PyMethodDef ValueArray_methods[] = {
     VALUE_ARRAY_METHODDEF(reshape),
     VALUE_ARRAY_METHODDEF(resize),
     {"dot", (PyCFunction)valuearray_dot, METH_O, "Array dot product / matrix product"},
+    {0}
 };
     
 static PyGetSetDef ValueArray_getset[] = {
@@ -1836,6 +1837,7 @@ static PyMappingMethods WithUnitMappingMethods = {
     0,			/* mp_length */
     (binaryfunc)value_getitem,	/* mp_subscript */
     (objobjargproc)value_setitem,     	/* mp_ass_subscript */
+    0
 };
 
 static PySequenceMethods ValueArraySequenceMethods = {
@@ -1885,7 +1887,8 @@ static PyTypeObject WithUnitType = {
     0,                         /* tp_dictoffset */
     0,                         /* tp_init */
     0,                         /* tp_alloc */
-    value_new                  /* tp_new */
+    value_new,                 /* tp_new */
+    0
 };
 
 static PyTypeObject ValueType = {
