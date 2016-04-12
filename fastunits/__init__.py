@@ -176,6 +176,10 @@ class Unit(object):
     def isAngle(self):
         return self._value.base_units == _unit_cache['rad']._value.base_units
 
+    @property
+    def base_unit(self):
+        return self._value.inBaseUnits().unit
+    
     is_angle = property(isAngle)
 
 
