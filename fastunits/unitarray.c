@@ -1837,7 +1837,6 @@ static PyMappingMethods WithUnitMappingMethods = {
     0,			/* mp_length */
     (binaryfunc)value_getitem,	/* mp_subscript */
     (objobjargproc)value_setitem,     	/* mp_ass_subscript */
-    0
 };
 
 static PySequenceMethods ValueArraySequenceMethods = {
