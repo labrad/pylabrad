@@ -171,7 +171,7 @@ class Unit(object):
         return self._value.isDimensionless()
 
     def isCompatible(self, other):
-        self._value.base_units == other._value.base_units
+        return self._value.base_units == other._value.base_units
         
     def isAngle(self):
         return self._value.base_units == _unit_cache['rad']._value.base_units
