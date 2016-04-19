@@ -188,6 +188,11 @@ class TestServer(LabradServer):
         """Same as self.set() with argument order reversed."""
         self.set(c, key, value)
 
+    @setting(1000, path=['', 's'], file=['s'])
+    def first_arg_can_have_default_value(self, c, path=None, file=None):
+        """Exercise setting decorator fix from issue #242."""
+        pass
+
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')
 

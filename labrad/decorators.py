@@ -41,7 +41,11 @@ def setting(lr_ID, lr_name=None, returns=[], unflatten=True, **params):
     This just creates a Setting class object which does the actual business.
     """
     def decorator(func):
-        return Setting(func, lr_ID, lr_name, returns, unflatten, **params)
+        try:
+            return Setting(func, lr_ID, lr_name, returns, unflatten, **params)
+        except Exception:
+            print 'Error in setting {} ({}):'.format(func.__name__, lr_ID)
+            raise
     return decorator
 
 class Setting(object):
@@ -126,7 +130,7 @@ class Setting(object):
         if Nparams:
             for tag in params[args[0]]:
                 tt = T.parseTypeTag(tag)
-                if isinstance(tt, T.LRNone) and Nrequired != 1:
+                if isinstance(tt, T.LRNone) and Nrequired > 1:
                     raise ValueError("First argument {} cannot accept '' "
                           "unless other arguments are optional".format(args[0]))
                 if isinstance(tt, (T.LRAny, T.LRCluster)) and self.expand_cluster=="optional":
