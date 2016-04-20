@@ -42,7 +42,15 @@ def setting(lr_ID, lr_name=None, returns=[], unflatten=True, **params):
     """
     def decorator(func):
         try:
-            return Setting(func, lr_ID, lr_name, returns, unflatten, **params)
+            handler = Setting(func, lr_ID, lr_name, returns, unflatten, **params)
+            func = handler.func  # might have gotten wrapped with inlineCallbacks
+            func.ID = handler.ID
+            func.name = handler.name
+            func.accepts = handler.accepts
+            func.returns = handler.returns
+            func.handleRequest = handler.handleRequest
+            func.getRegistrationInfo = handler.getRegistrationInfo
+            return func
         except Exception:
             print 'Error in setting {} ({}):'.format(func.__name__, lr_ID)
             raise
@@ -79,7 +87,6 @@ class Setting(object):
         self.ID = lr_ID
         self.name = lr_name or func.__name__
         self.returns = [returns] if isinstance(returns, basestring) else returns
-        self.isSetting = True
         self.unflatten = unflatten
         self.description, self.notes = util.parseSettingDoc(func.__doc__)
         self.__doc__ = "Setting wrapper for {}\n\n{}".format(func.__name__, func.__doc__)
@@ -154,20 +161,6 @@ class Setting(object):
                 accepted_types.extend(''.join(x) for x in accept_tuples)
         self.accepts = accepted_types
 
-    def __get__(self, obj, objtype):
-        """Allow direct call on settings from within the Server code
-
-        Uses the python descriptor protocol.
-        """
-        # When called on an instance, we return the setting function
-        # to allow direct calling.  When called on the class we return
-        # the Setting object so that the server code can call
-        # handleRequest
-        if obj:
-            return types.MethodType(self.func, obj, objtype)
-        else:
-            return self
-        
     def handleRequest(self, server, c, flat_data):
         data_type = flat_data.tag
 
@@ -358,7 +351,6 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         f.name = lr_name or f.__name__
         f.accepts = accepts_s
         f.returns = returns
-        f.isSetting = True
         f.handleRequest = handleRequest
 
         # this is the data that will be sent to the manager to

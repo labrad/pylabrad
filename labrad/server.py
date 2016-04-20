@@ -256,11 +256,10 @@ class LabradServer(object):
         return T.Error(msg, code)
 
     # registering setting and signal handlers
-    @classmethod
-    def _findSettingHandlers(cls):
+    def _findSettingHandlers(self):
         """Find all settings defined for this server."""
         # this is an ad-hoc test; we really should check for the IRequestHandler interface
-        members = [getattr(cls, name) for name in dir(cls)]
+        members = [getattr(self, name) for name in dir(self)]
         handlers = [m for m in members if hasattr(m, 'handleRequest')]
         return sorted(handlers, key=attrgetter('ID'))
 
