@@ -221,7 +221,7 @@ def registerType(cls, t):
     immediately from the python class.
     """
     classes = cls if isinstance(cls, tuple) else (cls,)
-    t = parseTypeTag(t) if isinstance(t, str) else t
+    t = parseTypeTag(t) if isinstance(t, basestring) else t
     for cls in classes:
         _types[cls] = t
 
@@ -288,9 +288,9 @@ def unflatten(s, t, endianness='>'):
     created the parseTypeTag function.  At present, the default
     unflatteners are called at each stage, according to t.
     """
-    if isinstance(t, str):
+    if isinstance(t, basestring):
         t = parseTypeTag(t)
-    if isinstance(s, str):
+    if isinstance(s, bytes):
         s = Buffer(s)
     return t.__unflatten__(s, endianness)
 
