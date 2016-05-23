@@ -158,7 +158,7 @@ class Setting(object):
                 accepted_types.append('_')
             else:
                 accept_tuples = itertools.product(*[params[arg] for arg in args[:i]])
-                accepted_types.extend(''.join(x) for x in accept_tuples)
+                accepted_types.extend(combine_type_tags(x) for x in accept_tuples)
         self.accepts = accepted_types
 
     def handleRequest(self, server, c, flat_data):
@@ -186,6 +186,24 @@ class Setting(object):
         return (self.ID, self.name, self.description,
                 self.accepts, self.returns, self.notes)
 
+
+def combine_type_tags(tags):
+    """Combine one or more type tag strings into a single type tag.
+
+    We cannot simply concatenate the tag strings because some of the input tags
+    may have trailing comments.
+
+    Args:
+        tags (iterable[str]): The type tags to be combined into one type.
+
+    Returns:
+        (string): A tag representing a cluster of the given tags.
+    """
+    if len(tags) == 1:
+        return tags[0]
+
+    types = [T.parseTypeTag(tag) for tag in tags]
+    return str(T.LRCluster(*types))
 
 
 class MessageHandler(object):
