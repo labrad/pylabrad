@@ -158,7 +158,7 @@ class Setting(object):
                 accepted_types.append('_')
             else:
                 accept_tuples = itertools.product(*[params[arg] for arg in args[:i]])
-                accepted_types.extend(make_type_string(x) for x in accept_tuples)
+                accepted_types.extend(combine_type_tags(x) for x in accept_tuples)
         self.accepts = accepted_types
 
     def handleRequest(self, server, c, flat_data):
@@ -187,8 +187,8 @@ class Setting(object):
                 self.accepts, self.returns, self.notes)
 
 
-def make_type_string(tags):
-    """Make an accepted type string for the given list of tags.
+def combine_type_tags(tags):
+    """Combine one or more type tag strings into a single type tag.
 
     We cannot simply concatenate the tag strings because some of the input tags
     may have trailing comments.

@@ -15,7 +15,6 @@ class DummyServer(LabradServer):
 
 def test_setting_types_with_comments():
     accepted_tags = DummyServer.dummy_setting.accepts
-    print accepted_tags
     accepted_types = [types.parseTypeTag(s) for s in accepted_tags]
     assert len(accepted_types) == 1
     assert accepted_types[0] == types.parseTypeTag('sb')
