@@ -308,8 +308,6 @@ class LabradTypesTests(unittest.TestCase):
 
     def testNumpySupport(self):
         """Test flattening and unflattening of numpy arrays"""
-        import numpy as np
-
         # TODO: flesh this out with more array types
         a = np.array([1, 2, 3, 4, 5], dtype='int32')
         b = T.unflatten(*T.flatten(a))
@@ -319,6 +317,13 @@ class LabradTypesTests(unittest.TestCase):
         self.assertTrue(len(T.flatten(np.float64(3.15))[0]) == 8)
         with self.assertRaises(T.FlatteningError):
             T.flatten(np.int64(-5), T.LRWord())
+
+    def testNumpyArrayScalar(self):
+        with self.assertRaises(TypeError):
+            T.flatten(np.array(5))
+        with self.assertRaises(TypeError):
+            T.flatten(U.ValueArray(np.array(5), 'ns'))
+
 
     def testIntegerRanges(self):
         """Test flattening of out-of-range integer values"""
