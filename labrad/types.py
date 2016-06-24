@@ -1095,7 +1095,7 @@ class LRList(LRType):
         self.depth = depth
 
     def __str__(self):
-        depth = str(self.depth) if self.depth > 1 else ''
+        depth = str(self.depth) if self.depth != 1 else ''
         elem = str(self.elem) if self.elem is not None else '_'
         return '*%s%s' % (depth, elem)
 
@@ -1260,12 +1260,16 @@ class LRList(LRType):
         Lists must be homogeneous and rectangular.
         """
         if isinstance(L, np.ndarray):
+            if L.ndim == 0:
+                raise TypeError("can't flatten 0-dimensional array")
             if (self.elem <= LRValue() and
                     not (self.elem.unit is None or self.elem.unit == '')):
                 msg = "Can't flatten ndarray to {}".flatten(self)
                 raise TypeError(msg)
             return self.__flatten_array__(L, endianness)
         if isinstance(L, U.ValueArray):
+            if L.ndim == 0:
+                raise TypeError("can't flatten 0-dimensional ValueArray")
             return self.__flatten_ValueArray__(L, endianness)
         if self.elem == LRAny():
             self.elem = self.__lrtype__(L).elem
