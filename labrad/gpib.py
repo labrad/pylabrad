@@ -289,7 +289,7 @@ class ManagedDeviceServer(LabradServer):
         """
 
         """
-        #yield self.client.refresh()
+        yield self.client.refresh()
         manager = self.client[self.deviceManager]
         #If we have a device identification function register it with the device manager
         if hasattr(self, 'deviceIdentFunc'):
