@@ -62,17 +62,16 @@ class AsyncioExecutor(futures.Executor):
 
     def submit(self, fn, *args, **kwargs):
         f = futures.Future()
-        @asyncio.coroutine
-        def task():
+        async def task():
             loop = asyncio.get_event_loop()
             if loop.is_closed():
                 f.set_exception(Exception('asyncio event loop closed'))
             try:
-                result = yield from fn(*args, **kwargs)
+                result = await fn(*args, **kwargs)
                 f.set_result(result)
             except Exception as e:
                 f.set_exception(e)
-        self._loop.call_soon_threadsafe(asyncio.async, task())
+        asyncio.run_coroutine_threadsafe(task(), self._loop)
         return f
 
     submit.__doc__ = futures.Executor.submit.__doc__
