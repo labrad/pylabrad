@@ -185,7 +185,7 @@ class GPIBDeviceServer(DeviceServer):
         return self.selectedDevice(c).query(query)
 
     @setting(1004, 'GPIB Binary Query', bin_query='s', byte_format='s',
-             big_endian='b', returns='s')
+             big_endian='b', returns='*v[]')
     def gpib_query_binary_values(self, c, bin_query, byte_format, big_endian):
         """Write a string over GPIB and read the response."""
         return self.selectedDevice(c).query_binary_values(bin_query,
@@ -504,15 +504,21 @@ class GPIBManagedServer(ManagedDeviceServer):
         return self.selectedDevice(c).query(query, timeout=timeout)
 
     @setting(1004, 'GPIB Binary Query', bin_query='s', byte_format='s',
-             big_endian='s',timeout='v[s]', returns='*v[]')
+             big_endian='b', timeout='v[s]', returns='*v[]')
     def gpib_query_binary_values(self, c, bin_query, byte_format, big_endian,
                                  timeout=None):
         """Write a string over GPIB; read and parsethe response."""
-        return self.selectedDevice(c).query_binary_values(bin_query,
+
+        resp = self.selectedDevice(c).query_binary_values(bin_query,
                                                           byte_format,
                                                           big_endian,
                                                           timeout=timeout)
-
+        print 'type(resp): {}'.format(type(resp))
+        print 'type(resp): {}'.format(type(resp))
+        print 'type(resp): {}'.format(type(resp))
+        print 'type(resp): {}'.format(type(resp))
+        print 'type(resp): {}'.format(type(resp))
+        return resp
 def _gpibServers(cxn):
     """Get a list of available GPIB servers."""
     gpibs = []

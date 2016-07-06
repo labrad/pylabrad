@@ -64,7 +64,7 @@ value['<unit>'] -> Return a floating point representation of value expressed
 		   in the specified units.  (5*MHz)['Hz'] -> 5000000.0.
 		   This coexists with indexing of ValueArrays.
 value.sqrt()	   Calculate the sqrt of value including the units.
-value.unit	   The Unit object represeting this Value's unit.
+value.unit	   The Unit object representing this Value's unit.
 value.units	   (note plural spelling): string representation of unit
 
 V. Dimensionless values
@@ -84,12 +84,12 @@ If 'omega' and 't' have the appropriate units this will just work.  A
 slight wrinkle on this is that the result is not actually a pure
 'float'.  The result is actually a special class DimensionlessFloat
 (or similar for complex or array types) that is a subclass of 'float'
-but implements the WithUnit API.  isDimensionless() alwasy returns
+but implements the WithUnit API.  isDimensionless() always returns
 true and so forth.  This allows code that works with units to not need
 a special case for dimensionless quantities, while allowing
 dimensionless quantities to work transparently with numerical code.
 
-Dimensionless quantities will propogate their type on simple
+Dimensionless quantities will propagate their type on simple
 arithmetic with other dimensionless quantities or bare
 float/complex/np.ndarray objects.  That is, +,-,*,/,//,-x, abs(x)
 where one or both operands is a dimensionless quantity should always
