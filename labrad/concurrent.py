@@ -59,10 +59,10 @@ class MappedFuture(futures.Future):
             except Exception as e:
                 self.set_exception(e)
         src.add_done_callback(handle_result)
-        self._src = src
+        self.__src = src
 
     def cancel(self):
-        return super(MappedFuture, self).cancel() and self._src.cancel()
+        return super(MappedFuture, self).cancel() and self.__src.cancel()
 
 
 class MutableFuture(MappedFuture):
@@ -81,14 +81,14 @@ class MutableFuture(MappedFuture):
     """
     def __init__(self, source):
         super(MutableFuture, self).__init__(source, None)
-        self._callbacks = []
-        self._done = False
-        self._result = None
-        self._error = None
+        self.__callbacks = []
+        self.__done = False
+        self.__result = None
+        self.__error = None
 
     def addCallback(self, func, *args, **kw):
         warnings.warn("addCallback is deprecated; use map_future instead.")
-        self._callbacks.append((func, args, kw))
+        self.__callbacks.append((func, args, kw))
 
     def wait(self):
         """Alias for the result() method; for backwards compatibility."""
@@ -96,22 +96,22 @@ class MutableFuture(MappedFuture):
         return self.result()
 
     def result(self, timeout=None):
-        if not self._done:
-            self._result = super(MutableFuture, self).result(timeout)
-            self._done = True
-        if self._error is not None:
-            raise self._error
-        while len(self._callbacks):
-            func, args, kw = self._callbacks.pop(0)
+        if not self.__done:
+            self.__result = super(MutableFuture, self).result(timeout)
+            self.__done = True
+        if self.__error is not None:
+            raise self.__error
+        while len(self.__callbacks):
+            func, args, kw = self.__callbacks.pop(0)
             try:
-                self._result = func(self._result, *args, **kw)
+                self.__result = func(self.__result, *args, **kw)
             except Exception as e:
-                self._error = e
+                self.__error = e
                 raise e
-        return self._result
+        return self.__result
 
     def exception(self, timeout=None):
-        if not self._done:
-            self._error = super(MutableFuture, self).exception(timeout)
-            self._done = True
-        return self._error
+        if not self.__done:
+            self.__error = super(MutableFuture, self).exception(timeout)
+            self.__done = True
+        return self.__error
