@@ -68,20 +68,10 @@ class ClientTests(unittest.TestCase):
         resp = resp.result()
         self.assertEqual(resp, TEST_STR)
 
-        # allow .wait() for backwards compatibility
-        resp = pts.echo.future(TEST_STR)
-        resp = resp.wait()
-        self.assertEqual(resp, TEST_STR)
-
         # allow calling with wait=False for backwards compatibility
         resp = pts.echo(TEST_STR, wait=False)
         resp = resp.result()
         self.assertEqual(resp, TEST_STR)
-
-        resp = pts.echo(TEST_STR, wait=False)
-        resp = resp.wait()
-        self.assertEqual(resp, TEST_STR)
-
 
     def testCompoundPacket(self):
         pts = self._get_tester()
@@ -120,18 +110,9 @@ class ClientTests(unittest.TestCase):
         resp = resp.result()
         self.assertEqual(resp.two, TEST_STR)
 
-        # allow calling .wait() for backwards compatibility
-        resp = pkt2.send_future()
-        resp = resp.wait()
-        self.assertEqual(resp.two, TEST_STR)
-
         # allow sending with wait=False for backwards compatibility
         resp = pkt2.send(wait=False)
         resp = resp.result()
-        self.assertEqual(resp.two, TEST_STR)
-
-        resp = pkt2.send(wait=False)
-        resp = resp.wait()
         self.assertEqual(resp.two, TEST_STR)
 
     def testTupleKeys(self):
