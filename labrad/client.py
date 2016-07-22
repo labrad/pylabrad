@@ -23,7 +23,7 @@ import warnings
 
 from labrad import constants as C, types as T
 from labrad.backend import ManagerService
-from labrad.concurrent import map_future, MutableFuture
+from labrad.concurrent import map_future
 from labrad.errors import Error
 from labrad.support import (mangle, indent, PrettyMultiDict, FlatPacket,
                             PacketRecord, PacketResponse, hexdump)
@@ -77,7 +77,7 @@ class SettingWrapper(object):
         f = self._server._send([(self.ID, flat)], **kw)
         if wrap:
             f = map_future(f, lambda resp: resp[0][1])
-        return MutableFuture(f)
+        return f
 
     # data to be loaded on demand
     @property
@@ -339,7 +339,7 @@ class PacketWrapper(HasDynamicAttrs):
         records = [(rec.ID, rec.flat) for rec in self._packet]
         f = self._server._send(records, **dict(self._kw, **kw))
         f = map_future(f, PacketResponse, self._server, self._packet)
-        return MutableFuture(f)
+        return f
 
     @property
     def settings(self):
