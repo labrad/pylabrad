@@ -56,7 +56,7 @@ class OAuthToken(object):
         self.token_type = resp['token_type']
 
 
-def get_token(client_id, client_secret, headless=False, retries=10, timeout=60):
+def get_token(client_id, client_secret, headless=False, timeout=60):
     """Get id token by asking the user to complete OAuth login flow.
 
     If we have a cached id_token for this client_id that is not expired, we use
@@ -76,8 +76,6 @@ def get_token(client_id, client_secret, headless=False, retries=10, timeout=60):
             we print a url for the user to visit to get the authorization code,
             which they must then paste into the terminal. The headless is useful
             in some scenarios such as when tunneling through ssh.
-        retries (int): The number of times to retry picking a random port for
-            the local http server.
         timeout (int): Amount of time to wait for OAuth login flow to complete,
             in seconds.
 
