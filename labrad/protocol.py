@@ -531,9 +531,8 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
     @inlineCallbacks
     def ping(p):
         resp = yield p._sendManagerRequest(2, 'PING')
-        features = resp.partition(':')[-1]
-        if features:
-            manager_features = set(features.split(','))
+        if isinstance(resp, tuple):
+            manager_features = set(resp[1])
         else:
             manager_features = set()
         returnValue(manager_features)
