@@ -330,6 +330,7 @@ def parseServerOptions(name, exit_on_failure=True, options=None):
             ['node', 'd', getNodeName(), 'Node name.'],
             ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
             ['port', 'p', None, 'Manager port.', int],
+            ['username', 'u', None, 'Username.'],
             ['password', 'w', None, 'Login password.'],
             ['tls', 's', C.MANAGER_TLS,
              'TLS mode for connecting to manager (on/starttls/off)']]
@@ -338,10 +339,6 @@ def parseServerOptions(name, exit_on_failure=True, options=None):
     config['tls'] = C.check_tls_mode(config['tls'])
     try:
         config.parseOptions(options=options)
-        if config['password'] is None:
-            config['password'] = support.get_password(host=config['host'],
-                                                      port=config['port'],
-                                                      prompt=False)
         if config['port'] is None:
             tls_on = config['tls'] == 'on'
             config['port'] = C.MANAGER_PORT_TLS if tls_on else C.MANAGER_PORT
@@ -384,7 +381,6 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
             condition. Otherwise, the caller must arrange to call reactor.stop.
     """
     from labrad import protocol
-    from twisted.internet import reactor
 
     config = parseServerOptions(name=srv.name)
     updateServerOptions(srv, config)
@@ -400,7 +396,7 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
         tls_mode = config['tls']
         try:
             p = yield protocol.connect(host, port, tls_mode)
-            yield p.authenticate(config['password'])
+            yield p.authenticate(config['username'], config['password'])
             yield srv.startup(p)
             yield srv.onShutdown()
             log.msg('Disconnected cleanly.')
@@ -417,8 +413,8 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
         reactor.run()
 
 @contextlib.contextmanager
-def syncRunServer(srv, host=C.MANAGER_HOST, port=None, password=None,
-                  tls_mode=C.MANAGER_TLS):
+def syncRunServer(srv, host=C.MANAGER_HOST, port=None, username=None,
+                  password=None, tls_mode=C.MANAGER_TLS):
     """Run a labrad server of the specified class in a synchronous context.
 
     Returns a context manager to be used with python's with statement that
@@ -432,13 +428,10 @@ def syncRunServer(srv, host=C.MANAGER_HOST, port=None, password=None,
     if port is None:
         port = C.MANAGER_PORT_TLS if tls_mode == 'on' else C.MANAGER_PORT
 
-    if password is None:
-        password = C.PASSWORD
-
     @inlineCallbacks
     def start_server():
         p = yield protocol.connect(host, port, tls_mode)
-        yield p.authenticate(password)
+        yield p.authenticate(username, password)
         yield srv.startup(p)
 
     @inlineCallbacks

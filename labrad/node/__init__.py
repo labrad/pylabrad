@@ -88,7 +88,7 @@ from twisted.python import usage
 from twisted.python.runtime import platformType
 
 import labrad
-from labrad import protocol, util, types as T, constants as C
+from labrad import auth, protocol, util, types as T, constants as C
 from labrad.server import LabradServer, setting
 import labrad.support
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
@@ -413,10 +413,12 @@ class Node(object):
     """
     reconnectDelay = 10
 
-    def __init__(self, nodename, host, port, password, tls_mode=C.MANAGER_TLS):
+    def __init__(self, nodename, host, port, username, password,
+                 tls_mode=C.MANAGER_TLS):
         self.nodename = nodename
         self.host = host
         self.port = port
+        self.username = username
         self.password = password
         self.tls_mode = tls_mode
 
@@ -428,9 +430,9 @@ class Node(object):
             print 'Connecting to {}:{}...'.format(self.host, self.port)
             try:
                 p = yield protocol.connect(self.host, self.port, self.tls_mode)
-                yield p.authenticate(self.password)
+                yield p.authenticate(self.username, self.password)
                 node = NodeServer(self.nodename, self.host, self.port,
-                                  self.password)
+                                  p.credential)
                 yield node.startup(p)
             except Exception:
                 log.error('Node failed to start', exc_info=True)
@@ -580,13 +582,13 @@ class NodeServer(LabradServer):
 
     name = 'node %LABRADNODE%'
 
-    def __init__(self, nodename, host, port, password):
+    def __init__(self, nodename, host, port, credential):
         LabradServer.__init__(self)
         self.nodename = nodename
         self.name = 'node %s' % nodename
         self.host = host
         self.port = port
-        self.password = password
+        self.credential = credential
         self.servers = {}
         self.instances = {}
         self.starters = {}
@@ -769,8 +771,10 @@ class NodeServer(LabradServer):
         environ.update(LABRADNODE=self.nodename,
                        LABRADHOST=self.host,
                        LABRADPORT=str(self.port),
-                       LABRADPASSWORD=self.password,
                        PYTHON=sys.executable)
+        if isinstance(self.credential, auth.Password):
+            environ.update(LABRADUSER=self.credential.username,
+                           LABRADPASSWORD=self.credential.password)
         srv = self.servers[name](environ)
         # TODO check whether an instance with this name already exists
         self.instances[name] = srv
@@ -915,8 +919,10 @@ class NodeServer(LabradServer):
 class NodeOptions(usage.Options):
     optParameters = [
             ['name', 'n', util.getNodeName(), 'Node name.'],
-            ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
             ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
+            ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
+            ['username', 'u', None, 'Login username.'],
+            ['password', 'w', None, 'Login password.'],
             ['tls', '', C.MANAGER_TLS,
              'TLS mode for connecting to manager (on/starttls/off)'],
             ['logfile', 'l', None, 'Enable logging to a file'],
@@ -931,9 +937,10 @@ def makeService(options):
     name = options['name']
     host = options['host']
     port = int(options['port'])
-    password = labrad.support.get_password(host, port)
+    username = options['username']
+    password = options['password']
     tls_mode = C.check_tls_mode(options['tls'])
-    return Node(name, host, port, password, tls_mode)
+    return Node(name, host, port, username, password, tls_mode)
 
 
 def setup_logging(options):

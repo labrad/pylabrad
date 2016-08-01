@@ -3,3 +3,4 @@ futures >= 3.0.4
 twisted >= 14.0.0
 pyOpenSSL >= 0.13
 service_identity
+requests
