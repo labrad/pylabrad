@@ -15,7 +15,6 @@ from __future__ import print_function
 import BaseHTTPServer
 import json
 import os
-import random
 import time
 import urllib
 import urlparse
