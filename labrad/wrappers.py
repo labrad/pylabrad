@@ -393,7 +393,7 @@ def getConnection(host=C.MANAGER_HOST, port=None, name="Python Client",
                   headless=False):
     """Connect to LabRAD and return a deferred that fires the protocol object."""
     p = yield protocol.connect(host, port, tls_mode)
-    yield p.authenticate(password, username, headless)
+    yield p.authenticate(username, password, headless)
     yield p.loginClient(name)
     returnValue(p)
 

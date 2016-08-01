@@ -430,7 +430,7 @@ class Node(object):
             print 'Connecting to {}:{}...'.format(self.host, self.port)
             try:
                 p = yield protocol.connect(self.host, self.port, self.tls_mode)
-                yield p.authenticate(self.password, self.username)
+                yield p.authenticate(self.username, self.password)
                 node = NodeServer(self.nodename, self.host, self.port,
                                   p.credential)
                 yield node.startup(p)

@@ -325,7 +325,7 @@ class LabradProtocol(protocol.Protocol):
             del self.listeners[key]
 
     @inlineCallbacks
-    def authenticate(self, password, username=None, headless=False):
+    def authenticate(self, username=None, password=None, headless=False):
         """Authenticate to the manager using the given credentials."""
 
         @inlineCallbacks
@@ -349,7 +349,10 @@ class LabradProtocol(protocol.Protocol):
         if username is None:
             username = C.USERNAME
         if password is None:
-            password = C.PASSWORD
+            cred = auth.get_password(self.host, self.port, username,
+                                     prompt=False)
+            if cred is not None:
+                password = cred.password
 
         if password is not None or username is not None:
             # Use password-based auth
