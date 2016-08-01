@@ -129,17 +129,9 @@ def get_token(client_id, client_secret, headless=False, retries=10, timeout=60):
             def log_request(self, *args, **kw):
                 pass
 
-        for i in xrange(retries):
-            local_port = random.randrange(10000, 50000)
-            try:
-                httpd = BaseHTTPServer.HTTPServer(('127.0.0.1', local_port),
-                                                  OAuthHandler)
-                break
-            except Exception as e:
-                print('Failed to launch http server, attempt={}/{}, port={}: {}'
-                      .format(i+1, retries, local_port, e))
-        else:
-            raise Exception('Failed to launch http server')
+        # Start local http server to receive redirect on random port
+        httpd = BaseHTTPServer.HTTPServer(('localhost', 0), OAuthHandler)
+        _, local_port = httpd.server_address
 
         redirect_uri = 'http://localhost:{}'.format(local_port)
         login_uri = _create_login_uri(client_id, redirect_uri)
