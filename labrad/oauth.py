@@ -15,6 +15,7 @@ from __future__ import print_function
 import BaseHTTPServer
 import json
 import os
+import threading
 import time
 import urllib
 import urlparse
@@ -47,11 +48,16 @@ TOKEN_PATH = os.path.join(os.path.expanduser('~'), '.labrad', 'client')
 TOKEN_FILE = os.path.join(TOKEN_PATH, 'oauth_tokens.json')
 
 
+# In-memory cache of OAuth tokens. Lasts until the python session is closed.
+_token_cache = {}
+_token_cache_lock = threading.RLock()
+
+
 class OAuthToken(object):
     def __init__(self, resp):
         self.access_token = resp['access_token']
-        self.id_token = resp['id_token']
         self.expires_at = resp['expires_at']
+        self.id_token = resp['id_token']
         self.refresh_token = resp['refresh_token']
         self.token_type = resp['token_type']
 
@@ -82,19 +88,19 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
     Returns:
         (str) id_token to be passed to the manager to identify the user.
     """
-    cached = _load_token(client_id)
+    cached = _get_cached_token(client_id)
     if cached is None:
         print('No cached token. Logging in...')
     else:
-        if cached['expires_at'] > time.time() + 600:
+        if cached.expires_at > time.time() + 600:
             print('Using cached id_token...')
-            return OAuthToken(cached)
+            return cached
         print('Trying cached refresh_token...')
         try:
             token = _refresh_token(client_id, client_secret,
-                                   cached['refresh_token'])
+                                   cached.refresh_token)
             _cache_token(client_id, token)
-            return OAuthToken(token)
+            return token
         except Exception:
             print('Failed to refresh token. Logging in...')
 
@@ -152,8 +158,9 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
     }
     response = _send_request(TOKEN_URI, data)
     response['expires_at'] = int(time.time() + response['expires_in'])
-    _cache_token(client_id, response)
-    return OAuthToken(response)
+    token = OAuthToken(response)
+    _cache_token(client_id, token)
+    return token
 
 
 # HTTP helpers.
@@ -189,7 +196,7 @@ def _refresh_token(client_id, client_secret, refresh_token):
         refresh_token (str): Token to use to try to fetch a refreshed id_token.
 
     Returns:
-        (dict) JSON refresh response. See google OAuth docs.
+        (OAuthToken) Token containing information from JSON response.
     """
     data = {
         'refresh_token': refresh_token,
@@ -200,7 +207,7 @@ def _refresh_token(client_id, client_secret, refresh_token):
     response = _send_request(TOKEN_URI, data)
     response['expires_at'] = int(time.time() + response['expires_in'])
     response['refresh_token'] = refresh_token
-    return response
+    return OAuthToken(response)
 
 
 def _send_request(url, params):
@@ -215,17 +222,53 @@ def _send_request(url, params):
 
 def clear_token_cache():
     """Discard all cached OAuth tokens."""
-    _save_tokens({})
+    with _token_cache_lock:
+        _token_cache = {}
+        _save_tokens({})
 
 
-def _ensure_token_file():
-    """Ensure that the token cache file exists and has appropriate perms."""
-    if not os.path.exists(TOKEN_PATH):
-        os.makedirs(TOKEN_PATH)
-    if not os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, 'w') as f:
-            pass
-    os.chmod(TOKEN_FILE, 0o600)
+def _get_cached_token(client_id):
+    """Get cached token information for the given OAuth client_id.
+
+    Args:
+        client_id (str): The OAuth client_id for the app to be authorized.
+
+    Returns:
+        (OAuthToken or None): Token for the given client_id or None if we do
+        not have a cached token.
+    """
+    with _token_cache_lock:
+        if client_id in _token_cache:
+            return _token_cache[client_id]
+        tokens = _load_tokens()
+        if client_id in tokens:
+            return OAuthToken(tokens[client_id])
+        return None
+
+
+def _cache_token(client_id, token, persistent=True):
+    """Cache token response for the given client_id.
+
+    Args:
+        client_id (str): The OAuth client_id for the app to be authorized.
+        resp (OAuthToken): Dict of JSON response parameters from a successful OAuth
+            API call. Should contain 'access_token', 'id_token', 'expires_in',
+            'refresh_token', and 'token_type' entries. We convert 'expires_in'
+            from a relative time to an absolute epoch time and store it as
+            'expires_at'.
+    """
+    with _token_cache_lock:
+        _token_cache[client_id] = token
+        if persistent:
+            tokens = _load_tokens()
+            tokens[client_id] = {
+                'access_token': token.access_token,
+                'expires_at': token.expires_at,
+                'id_token': token.id_token,
+                'refresh_token': token.refresh_token,
+                'token_type': token.token_type
+            }
+            _save_tokens(tokens)
 
 
 def _load_tokens():
@@ -245,29 +288,12 @@ def _save_tokens(tokens):
         json.dump(tokens, f, sort_keys=True, indent=4)
 
 
-def _cache_token(client_id, resp):
-    """Cache token response for the given client_id.
+def _ensure_token_file():
+    """Ensure that the token cache file exists and has appropriate perms."""
+    if not os.path.exists(TOKEN_PATH):
+        os.makedirs(TOKEN_PATH)
+    if not os.path.exists(TOKEN_FILE):
+        with open(TOKEN_FILE, 'w') as f:
+            pass
+    os.chmod(TOKEN_FILE, 0o600)
 
-    Args:
-        client_id (str): The OAuth client_id for the app to be authorized.
-        resp (dict): Dict of JSON response parameters from a successful OAuth
-            API call. Should contain 'access_token', 'id_token', 'expires_in',
-            'refresh_token', and 'token_type' entries. We convert 'expires_in'
-            from a relative time to an absolute epoch time and store it as
-            'expires_at'.
-    """
-    tokens = _load_tokens()
-    tokens[client_id] = {
-        'access_token': resp['access_token'],
-        'id_token': resp['id_token'],
-        'expires_at': resp['expires_at'],
-        'refresh_token': resp['refresh_token'],
-        'token_type': resp['token_type']
-    }
-    _save_tokens(tokens)
-
-
-def _load_token(client_id):
-    """Load cached token information for the given OAuth client_id."""
-    tokens = _load_tokens()
-    return tokens.get(client_id, None)
