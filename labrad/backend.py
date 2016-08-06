@@ -14,50 +14,7 @@ from labrad import auth, constants as C, support, thread, types as T
 from labrad.wrappers import getConnection
 
 
-class BaseConnection(object):
-    def __init__(self, name=None):
-        self.name = name or 'Python Client ({})'.format(support.getNodeName())
-        self._connected = threading.Event()
-        self._nextContext = 1
-
-    def context(self):
-        """Create a new context for use with this connection"""
-        ctx = 0, self._nextContext
-        self._nextContext += 1
-        return ctx
-
-    def connect(self, host=C.MANAGER_HOST, port=None, timeout=C.TIMEOUT,
-                password=None, tls_mode=C.MANAGER_TLS, username=None,
-                headless=False):
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-        self.tls_mode = tls_mode
-        self.username = username
-        self.password = password
-        self.headless = headless
-        self.ID = self._connect(password, timeout, tls_mode=tls_mode,
-                                username=username, headless=headless)
-
-    @property
-    def connected(self):
-        return self._connected.is_set()
-
-    def disconnect(self):
-        if self.connected:
-            self._disconnect()
-
-    def spawn(self):
-        """Start a new independent backend connection to the same manager."""
-        cls = self.__class__
-        inst = cls(name=self.name)
-        inst.connect(host=self.host, port=self.port, timeout=self.timeout,
-                     password=self.password, tls_mode=self.tls_mode,
-                     username=self.username, headless=self.headless)
-        return inst
-
-
-class TwistedConnection(BaseConnection):
+class TwistedConnection(object):
     def __init__(self, name=None):
         self.name = name or 'Python Client ({})'.format(support.getNodeName())
         self._connected = threading.Event()
