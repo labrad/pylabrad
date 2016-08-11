@@ -8,6 +8,12 @@ pylabrad is an interface to the LabRAD system in python with support for both cl
 For general information about the LabRAD system/protocol see [the labrad repository](https://github.com/labrad/labrad) and associated [wiki](https://github.com/labrad/labrad/wiki).
 For help getting started and understanding pylabrad take a look at the [wiki](https://github.com/labrad/pylabrad/wiki).
 
+## Manager Compatibility
+
+Compatibility with the Sourceforge manager and explorer is no longer supported.
+Instead, use the new [scalabrad manager](https://github.com/labrad/scalabrad).
+The user interface for the manager and node along with the registry editor and grapher is now [web-based (scalabrad-web)](https://github.com/labrad/scalabrad-web).
+
 ## Node Server
 
 In addition to the basic labrad client/server support, this package also includes a tool called the "node" server in the `labrad.node` package.
