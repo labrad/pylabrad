@@ -10,7 +10,7 @@ For help getting started and understanding pylabrad take a look at the [wiki](ht
 
 ## Manager Compatibility
 
-Compatibility with the Sourceforge manager and explorer is no longer supported.
+As of version 0.96.0, pylabrad is no longer compatible with the Delphi labrad manager available from Sourceforge.
 Instead, use the new [scalabrad manager](https://github.com/labrad/scalabrad).
 The user interface for the manager and node along with the registry editor and grapher is now [web-based (scalabrad-web)](https://github.com/labrad/scalabrad-web).
 
