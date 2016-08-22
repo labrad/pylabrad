@@ -20,9 +20,8 @@ In addition to the basic labrad client/server support, this package also include
 This server just runs other labrad servers, allowing you to start and stop them by sending labrad requests to the node.
 By running node servers on one or more machines connected to labrad, you can remotely control which labrad servers are running on those machines.
 This can be very useful in distributed setups.
-For more information, see the [source](https://github.com/labrad/pylabrad/blob/master/labrad/node/__init__.py).
-To configure the node (e.g., define directories containing servers), it is necessary to set several registry keys;
-see the [node docstring](https://github.com/labrad/pylabrad/blob/master/labrad/node/__init__.py) for details.
+For more information, including required configuration in the LabRAD registry (to, e.g., define directories containing servers),
+see the [node docstring](https://github.com/labrad/pylabrad/blob/master/labrad/node/__init__.py).
 The node module is executable, so you should launch it with `python -m labrad.node`.
 To see documentation of the available command-line parameters run `python -m labrad.node --help`.
 

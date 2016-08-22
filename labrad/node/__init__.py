@@ -36,8 +36,6 @@ configuration keys are:
                     along with all their subdirs.
   extensions (*s): what files to look at, e.g. ['.ini', '.py', '.exe']
   autostart (*s): list of servers to be autostarted
-  javapath (s): Path for java VM, e.g. "C:\\Java\\jre1.7.0\\bin\\java.exe".
-                Needed if java or scala servers are used.
 
 Changes required on the server:
 
