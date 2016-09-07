@@ -308,7 +308,8 @@ class FlatData(collections.namedtuple('FlatDataBase', ['bytes', 'tag', 'endianne
     __slots__ = ()
     def unflatten(self, endianness='>'):
         return unflatten(self.bytes, self.tag, self.endianness)
-    
+
+
 def flatten(obj, types=None, endianness='>'):
     """Flatten python data into labrad data.
 
@@ -1311,7 +1312,8 @@ class LRList(LRType):
                     raise Exception("Narrowing typecast loses information while flattening numpy array: dtype={0}, wanted_dtype={1}".format(a.dtype, wanted_dtype))
                 a = a_cast
         else:
-            elems = (flatten(i, endianness=endianness).bytes for i in a.flat)
+            elems = (self.elem.flatten(i, endianness=endianness).bytes
+                     for i in a.flat)
             return dims + ''.join(elems), self
         return dims + a.tostring(), self
 

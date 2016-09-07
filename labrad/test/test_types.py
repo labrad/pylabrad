@@ -362,6 +362,15 @@ class LabradTypesTests(unittest.TestCase):
         y = T.unflatten(*flat)
         self.assertTrue(np.all(x == y))
 
+    def testFlattenArrayToClusterList(self):
+        """Fail if trying to flatten a numpy array to type with incorrect shape.
+
+        See https://github.com/labrad/pylabrad/issues/290.
+        """
+        arr = np.arange(5, dtype='float64')
+        with self.assertRaises(T.FlatteningError):
+            T.flatten(arr, types=['*(v, v)'])
+
     def testCanFlattenFlatData(self):
         x = ('this is a test', -42, [False, True])
         flat = T.flatten(x)
