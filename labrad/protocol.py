@@ -381,11 +381,17 @@ class LabradProtocol(protocol.Protocol):
             # Have neither username nor password.
             # Check manager-supported auth methods; use OAuth if available.
             manager_auth_methods = yield get_manager_auth_methods()
-            client_auth_methods = {'password', 'username+password', 'oauth_token'}
+            oauth_methods = {'oauth_token', 'oauth_access_token'}
+            client_auth_methods = {'password', 'username+password'} | oauth_methods
             allowed = client_auth_methods & manager_auth_methods
 
-            if 'oauth_token' in allowed:
-                auth_info = yield self._sendManagerRequest(102, 'oauth_token')
+            if oauth_methods & allowed:
+                if 'oauth_access_token' in allowed:
+                    # Prefer using access token if manager support it.
+                    method = 'oauth_access_token'
+                else:
+                    method = 'oauth_token'
+                auth_info = yield self._sendManagerRequest(102, method)
                 auth_info = dict(auth_info)
                 credential = oauth.get_token(auth_info['client_id'],
                                              auth_info['client_secret'],
@@ -421,10 +427,12 @@ class LabradProtocol(protocol.Protocol):
             auth.cache_password(self.host, self.port, credential)
 
         elif isinstance(credential, oauth.OAuthToken):
-            method = 'oauth_token'
             require_secure_connection(method)
             try:
-                data = credential.id_token
+                if method == 'oauth_access_token':
+                    data = credential.access_token
+                else:
+                    data = credential.id_token
                 resp = yield self._sendManagerRequest(103, (method, data))
             except Exception as e:
                 raise errors.LoginFailedError(str(e))
