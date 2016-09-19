@@ -387,7 +387,7 @@ class LabradProtocol(protocol.Protocol):
 
             if oauth_methods & allowed:
                 if 'oauth_access_token' in allowed:
-                    # Prefer using access token if manager support it.
+                    # Prefer using access token if manager supports it.
                     method = 'oauth_access_token'
                 else:
                     method = 'oauth_token'
