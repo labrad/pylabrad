@@ -472,7 +472,9 @@ class LabradProtocol(protocol.Protocol):
 
     @inlineCallbacks
     def _doLogin(self, *ident):
-        # send identification
+        # Store name, which is always the first identification param.
+        self.name = ident[0]
+        # Send identification.
         self.ID = yield self._sendManagerRequest(0, (1L,) + ident)
 
 

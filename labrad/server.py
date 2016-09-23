@@ -206,7 +206,7 @@ class LabradServer(object):
 
         self.__protocol = None
         self.__async_client = None
-        self.__sync_client = threading.local()
+        self.__thread_data = threading.local()
 
     def _dispatch(self, func, *args, **kw):
         return func(*args, **kw)
@@ -373,10 +373,11 @@ class LabradServer(object):
             # We're in the reactor thread, so can return shared async client.
             return self.__async_client
         else:
-            if not hasattr(self.__sync_client, 'cxn'):
-                backend = labrad.backend.TwistedConnection(async_cxn=self.__protocol)
-                self.__sync_client.cxn = Client(backend)
-            return self.__sync_client.cxn
+            data = self.__thread_data
+            if not hasattr(data, 'sync_client'):
+                backend = labrad.backend.TwistedConnection(self.__protocol)
+                data.sync_client = Client(backend)
+            return data.sync_client
 
     # Network events
     # these methods are called by network events from twisted
