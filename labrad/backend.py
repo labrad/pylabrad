@@ -19,18 +19,16 @@ class TwistedConnection(object):
         self.name = name or 'Python Client ({})'.format(support.getNodeName())
         self._connected = threading.Event()
         self._nextContext = 1
+        # This connection can be shared between multiple threads with
+        # separate Client objects.  Access to mutable state needs to
+        # be protected by a lock.
+        self._lock = threading.Lock()
 
     def connect(self, host=C.MANAGER_HOST, port=None, timeout=C.TIMEOUT,
                 password=None, tls_mode=C.MANAGER_TLS, username=None,
                 headless=False):
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-        self.tls_mode = tls_mode
-        self.username = username
-        self.password = password
-        self.headless = headless
-
+        """Get a protocol object.
+        """
         @defer.inlineCallbacks
         def _connect_deferred():
             cxn = yield getConnection(self.host, self.port, self.name,
@@ -53,9 +51,18 @@ class TwistedConnection(object):
 
             defer.returnValue(cxn)
 
-        thread.startReactor()
-        self.cxn = self.call(_connect_deferred).result()
-        self.ID = self.cxn.ID
+        with self._lock:
+            self.host = host
+            self.port = port
+            self.timeout = timeout
+            self.tls_mode = tls_mode
+            self.username = username
+            self.password = password
+            self.headless = headless
+
+            thread.startReactor()
+            self.cxn = self.call(_connect_deferred).result()
+            self.ID = self.cxn.ID
 
     @property
     def connected(self):
@@ -68,17 +75,19 @@ class TwistedConnection(object):
     def spawn(self):
         """Start a new independent backend connection to the same manager."""
         cls = self.__class__
-        inst = cls(name=self.name)
-        inst.connect(host=self.host, port=self.port, timeout=self.timeout,
-                     password=self.password, tls_mode=self.tls_mode,
-                     username=self.username, headless=self.headless)
-        return inst
+        with self._lock:
+            inst = cls(name=self.name)
+            inst.connect(host=self.host, port=self.port, timeout=self.timeout,
+                         password=self.password, tls_mode=self.tls_mode,
+                         username=self.username, headless=self.headless)
+            return inst
 
     def context(self):
         """Create a new context for use with this connection"""
-        ctx = 0, self._nextContext
-        self._nextContext += 1
-        return ctx
+        with self._lock:
+            ctx = 0, self._nextContext
+            self._nextContext += 1
+            return ctx
 
     def call(self, func, *args, **kw):
         """Run func in the twisted reactor; return result as a future."""

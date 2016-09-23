@@ -438,8 +438,9 @@ class Client(HasDynamicAttrs):
         HasDynamicAttrs.__init__(self)
         self._backend = cxn
         self._mgr = ManagerService(cxn)
+        self._contexts = set()
         if context is None:
-            context = cxn.context()
+            context = self.context()
         self._ctx = context
 
     def __enter__(self):
@@ -489,18 +490,52 @@ class Client(HasDynamicAttrs):
 
     @property
     def connected(self):
-        return self._backend.connected
+        return self._backend and self._backend.connected
 
     def connect(self, host, port=None, timeout=C.TIMEOUT, password=None,
                 tls_mode=C.MANAGER_TLS):
+        """(Re-)Establish a manager connection.
+
+        This is deprecated.  To establish a connection to a new manager,
+        call labrad.connect.  To establish a new connection to the existing
+        manager use Client.spawn().
+        """
         self._backend.connect(host, port=port, timeout=timeout,
                               password=password, tls_mode=tls_mode)
 
     def disconnect(self):
+        """Disconnect from the labrad manager.
+
+        This closes the connection for all Clients.
+        """
         self._backend.disconnect()
 
+    def close(self):
+        """Close this Client
+
+        Any other clients using the same connection will be unaffected.
+        This will expire all contexts allocated with the context() method.
+        It will not expire any contexts explicitly overriden by the user,
+        such as in a call to __init__ or Server.packet()
+        """
+        if self.connected:
+            for c in self._contexts:
+                self.manager.expire_context(context=c)
+        self._backend = None
+        self._mgr = None
+
     def context(self):
-        return self._backend.context()
+        """Allocate a new context.
+
+        The context will be unique relative to any other context allocated on
+        the same socket, even if they come from different client wrappers.
+
+        The allocated context will be cleaned up when the client object
+        is closed/deallocated.
+        """
+        new_ctx = self._backend.context()
+        self._contexts.add(new_ctx)
+        return new_ctx
 
     def spawn(self):
         """Start a new independent connection to the same manager."""
