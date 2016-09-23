@@ -35,7 +35,7 @@ from twisted.python import failure, log, threadable
 
 from labrad import constants as C, types as T, util
 import labrad.backend
-from labrad.client import Client
+import labrad.client
 import labrad.concurrent
 from labrad.decorators import setting
 from labrad.wrappers import ClientAsync
@@ -376,7 +376,7 @@ class LabradServer(object):
             data = self.__thread_data
             if not hasattr(data, 'sync_client'):
                 backend = labrad.backend.TwistedConnection(self.__protocol)
-                data.sync_client = Client(backend)
+                data.sync_client = labrad.client.Client(backend)
             return data.sync_client
 
     # Network events
