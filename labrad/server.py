@@ -20,11 +20,14 @@ Base classes for building asynchronous, context- and request- aware
 servers with labrad.
 """
 
+from __future__ import absolute_import
+
 from datetime import datetime
 from operator import attrgetter
 import threading
 import traceback
 
+from concurrent import futures
 from twisted.internet import defer, reactor, threads
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionDone, ConnectionLost
@@ -33,6 +36,7 @@ from twisted.python import failure, log, threadable
 from labrad import constants as C, types as T, util
 import labrad.backend
 from labrad.client import Client
+import labrad.concurrent
 from labrad.decorators import setting
 from labrad.wrappers import ClientAsync
 
@@ -578,6 +582,10 @@ class LabradServer(object):
 class ThreadedServer(LabradServer):
     """A LabRAD server that dispatches requests to a thread pool."""
 
+    @inlineCallbacks
     def _dispatch(self, func, *args, **kw):
-        return threads.deferToThread(func, *args, **kw)
+        result = yield threads.deferToThread(func, *args, **kw)
+        if isinstance(result, futures.Future):
+            result = yield labrad.concurrent.future_to_deferred(result)
+        returnValue(result)
 

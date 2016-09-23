@@ -1,8 +1,7 @@
 from __future__ import absolute_import
 
-import warnings
-
 from concurrent import futures
+from twisted.internet import defer
 
 
 def map_future(src, func, *args, **kw):
@@ -63,4 +62,30 @@ class MappedFuture(futures.Future):
 
     def cancel(self):
         return super(MappedFuture, self).cancel() and self.__src.cancel()
+
+
+def future_to_deferred(future):
+    """Create a twisted Deferred from a Future.
+
+    Args:
+        future (concurrent.future.Future): Future whose result or failure we
+            wish to capture in a deferred.
+
+    Returns:
+        (twisted.internet.defer.Deferred) that will fire when the future
+        completes with a result (callback) or error (errback).
+    """
+    deferred = defer.Deferred()
+    def handle_result(future):
+        if future.cancelled():
+            deferred.errback(futures.CancelledError())
+            return
+        error = future.exception()
+        if error is not None:
+            deferred.errback(error)
+            return
+        result = future.result()
+        deferred.callback(result)
+    future.add_done_callback(handle_result)
+    return deferred
 
