@@ -22,14 +22,17 @@ servers with labrad.
 
 from datetime import datetime
 from operator import attrgetter
+import threading
 import traceback
 
-from twisted.internet import defer, reactor
+from twisted.internet import defer, reactor, threads
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionDone, ConnectionLost
-from twisted.python import failure, log
+from twisted.python import failure, log, threadable
 
 from labrad import constants as C, types as T, util
+import labrad.backend
+from labrad.client import Client
 from labrad.decorators import setting
 from labrad.wrappers import ClientAsync
 
@@ -197,6 +200,13 @@ class LabradServer(object):
         self.signals = []
         self.contexts = {}
 
+        self.__protocol = None
+        self.__async_client = None
+        self.__sync_client = threading.local()
+
+    def _dispatch(self, func, *args, **kw):
+        return func(*args, **kw)
+
     # request handling
     @inlineCallbacks
     def request_handler(self, source, context, flat_records):
@@ -211,8 +221,8 @@ class LabradServer(object):
         if c is None:
             c = self.contexts[context] = Context()
             yield c.acquire() # make sure we're the first in line
-            c.data = yield self.newContext(context)
-            yield self.initContext(c.data)
+            c.data = yield self._dispatch(self.newContext, context)
+            yield self._dispatch(self.initContext, c.data)
         else:
             yield c.acquire() # wait for previous requests in this context to finish
 
@@ -224,12 +234,12 @@ class LabradServer(object):
             yield util.wakeupCall(0.0)
         response = []
         try:
-            yield self.startRequest(c.data, source)
+            yield self._dispatch(self.startRequest, c.data, source)
             for ID, flat_data in flat_records:
                 c.check() # make sure this context hasn't expired
                 try:
                     setting = self.settings[ID]
-                    result = yield setting.handleRequest(self, c.data, flat_data)
+                    result = yield self._dispatch(setting.handleRequest, self, c.data, flat_data)
                     response.append((ID, result, setting.returns))
                 except Exception, e:
                     response.append((ID, self._getTraceback(e)))
@@ -341,8 +351,9 @@ class LabradServer(object):
             self.ID = protocol.ID
             protocol.request_handler = self.request_handler
             protocol.onDisconnect().addBoth(self._connection_lost)
-            self.client = ClientAsync(protocol)
-            yield self.client._init()
+            self.__protocol = protocol
+            self.__async_client = ClientAsync(protocol)
+            yield self.__async_client._init()
             yield self._initServer()
             self.started = True
             self.onStartup.callback(self)
@@ -351,6 +362,17 @@ class LabradServer(object):
             traceback.print_exc()
             self.disconnect(e)
             raise
+
+    @property
+    def client(self):
+        if threadable.isInIOThread():
+            # We're in the reactor thread, so can return shared async client.
+            return self.__async_client
+        else:
+            if not hasattr(self.__sync_client, 'cxn'):
+                backend = labrad.backend.TwistedConnection(async_cxn=self.__protocol)
+                self.__sync_client.cxn = Client(backend)
+            return self.__sync_client.cxn
 
     # Network events
     # these methods are called by network events from twisted
@@ -375,7 +397,7 @@ class LabradServer(object):
         yield p.send()
 
         # do server-specific initialization
-        yield self.initServer()
+        yield self._dispatch(self.initServer)
         # make sure we shut down gracefully when reactor quits or a remote message is fired
         self._shutdownID = reactor.addSystemEventTrigger('before', 'shutdown', self._stopServer)
         self._cxn.addListener(self._stopServer, ID=987654321)
@@ -399,7 +421,7 @@ class LabradServer(object):
     def _stopServer(self, *ignored):
         self.stopping = True
         try:
-            yield self.stopServer()
+            yield self._dispatch(self.stopServer)
         except Exception, e:
             self._error = failure.Failure(e)
         finally:
@@ -460,12 +482,12 @@ class LabradServer(object):
     def _serverConnected(self, c, data):
         """Handle connection messages from the manager."""
         ID, name = data
-        self.serverConnected(ID, name)
+        self._dispatch(self.serverConnected, ID, name)
 
     def _serverDisconnected(self, c, data):
         """Handle disconnection messages from the manager."""
         ID, name = data
-        self.serverDisconnected(ID, name)
+        self._dispatch(self.serverDisconnected, ID, name)
 
     # these methods should be overridden
     def serverConnected(self, ID, name):
@@ -509,7 +531,7 @@ class LabradServer(object):
             c = self.contexts[context]
             del self.contexts[context]
             c.expire()
-            self.expireContext(c.data)
+            self._dispatch(self.expireContext, c.data)
 
     # these methods may be overridden
     def newContext(self, ID):
@@ -551,4 +573,11 @@ class LabradServer(object):
 
     def log(self, *messages):
         self.onLog((datetime.now(), messages))
+
+
+class ThreadedServer(LabradServer):
+    """A LabRAD server that dispatches requests to a thread pool."""
+
+    def _dispatch(self, func, *args, **kw):
+        return threads.deferToThread(func, *args, **kw)
 
