@@ -10,7 +10,7 @@ import threading
 from concurrent.futures import Future
 from twisted.internet import defer, reactor
 
-from labrad import auth, constants as C, support, thread, types as T
+from labrad import constants as C, support, thread, types as T
 from labrad.wrappers import getConnection
 
 
@@ -32,12 +32,6 @@ class TwistedConnection(object):
         self._spawn_kw = spawn_kw
         self._connected = threading.Event()
         self._connected.set()
-        self._nextContext = 1
-
-        # This connection can be shared between multiple threads with
-        # separate Client objects.  Access to mutable state needs to
-        # be protected by a lock.
-        self._lock = threading.Lock()
 
         # Setup a coroutine that will clear the connected flag when the
         # connection is lost. We launch this but do not wait for the result of
@@ -68,10 +62,7 @@ class TwistedConnection(object):
 
     def context(self):
         """Create a new context for use with this connection"""
-        with self._lock:
-            ctx = 0, self._nextContext
-            self._nextContext += 1
-            return ctx
+        return _call_future(self.cxn.context).result()
 
     def sendRequest(self, target, records, *args, **kw):
         return _call_future(self.cxn.sendRequest, target, records, *args, **kw)

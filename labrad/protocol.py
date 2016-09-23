@@ -37,6 +37,7 @@ class LabradProtocol(protocol.Protocol):
 
     def __init__(self):
         self.disconnected = False
+        self._next_context = 1
         self._nextRequest = 1
         self.pool = set()
         self.requests = {}
@@ -64,6 +65,12 @@ class LabradProtocol(protocol.Protocol):
         """
         self.host = host
         self.port = port
+
+    def context(self):
+        """Create a new communication context for this connection."""
+        context = (0, self._next_context)
+        self._next_context += 1
+        return context
 
     # network events
     def connectionMade(self):

@@ -428,7 +428,6 @@ class ClientAsync(object):
         self._cache = {}
         self._cxn = prot
         self._mgr = manager.AsyncManager(self._cxn)
-        self._next_context = 1
         self._refreshLock = defer.DeferredLock()
 
     _staticAttrs = ['servers', 'refresh', 'context']
@@ -548,9 +547,7 @@ class ClientAsync(object):
 
     def context(self):
         """Create a new communication context for this connection."""
-        context = (0, self._next_context)
-        self._next_context += 1
-        return context
+        return self._cxn.context()
 
     def __getitem__(self, key):
         return self.servers[key]
