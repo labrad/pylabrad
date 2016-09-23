@@ -15,7 +15,7 @@ from labrad.wrappers import getConnection
 
 
 class TwistedConnection(object):
-    def __init__(self, name=None):
+    def __init__(self, name=None, async_cxn=None):
         self.name = name or 'Python Client ({})'.format(support.getNodeName())
         self._connected = threading.Event()
         self._nextContext = 1
@@ -23,6 +23,9 @@ class TwistedConnection(object):
         # separate Client objects.  Access to mutable state needs to
         # be protected by a lock.
         self._lock = threading.Lock()
+        if async_cxn is not None:
+            with self._lock:
+                self._wrap_async_cxn(async_cxn)
 
     def connect(self, host=C.MANAGER_HOST, port=None, timeout=C.TIMEOUT,
                 password=None, tls_mode=C.MANAGER_TLS, username=None,
@@ -31,29 +34,12 @@ class TwistedConnection(object):
         """
         @defer.inlineCallbacks
         def _connect_deferred():
-            cxn = yield getConnection(self.host, self.port, self.name,
+            cxn = yield getConnection(host, port, self.name,
                                       password, tls_mode=tls_mode,
                                       username=username, headless=headless)
-            self._connected.set()
-
-            # Setup a coroutine that will clear the connected flag when the
-            # connection is lost. We launch this but do not yield to wait
-            # for the result because we want this to happen asynchronously
-            # in the background.
-            @defer.inlineCallbacks
-            def handle_disconnect():
-                try:
-                    yield cxn.onDisconnect()
-                except Exception:
-                    pass
-                self._connected.clear()
-            handle_disconnect()
-
             defer.returnValue(cxn)
 
         with self._lock:
-            self.host = host
-            self.port = port
             self.timeout = timeout
             self.tls_mode = tls_mode
             self.username = username
@@ -61,8 +47,28 @@ class TwistedConnection(object):
             self.headless = headless
 
             thread.startReactor()
-            self.cxn = self.call(_connect_deferred).result()
-            self.ID = self.cxn.ID
+            cxn = self.call(_connect_deferred).result()
+            self._wrap_async_cxn(cxn)
+
+    def _wrap_async_cxn(self, cxn):
+        self.cxn = cxn
+        self.ID = cxn.ID
+        self.host = cxn.host
+        self.port = cxn.port
+        self._connected.set()
+
+        # Setup a coroutine that will clear the connected flag when the
+        # connection is lost. We launch this but do not yield to wait
+        # for the result because we want this to happen asynchronously
+        # in the background.
+        @defer.inlineCallbacks
+        def handle_disconnect():
+            try:
+                yield cxn.onDisconnect()
+            except Exception:
+                pass
+            self._connected.clear()
+        self.call(handle_disconnect)
 
     @property
     def connected(self):
