@@ -617,3 +617,10 @@ class ThreadedServer(LabradServer):
             result = yield labrad.concurrent.future_to_deferred(result)
         returnValue(result)
 
+
+class SingleThreadedServer(ThreadedServer):
+    """A LabRAD server that handles requests in a single thread."""
+    def __init__(self):
+        pool = futures.ThreadPoolExecutor(max_workers=1)
+        super(SingleThreadedServer, self).__init__(pool)
+
