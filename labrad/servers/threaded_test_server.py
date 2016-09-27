@@ -73,6 +73,17 @@ class TestServer(ThreadedServer):
             c['delay'] = delay
         return c['delay']
 
+    @setting(2000, "Registry Dir", path='*s', returns='(*s, *s)')
+    def registry_dir(self, c, path=['']):
+        """Get Registry listing for the specified path."""
+        p = self.client.registry.packet()
+        p.cd([''])
+        p.cd(path)
+        p.dir()
+        result = p.send()
+        dirs, keys = result['dir']
+        return dirs, keys
+
     @setting(42, "Delayed Echo Wrapper", data='?', returns='?')
     def delayed_echo_wrapper(self, c, data):
         """Echo a packet after a delay just like delayed_echo.
