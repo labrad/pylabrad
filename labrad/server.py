@@ -369,6 +369,13 @@ class LabradServer(object):
 
     @property
     def client(self):
+        """Get a labrad client for this server's labrad connection.
+
+        To accomodate asynchronous and synchronous (threaded) server
+        implementations, this returns a single shared AsyncClient instance if
+        called from the twisted reactor thread, or a thread-local Client
+        instance for synchronous use if called from any other thread.
+        """
         if threadable.isInIOThread():
             # We're in the reactor thread, so can return shared async client.
             return self.__async_client
