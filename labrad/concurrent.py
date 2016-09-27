@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from concurrent import futures
-from twisted.internet import defer
+from twisted.internet import defer, reactor
 
 
 def map_future(src, func, *args, **kw):
@@ -62,6 +62,31 @@ class MappedFuture(futures.Future):
 
     def cancel(self):
         return super(MappedFuture, self).cancel() and self.__src.cancel()
+
+
+def call_future(func, *args, **kw):
+    """Run func in the twisted reactor thread; return the result as a Future.
+
+    Args:
+        func (callable): Function to be run in the twisted reactor thread. May
+            return a Deferred.
+        *args: Positional arguments to pass to func.
+        **kw: Keyword arguments to pass to func.
+
+    Returns:
+        (concurrent.future.Future) Future that will receive the result of
+        calling func or an exception if it fails.
+    """
+    f = futures.Future()
+    @defer.inlineCallbacks
+    def wrapped():
+        try:
+            result = yield defer.maybeDeferred(func, *args, **kw)
+            f.set_result(result)
+        except Exception as e:
+            f.set_exception(e)
+    reactor.callFromThread(wrapped)
+    return f
 
 
 def future_to_deferred(future):

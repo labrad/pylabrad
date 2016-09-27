@@ -10,7 +10,7 @@ import threading
 from concurrent.futures import Future
 from twisted.internet import defer, reactor
 
-from labrad import constants as C, support, thread, types as T
+from labrad import concurrent, constants as C, support, thread, types as T
 from labrad.wrappers import getConnection
 
 
@@ -44,7 +44,7 @@ class TwistedConnection(object):
             except Exception:
                 pass
             self._connected.clear()
-        _call_future(handle_disconnect)
+        concurrent.call_future(handle_disconnect)
 
     @property
     def connected(self):
@@ -52,7 +52,7 @@ class TwistedConnection(object):
 
     def disconnect(self):
         if self.connected:
-            _call_future(self.cxn.disconnect).result()
+            concurrent.call_future(self.cxn.disconnect).result()
 
     def spawn(self):
         """Start a new independent backend connection to the same manager."""
@@ -62,13 +62,15 @@ class TwistedConnection(object):
 
     def context(self):
         """Create a new context for use with this connection"""
-        return _call_future(self.cxn.context).result()
+        return concurrent.call_future(self.cxn.context).result()
 
     def sendRequest(self, target, records, *args, **kw):
-        return _call_future(self.cxn.sendRequest, target, records, *args, **kw)
+        return concurrent.call_future(self.cxn.sendRequest, target, records,
+                                      *args, **kw)
 
     def sendMessage(self, target, records, *args, **kw):
-        return _call_future(self.cxn.sendMessage, target, records, *args, **kw).result()
+        return concurrent.call_future(self.cxn.sendMessage, target, records,
+                                      *args, **kw).result()
 
 
 def connect(host=C.MANAGER_HOST, port=None, name=None, timeout=C.TIMEOUT, **kw):
@@ -80,7 +82,7 @@ def connect(host=C.MANAGER_HOST, port=None, name=None, timeout=C.TIMEOUT, **kw):
     name = name or 'Python Client ({})'.format(support.getNodeName())
 
     thread.startReactor()
-    future = _call_future(getConnection, host, port, name, **kw)
+    future = concurrent.call_future(getConnection, host, port, name, **kw)
     cxn = future.result(timeout=timeout)
 
     # Make a dict of all params we were called with so that identical new
@@ -88,20 +90,6 @@ def connect(host=C.MANAGER_HOST, port=None, name=None, timeout=C.TIMEOUT, **kw):
     spawn_kw = dict(host=host, port=port, name=name, timeout=timeout, **kw)
 
     return TwistedConnection(cxn, spawn_kw=spawn_kw)
-
-
-def _call_future(func, *args, **kw):
-    """Run func in the twisted reactor; return result as a Future."""
-    f = Future()
-    @defer.inlineCallbacks
-    def wrapped():
-        try:
-            result = yield defer.maybeDeferred(func, *args, **kw)
-            f.set_result(result)
-        except Exception as e:
-            f.set_exception(e)
-    reactor.callFromThread(wrapped)
-    return f
 
 
 class ManagerService:
