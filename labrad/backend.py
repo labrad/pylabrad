@@ -10,52 +10,41 @@ import threading
 from concurrent.futures import Future
 from twisted.internet import defer, reactor
 
-from labrad import auth, constants as C, support, thread, types as T
+from labrad import concurrent, constants as C, support, thread, types as T
 from labrad.wrappers import getConnection
 
 
 class TwistedConnection(object):
-    def __init__(self, name=None):
-        self.name = name or 'Python Client ({})'.format(support.getNodeName())
+    def __init__(self, cxn, spawn_kw=None):
+        """Create a synchronous wrapper around an asynchronous connection.
+
+        Args:
+            cxn (labrad.protocol.LabradProtocol): The asynchronous protocol
+                instance for which to provide a synchronous interface.
+            spawn_kw (dict): Keyword arguments to pass to labrad.backend.connect
+                to spawn a new connection. If None, spawning will fail.
+        """
+        self.cxn = cxn
+        self.name = cxn.name
+        self.ID = cxn.ID
+        self.host = cxn.host
+        self.port = cxn.port
+        self._spawn_kw = spawn_kw
         self._connected = threading.Event()
-        self._nextContext = 1
+        self._connected.set()
 
-    def connect(self, host=C.MANAGER_HOST, port=None, timeout=C.TIMEOUT,
-                password=None, tls_mode=C.MANAGER_TLS, username=None,
-                headless=False):
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-        self.tls_mode = tls_mode
-        self.username = username
-        self.password = password
-        self.headless = headless
-
+        # Setup a coroutine that will clear the connected flag when the
+        # connection is lost. We launch this but do not wait for the result of
+        # the future because we want this to happen asynchronously in the
+        # background.
         @defer.inlineCallbacks
-        def _connect_deferred():
-            cxn = yield getConnection(self.host, self.port, self.name,
-                                      password, tls_mode=tls_mode,
-                                      username=username, headless=headless)
-            self._connected.set()
-
-            # Setup a coroutine that will clear the connected flag when the
-            # connection is lost. We launch this but do not yield to wait
-            # for the result because we want this to happen asynchronously
-            # in the background.
-            @defer.inlineCallbacks
-            def handle_disconnect():
-                try:
-                    yield cxn.onDisconnect()
-                except Exception:
-                    pass
-                self._connected.clear()
-            handle_disconnect()
-
-            defer.returnValue(cxn)
-
-        thread.startReactor()
-        self.cxn = self.call(_connect_deferred).result()
-        self.ID = self.cxn.ID
+        def handle_disconnect():
+            try:
+                yield cxn.onDisconnect()
+            except Exception:
+                pass
+            self._connected.clear()
+        concurrent.call_future(handle_disconnect)
 
     @property
     def connected(self):
@@ -63,48 +52,44 @@ class TwistedConnection(object):
 
     def disconnect(self):
         if self.connected:
-            self.call(self.cxn.disconnect).result()
+            concurrent.call_future(self.cxn.disconnect).result()
 
     def spawn(self):
         """Start a new independent backend connection to the same manager."""
-        cls = self.__class__
-        inst = cls(name=self.name)
-        inst.connect(host=self.host, port=self.port, timeout=self.timeout,
-                     password=self.password, tls_mode=self.tls_mode,
-                     username=self.username, headless=self.headless)
-        return inst
+        if self._spawn_kw is None:
+            raise ValueError("Cannot spawn from {}".format(self))
+        return connect(**self._spawn_kw)
 
     def context(self):
         """Create a new context for use with this connection"""
-        ctx = 0, self._nextContext
-        self._nextContext += 1
-        return ctx
-
-    def call(self, func, *args, **kw):
-        """Run func in the twisted reactor; return result as a future."""
-        f = Future()
-        @defer.inlineCallbacks
-        def wrapped():
-            try:
-                result = yield defer.maybeDeferred(func, *args, **kw)
-                f.set_result(result)
-            except Exception as e:
-                f.set_exception(e)
-        reactor.callFromThread(wrapped)
-        return f
+        return concurrent.call_future(self.cxn.context).result()
 
     def sendRequest(self, target, records, *args, **kw):
-        return self.call(self.cxn.sendRequest, target, records, *args, **kw)
+        return concurrent.call_future(self.cxn.sendRequest, target, records,
+                                      *args, **kw)
 
     def sendMessage(self, target, records, *args, **kw):
-        return self.call(self.cxn.sendMessage, target, records, *args, **kw).result()
+        return concurrent.call_future(self.cxn.sendMessage, target, records,
+                                      *args, **kw).result()
 
 
-def connect(host=C.MANAGER_HOST, port=None, name=None, **kw):
-    """Create a backend connection to labrad"""
-    cxn = TwistedConnection(name)
-    cxn.connect(host, port, **kw)
-    return cxn
+def connect(host=C.MANAGER_HOST, port=None, name=None, timeout=C.TIMEOUT, **kw):
+    """Create a backend connection to labrad.
+
+    This connects to labrad asynchronously and then wraps the underlying async
+    connection object in a synchronous TwistedConnection interface.
+    """
+    name = name or 'Python Client ({})'.format(support.getNodeName())
+
+    thread.startReactor()
+    future = concurrent.call_future(getConnection, host, port, name, **kw)
+    cxn = future.result(timeout=timeout)
+
+    # Make a dict of all params we were called with so that identical new
+    # connections can be spawned from this one.
+    spawn_kw = dict(host=host, port=port, name=name, timeout=timeout, **kw)
+
+    return TwistedConnection(cxn, spawn_kw=spawn_kw)
 
 
 class ManagerService:

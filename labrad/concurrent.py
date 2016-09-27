@@ -1,8 +1,7 @@
 from __future__ import absolute_import
 
-import warnings
-
 from concurrent import futures
+from twisted.internet import defer, reactor
 
 
 def map_future(src, func, *args, **kw):
@@ -63,4 +62,55 @@ class MappedFuture(futures.Future):
 
     def cancel(self):
         return super(MappedFuture, self).cancel() and self.__src.cancel()
+
+
+def call_future(func, *args, **kw):
+    """Run func in the twisted reactor thread; return the result as a Future.
+
+    Args:
+        func (callable): Function to be run in the twisted reactor thread. May
+            return a Deferred.
+        *args: Positional arguments to pass to func.
+        **kw: Keyword arguments to pass to func.
+
+    Returns:
+        (concurrent.future.Future) Future that will receive the result of
+        calling func or an exception if it fails.
+    """
+    f = futures.Future()
+    @defer.inlineCallbacks
+    def wrapped():
+        try:
+            result = yield defer.maybeDeferred(func, *args, **kw)
+            f.set_result(result)
+        except Exception as e:
+            f.set_exception(e)
+    reactor.callFromThread(wrapped)
+    return f
+
+
+def future_to_deferred(future):
+    """Create a twisted Deferred from a Future.
+
+    Args:
+        future (concurrent.future.Future): Future whose result or failure we
+            wish to capture in a deferred.
+
+    Returns:
+        (twisted.internet.defer.Deferred) that will fire when the future
+        completes with a result (callback) or error (errback).
+    """
+    deferred = defer.Deferred()
+    def handle_result(future):
+        if future.cancelled():
+            reactor.callFromThread(deferred.errback, futures.CancelledError())
+            return
+        error = future.exception()
+        if error is not None:
+            reactor.callFromThread(deferred.errback, error)
+            return
+        result = future.result()
+        reactor.callFromThread(deferred.callback, result)
+    future.add_done_callback(handle_result)
+    return deferred
 
