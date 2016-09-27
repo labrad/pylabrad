@@ -613,7 +613,7 @@ class ThreadedServer(LabradServer):
             result = yield threads.deferToThread(func, *args, **kw)
         else:
             result = self.__pool.submit(func, *args, **kw)
-        if isinstance(result, futures.Future):
+        while isinstance(result, futures.Future):
             result = yield labrad.concurrent.future_to_deferred(result)
         returnValue(result)
 
