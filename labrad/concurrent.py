@@ -103,14 +103,14 @@ def future_to_deferred(future):
     deferred = defer.Deferred()
     def handle_result(future):
         if future.cancelled():
-            deferred.errback(futures.CancelledError())
+            reactor.callFromThread(deferred.errback, futures.CancelledError())
             return
         error = future.exception()
         if error is not None:
-            deferred.errback(error)
+            reactor.callFromThread(deferred.errback, error)
             return
         result = future.result()
-        deferred.callback(result)
+        reactor.callFromThread(deferred.callback, result)
     future.add_done_callback(handle_result)
     return deferred
 
