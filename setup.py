@@ -15,8 +15,9 @@ Operating System :: OS Independent
 Programming Language :: Python
 Topic :: Scientific/Engineering"""
 
+import numpy as np
 import os
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 
 doclines = __doc__.split('\n')
 
@@ -45,9 +46,12 @@ setup(
     install_requires=requirements,
     provides=['labrad'],
     packages=find_packages(),
+    include_dirs = [np.get_include()],
     package_data={
         'labrad': ['LICENSE.txt'],
         'labrad.node': ['*.ini'],
     },
     scripts=[],
+    ext_modules=[Extension("fastunits.unitarray", 
+                             sources = ["fastunits/unitarray.c"])]
 )

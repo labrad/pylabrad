@@ -15,7 +15,9 @@ cache:
 before_script:
   - bash scripts/test/install-scalabrad.sh
   - export PATH=$PATH:$HOME/scalabrad-$SCALABRAD_VERSION/bin/
-script: scripts/test/test.sh
+  - mkdir empty_dir
+  - cd empty_dir
+script: ../scripts/test/test.sh
 after_success:
   - coveralls
 
