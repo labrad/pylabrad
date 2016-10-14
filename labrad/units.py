@@ -1376,7 +1376,7 @@ Ang     = 1.e-10*m                         # Angstrom
 lyr     = c*y                              # light year
 Bohr    = 4*pi*eps0*hbar**2/me/e**2        # Bohr radius
 ha      = 10000*m**2                       # hectare
-b       = 1.e-28*m                         # barn
+b       = 1.e-28*m**2                      # barn
 Hartree = me*e**4/16/pi**2/eps0**2/hbar**2 # Wavenumbers/inverse cm
 rootHz  = sqrtHz = Hz**0.5                 # for power spectral density
 tsp     = 4.92892159375*ml   # teaspoon
