@@ -14,6 +14,7 @@ from __future__ import print_function
 
 import BaseHTTPServer
 import json
+import logging
 import os
 import threading
 import time
@@ -21,8 +22,11 @@ import urllib
 import urlparse
 import webbrowser
 
-from concurrent import futures
 import requests
+from concurrent import futures
+
+
+log = logging.getLogger(__name__)
 
 
 # Page to display after we complete the OAuth flow
@@ -90,19 +94,20 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
     """
     cached = _get_cached_token(client_id)
     if cached is None:
-        print('No cached token. Logging in...')
+        log.debug('No cached token. Logging in. client_id=%s', client_id)
     else:
         if cached.expires_at > time.time() + 600:
-            print('Using cached id_token...')
+            log.debug('Using cached id_token. client_id=%s', client_id)
             return cached
-        print('Trying cached refresh_token...')
+        log.debug('Trying cached refresh_token. client_id=%s', client_id)
         try:
             token = _refresh_token(client_id, client_secret,
                                    cached.refresh_token)
             _cache_token(client_id, token)
             return token
         except Exception:
-            print('Failed to refresh token. Logging in...')
+            log.error('Failed to refresh token. Logging in. client_id=%s',
+                      client_id, exc_info=True)
 
     def do_headless_login():
         redirect_uri = NO_REDIRECT_URI
