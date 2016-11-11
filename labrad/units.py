@@ -1346,6 +1346,7 @@ _addUnit('torr', 1./760., atm, 'torr = mm of mercury', '1/760 atm')
 _help.append('Angle units:')
 
 _addUnit('deg', pi/180, 'rad', 'degrees', 'pi/180 rad')
+_addUnit('cyc', 2*pi, 'rad', 'cycles', '2 pi rad')
 
 # Temperature units
 _help.append('Temperature units:')
