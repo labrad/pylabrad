@@ -2,7 +2,7 @@ import unittest
 
 import labrad
 from labrad import types as T
-from labrad.servers.test_server import TestServer
+from labrad.servers.test_server import PythonTestServer
 from labrad.util import syncRunServer
 
 TEST_STR = 'this is a test, this is only a test'
@@ -15,7 +15,7 @@ class ClientTests(unittest.TestCase):
         context manager as part of a test fixture.  This method then calls
         the usual test fixture setUp and tearDown within this context.
         """
-        with syncRunServer(TestServer()):
+        with syncRunServer(PythonTestServer()):
             super(ClientTests, self).run(result)
 
     def setUp(self):
@@ -170,6 +170,21 @@ class ClientTests(unittest.TestCase):
 
         ts.echo_delay(T.Value(0.1, 's'))
         self.assertEquals(ts.delayed_echo_wrapper(1), 1)
+
+    def test_spawn(self):
+        cxn1 = self.cxn()
+
+        # Can spawn from active client.
+        with cxn1.spawn() as cxn2:
+            self.assertTrue(cxn2.connected)
+            cxn2.manager.servers()
+
+        # Can spawn from client after disconnect
+        self.assertFalse(cxn2.connected)
+        with cxn2.spawn() as cxn3:
+            self.assertTrue(cxn3.connected)
+            cxn3.manager.servers()
+
 
 if __name__ == "__main__":
     unittest.main()

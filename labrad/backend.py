@@ -6,6 +6,7 @@ Provides a backend connection that underlies the wrapper client object.
 from __future__ import absolute_import
 
 import threading
+import time
 
 from concurrent.futures import Future
 from twisted.internet import defer, reactor
@@ -15,21 +16,18 @@ from labrad.wrappers import getConnection
 
 
 class TwistedConnection(object):
-    def __init__(self, cxn, spawn_kw=None):
+    def __init__(self, cxn):
         """Create a synchronous wrapper around an asynchronous connection.
 
         Args:
             cxn (labrad.protocol.LabradProtocol): The asynchronous protocol
                 instance for which to provide a synchronous interface.
-            spawn_kw (dict): Keyword arguments to pass to labrad.backend.connect
-                to spawn a new connection. If None, spawning will fail.
         """
         self.cxn = cxn
         self.name = cxn.name
         self.ID = cxn.ID
         self.host = cxn.host
         self.port = cxn.port
-        self._spawn_kw = spawn_kw
         self._connected = threading.Event()
         self._connected.set()
 
@@ -53,12 +51,14 @@ class TwistedConnection(object):
     def disconnect(self):
         if self.connected:
             concurrent.call_future(self.cxn.disconnect).result()
+            # Wait for the connected flag to go False.
+            while self.connected:
+                time.sleep(0.01)
 
-    def spawn(self):
+    def spawn(self, timeout=C.TIMEOUT):
         """Start a new independent backend connection to the same manager."""
-        if self._spawn_kw is None:
-            raise ValueError("Cannot spawn from {}".format(self))
-        return connect(**self._spawn_kw)
+        cxn = concurrent.call_future(self.cxn.spawn).result(timeout=timeout)
+        return TwistedConnection(cxn)
 
     def context(self):
         """Create a new context for use with this connection"""
@@ -85,11 +85,7 @@ def connect(host=C.MANAGER_HOST, port=None, name=None, timeout=C.TIMEOUT, **kw):
     future = concurrent.call_future(getConnection, host, port, name, **kw)
     cxn = future.result(timeout=timeout)
 
-    # Make a dict of all params we were called with so that identical new
-    # connections can be spawned from this one.
-    spawn_kw = dict(host=host, port=port, name=name, timeout=timeout, **kw)
-
-    return TwistedConnection(cxn, spawn_kw=spawn_kw)
+    return TwistedConnection(cxn)
 
 
 class ManagerService:

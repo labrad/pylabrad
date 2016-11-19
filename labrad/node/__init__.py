@@ -429,8 +429,8 @@ class Node(object):
         while True:
             print 'Connecting to {}:{}...'.format(self.host, self.port)
             try:
-                p = yield protocol.connect(self.host, self.port, self.tls_mode)
-                yield p.authenticate(self.username, self.password)
+                p = yield protocol.connect(self.host, self.port, self.tls_mode,
+                                           self.username, self.password)
                 node = NodeServer(self.nodename, self.host, self.port,
                                   p.credential)
                 yield node.startup(p)

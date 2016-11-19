@@ -4,7 +4,7 @@ import random
 import pytest
 
 import labrad
-from labrad.server import LabradServer, setting
+from labrad.server import LabradServer, ThreadedServer, setting
 from labrad import util
 
 
@@ -29,6 +29,21 @@ def test_server_expire_context_method_is_called():
             cxn.testserver.echo('hello, world!', context=request_context)
         expired_context = queue.get(block=True, timeout=1)
         assert expired_context == request_context
+
+
+def test_threaded_server_client_can_be_spawned():
+    class TestServer(ThreadedServer):
+        name = "TestServer"
+
+        @setting(100)
+        def spawn_call(self, c, server, setting, data):
+            with self.client.spawn() as cxn:
+                return cxn[server][setting](data)
+
+    with util.syncRunServer(TestServer()):
+        with labrad.connect() as cxn:
+            result = cxn.testserver.spawn_call('Manager', 'Echo', 'woot!')
+            assert result == 'woot!'
 
 
 def test_server_init_failure_is_propagated():

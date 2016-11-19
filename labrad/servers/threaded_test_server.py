@@ -23,7 +23,7 @@ from labrad.units import m, s
 from labrad.util import hydrant
 
 
-class TestServer(ThreadedServer):
+class ThreadedTestServer(ThreadedServer):
     """Server to test labrad from python.
 
     This server provides a number of settings that
@@ -164,4 +164,4 @@ class TestServer(ThreadedServer):
 
 
 if __name__ == '__main__':
-    util.runServer(TestServer())
+    util.runServer(ThreadedTestServer())
