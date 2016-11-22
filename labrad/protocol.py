@@ -332,6 +332,15 @@ class LabradProtocol(protocol.Protocol):
             del self.listeners[key]
 
     @inlineCallbacks
+    def spawn(self, client=True):
+        p = yield connect(**self.spawn_kw)
+        if client or len(self.ident) == 1:
+            yield p.loginClient(self.name)
+        else:
+            yield p.loginServer(*self.ident)
+        returnValue(p)
+
+    @inlineCallbacks
     def authenticate(self, username=None, password=None, headless=False):
         """Authenticate to the manager using the given credentials."""
 
@@ -479,6 +488,7 @@ class LabradProtocol(protocol.Protocol):
 
     @inlineCallbacks
     def _doLogin(self, *ident):
+        self.ident = ident
         # Store name, which is always the first identification param.
         self.name = ident[0]
         # Send identification.
@@ -502,7 +512,8 @@ _factory = protocol.ClientCreator(reactor, LabradProtocol)
 
 
 @inlineCallbacks
-def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
+def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
+            username=None, password=None, headless=False):
     """Connect to LabRAD and return a deferred that fires the protocol object.
 
     Args:
@@ -511,25 +522,39 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
             default value based on the TLS mode.
         tls_mode (str): The tls mode to use for this connection. See:
             `labrad.constants.check_tls_mode`.
+        username (str | None): The username to use when authenticating.
+        password (str | None): The password to use when authenticating.
+        headless (bool): Whether to use headless OAuth flow if no username or
+            password is configured.
 
     Returns:
         twisted.internet.defer.Deferred(LabradProtocol): A deferred that will
         fire with the protocol once the connection is established.
     """
+    spawn_kw = dict(host=host, port=port, tls_mode=tls_mode,
+                    username=username, password=password, headless=headless)
+
     tls_mode = C.check_tls_mode(tls_mode)
     if port is None:
         port = C.MANAGER_PORT_TLS if tls_mode == 'on' else C.MANAGER_PORT
+
+    @inlineCallbacks
+    def authenticate(p):
+        yield p.authenticate(username, password, headless)
 
     if tls_mode == 'on':
         tls_options = crypto.tls_options(host)
         p = yield _factory.connectSSL(host, port, tls_options, timeout=C.TIMEOUT)
         p.set_address(host, port)
+        p.spawn_kw = spawn_kw
+        yield authenticate(p)
         returnValue(p)
 
     @inlineCallbacks
     def do_connect():
         p = yield _factory.connectTCP(host, port, timeout=C.TIMEOUT)
         p.set_address(host, port)
+        p.spawn_kw = spawn_kw
         returnValue(p)
 
     @inlineCallbacks
@@ -568,6 +593,7 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
             p = yield connect(host, port, tls_mode='off')
             print 'Connected without encryption.'
             p.manager_features = set()
+            yield authenticate(p)
             returnValue(p)
         try:
             manager_features = yield ping(p)
@@ -597,4 +623,6 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS):
     else:
         manager_features = yield ping(p)
     p.manager_features = manager_features
+
+    yield authenticate(p)
     returnValue(p)

@@ -387,27 +387,28 @@ class AsyncServerWrapper(object):
         """Send packet to this server."""
         return self._cxn._send(self.ID, *args, **kw)
 
+
 @inlineCallbacks
 def getConnection(host=C.MANAGER_HOST, port=None, name="Python Client",
                   password=None, tls_mode=C.MANAGER_TLS, username=None,
                   headless=False):
     """Connect to LabRAD and return a deferred that fires the protocol object."""
-    p = yield protocol.connect(host, port, tls_mode)
-    yield p.authenticate(username, password, headless)
+    p = yield protocol.connect(host, port, tls_mode, username, password,
+                               headless)
     yield p.loginClient(name)
     returnValue(p)
 
+
 @inlineCallbacks
-def connectAsync(host=C.MANAGER_HOST, port=None, name="Python Client",
+def connectAsync(host=C.MANAGER_HOST, port=None, name=None,
                  password=None, tls_mode=C.MANAGER_TLS, username=None,
                  headless=False):
     """Connect to LabRAD and return a deferred that fires the client object."""
     p = yield getConnection(host, port, name, password, tls_mode=tls_mode,
                             username=username, headless=headless)
-    cxn = ClientAsync(p)
-    yield cxn._init()
-    cxn.onDisconnect = p.onDisconnect
+    cxn = yield ClientAsync.create(p)
     returnValue(cxn)
+
 
 def runAsync(func, *args, **kw):
     from twisted.internet import reactor
@@ -420,8 +421,16 @@ def runAsync(func, *args, **kw):
     reactor.callWhenRunning(runIt)
     reactor.run()
 
+
 class ClientAsync(object):
     """Adapt a LabRAD request protocol object to an asynchronous client."""
+
+    @staticmethod
+    @inlineCallbacks
+    def create(protocol):
+        cxn = ClientAsync(protocol)
+        yield cxn._init()
+        returnValue(cxn)
 
     def __init__(self, prot):
         self.servers = MultiDict()
@@ -469,6 +478,10 @@ class ClientAsync(object):
         except Exception, e:
             print 'Error removing server %d, "%s":' % (ID, name)
             print str(e)
+
+    @property
+    def onDisconnect(self):
+        return self._cxn.onDisconnect
 
     def refresh(self):
         return self._refreshLock.run(self._refresh)
@@ -548,6 +561,12 @@ class ClientAsync(object):
     def context(self):
         """Create a new communication context for this connection."""
         return self._cxn.context()
+
+    @inlineCallbacks
+    def spawn(self):
+        p = yield self._cxn.spawn()
+        cxn = yield ClientAsync.create(p)
+        returnValue(cxn)
 
     def __getitem__(self, key):
         return self.servers[key]

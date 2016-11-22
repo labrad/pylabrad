@@ -39,7 +39,7 @@ from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 
-class TestServer(LabradServer):
+class PythonTestServer(LabradServer):
     """Server to test labrad from python.
 
     This server provides a number of settings that
@@ -213,7 +213,5 @@ class TestServer(LabradServer):
 def owie(dummy=None):
     raise Exception('Raised in subfunction.')
 
-__server__ = TestServer()
-
 if __name__ == '__main__':
-    util.runServer(__server__)
+    util.runServer(PythonTestServer())

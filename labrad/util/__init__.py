@@ -395,8 +395,8 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
         port = int(config['port'])
         tls_mode = config['tls']
         try:
-            p = yield protocol.connect(host, port, tls_mode)
-            yield p.authenticate(config['username'], config['password'])
+            p = yield protocol.connect(host, port, tls_mode, config['username'],
+                                       config['password'])
             yield srv.startup(p)
             yield srv.onShutdown()
             log.msg('Disconnected cleanly.')
@@ -430,8 +430,7 @@ def syncRunServer(srv, host=C.MANAGER_HOST, port=None, username=None,
 
     @inlineCallbacks
     def start_server():
-        p = yield protocol.connect(host, port, tls_mode)
-        yield p.authenticate(username, password)
+        p = yield protocol.connect(host, port, tls_mode, username, password)
         yield srv.startup(p)
 
     @inlineCallbacks
