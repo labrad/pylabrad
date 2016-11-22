@@ -21,7 +21,7 @@ from types import MethodType
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from labrad import constants as C, manager, protocol, support, types as T
+from labrad import constants as C, manager, protocol, types as T
 from labrad.support import (indent, mangle, extractKey, MultiDict, PacketRecord,
                             PacketResponse, hexdump)
 
