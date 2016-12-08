@@ -21,7 +21,7 @@ from types import MethodType
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from labrad import constants as C, manager, protocol, types as T
+from labrad import constants as C, manager, protocol, support, types as T
 from labrad.support import (indent, mangle, extractKey, MultiDict, PacketRecord,
                             PacketResponse, hexdump)
 
@@ -389,10 +389,11 @@ class AsyncServerWrapper(object):
 
 
 @inlineCallbacks
-def getConnection(host=C.MANAGER_HOST, port=None, name="Python Client",
+def getConnection(host=C.MANAGER_HOST, port=None, name=None,
                   password=None, tls_mode=C.MANAGER_TLS, username=None,
                   headless=False):
     """Connect to LabRAD and return a deferred that fires the protocol object."""
+    name = name or 'Python Client ({})'.format(support.getNodeName())
     p = yield protocol.connect(host, port, tls_mode, username, password,
                                headless)
     yield p.loginClient(name)
