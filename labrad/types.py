@@ -36,13 +36,17 @@ import re
 import struct
 import sys
 import time
-from types import InstanceType
 import warnings
+
+import numpy as np
 
 import labrad.units as U
 from labrad.units import Value, Complex
 
-import numpy as np
+try:
+    from types import InstanceType
+except ImportError:
+    InstanceType = None
 
 
 SYSTEM_BYTE_ORDER = '<' if sys.byteorder == 'little' else '>'
@@ -257,8 +261,8 @@ def getType(obj):
     if t == FlatData:
         return parseTypeTag(obj.tag)
 
-    # handle classic classes
-    if t == InstanceType:
+    # handle classic classes (python 2)
+    if InstanceType is not None and t == InstanceType:
         t = obj.__class__
 
     # check if we know this type
