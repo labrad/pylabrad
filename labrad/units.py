@@ -1420,7 +1420,7 @@ def description():
             s += '%-8s  %-26s %s\n' % (prefix + name, comment, unit)
         else:
             # impossible
-            raise TypeError, 'wrong construction of _help list'
+            raise TypeError('wrong construction of _help list')
     return s
 
 # add the description of the units to the module's doc string:

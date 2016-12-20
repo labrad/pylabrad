@@ -135,7 +135,7 @@ class ParseBaseException(Exception):
         elif aname == "line":
             return line(self.loc, self.pstr)
         else:
-            raise AttributeError, aname
+            raise AttributeError(aname)
 
     def __str__(self):
         return "%s (at char %d), (line:%d, col:%d)" % \
@@ -1231,7 +1231,7 @@ class ParserElement(object):
             self.myException = ret = self.getException();
             return ret;
         else:
-            raise AttributeError, "no such attribute " + aname
+            raise AttributeError("no such attribute " + aname)
 
 class Token(ParserElement):
     """Abstract ParserElement subclass, for defining atomic matching patterns."""
@@ -1425,7 +1425,7 @@ class Word(Token):
         self.maxSpecified = max > 0
 
         if min < 1:
-            raise ValueError, "cannot specify a minimum length < 1; use Optional(Word()) if zero-length word is permitted"
+            raise ValueError("cannot specify a minimum length < 1; use Optional(Word()) if zero-length word is permitted")
 
         self.minLen = min
 
@@ -1716,7 +1716,7 @@ class CharsNotIn(Token):
         self.notChars = notChars
 
         if min < 1:
-            raise ValueError, "cannot specify a minimum length < 1; use Optional(CharsNotIn()) if zero-length char group is permitted"
+            raise ValueError("cannot specify a minimum length < 1; use Optional(CharsNotIn()) if zero-length char group is permitted")
 
         self.minLen = min
 
@@ -3016,7 +3016,7 @@ def keepOriginalText(s, startLoc, t):
     try:
         endloc = getTokensEndLoc()
     except ParseException:
-        raise ParseFatalException, "incorrect usage of keepOriginalText - may only be called as a parse action"
+        raise ParseFatalException("incorrect usage of keepOriginalText - may only be called as a parse action")
     del t[:]
     t += ParseResults(s[startLoc:endloc])
     return t
@@ -3033,7 +3033,7 @@ def getTokensEndLoc():
                 endloc = f[0].f_locals["loc"]
                 return endloc
         else:
-            raise ParseFatalException, "incorrect usage of getTokensEndLoc - may only be called from within a parse action"
+            raise ParseFatalException("incorrect usage of getTokensEndLoc - may only be called from within a parse action")
     finally:
         del fstack
 
@@ -3137,7 +3137,7 @@ def operatorPrecedence(baseExpr, opList):
             elif arity == 2:
                 matchExpr = Group(FollowedBy(lastExpr + opExpr + lastExpr) + lastExpr + OneOrMore(opExpr + lastExpr))
             else:
-                raise ValueError, "operator must be unary (1) or binary (2)"
+                raise ValueError("operator must be unary (1) or binary (2)")
         elif rightLeftAssoc == opAssoc.RIGHT:
             if arity == 1:
                 # try to avoid LR with this extra test
@@ -3147,9 +3147,9 @@ def operatorPrecedence(baseExpr, opList):
             elif arity == 2:
                 matchExpr = Group(FollowedBy(lastExpr + opExpr + thisExpr) + lastExpr + OneOrMore(opExpr + thisExpr))
             else:
-                raise ValueError, "operator must be unary (1) or binary (2)"
+                raise ValueError("operator must be unary (1) or binary (2)")
         else:
-            raise ValueError, "operator must indicate right or left associativity"
+            raise ValueError("operator must indicate right or left associativity")
         if pa:
             matchExpr.setParseAction(pa)
         thisExpr << (matchExpr | lastExpr)
