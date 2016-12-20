@@ -81,7 +81,7 @@ def run_manager(tls_required, port=7778, tls_port=7779, startup_timeout=20):
                 try:
                     labrad.connect(port=tls_port, tls_mode='on',
                                    password=password)
-                except Exception, e:
+                except Exception as e:
                     last_error = e
                 else:
                     break

@@ -81,7 +81,7 @@ def _ustr(obj):
         # it won't break any existing code.
         return str(obj)
 
-    except UnicodeEncodeError, e:
+    except UnicodeEncodeError as e:
         # The Python docs (http://docs.python.org/ref/customization.html#l2h-182)
         # state that "The return value must be a string object". However, does a
         # unicode object (being a subclass of basestring) count as a "string
@@ -809,7 +809,7 @@ class ParserElement(object):
                     loc, tokens = self.parseImpl(instring, preloc, doActions)
                 except IndexError:
                     raise ParseException(instring, len(instring), self.errmsg, self)
-            except ParseException, err:
+            except ParseException as err:
                 #~ print("Exception raised:", err)
                 if self.debugActions[2]:
                     self.debugActions[2](instring, tokensStart, self, err)
@@ -843,7 +843,7 @@ class ParserElement(object):
                                                     self.resultsName,
                                                      asList=self.saveAsList and isinstance(tokens, (ParseResults, list)),
                                                      modal=self.modalResults)
-                except ParseException, err:
+                except ParseException as err:
                     #~ print("Exception raised in user parse action:", err)
                     if self.debugActions[2]:
                         self.debugActions[2](instring, tokensStart, self, err)
@@ -883,7 +883,7 @@ class ParserElement(object):
                 value = self._parseNoCache(instring, loc, doActions, callPreParse)
                 ParserElement._exprArgCache[lookup] = (value[0], value[1].copy())
                 return value
-            except ParseBaseException, pe:
+            except ParseBaseException as pe:
                 ParserElement._exprArgCache[lookup] = pe
                 raise
 
@@ -2116,11 +2116,11 @@ class Or(ParseExpression):
         for e in self.exprs:
             try:
                 loc2 = e.tryParse(instring, loc)
-            except ParseException, err:
+            except ParseException as err:
                 if err.loc > maxExcLoc:
                     maxException = err
                     maxExcLoc = err.loc
-            except IndexError, err:
+            except IndexError as err:
                 if len(instring) > maxExcLoc:
                     maxException = ParseException(instring, len(instring), e.errmsg, self)
                     maxExcLoc = len(instring)
@@ -2179,11 +2179,11 @@ class MatchFirst(ParseExpression):
             try:
                 ret = e._parse(instring, loc, doActions)
                 return ret
-            except ParseException, err:
+            except ParseException as err:
                 if err.loc > maxExcLoc:
                     maxException = err
                     maxExcLoc = err.loc
-            except IndexError, err:
+            except IndexError as err:
                 if len(instring) > maxExcLoc:
                     maxException = ParseException(instring, len(instring), e.errmsg, self)
                     maxExcLoc = len(instring)
@@ -2770,7 +2770,7 @@ def traceParseAction(f):
         sys.stderr.write(">>entering %s(line: '%s', %d, %s)\n" % (thisFunc, line(l, s), l, t))
         try:
             ret = f(*paArgs)
-        except Exception, exc:
+        except Exception as exc:
             sys.stderr.write("<<leaving %s (exception: %s)\n" % (thisFunc, exc))
             raise
         sys.stderr.write("<<leaving %s (ret: %s)\n" % (thisFunc, ret))
@@ -3234,7 +3234,7 @@ if __name__ == "__main__":
             print("tokens.columns =", tokens.columns)
             print("tokens.tables =", tokens.tables)
             print(tokens.asXML("SQL", True))
-        except ParseException, err:
+        except ParseException as err:
             print(err.line)
             print(" "*(err.column-1) + "^")
             print(err)

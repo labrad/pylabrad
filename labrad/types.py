@@ -376,7 +376,7 @@ def flatten(obj, types=None, endianness='>'):
     if foundCompatibleType:
         try:
             return t.flatten(obj, endianness)
-        except Exception, e:
+        except Exception as e:
             raise FlatteningError(obj, t)
 
     # Since we haven't found anything compatible, just try to

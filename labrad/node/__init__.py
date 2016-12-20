@@ -190,7 +190,7 @@ class ServerProcess(ProcessProtocol):
                 timeoutCall.cancel()
             try:
                 dispatcher.disconnect(self.serverConnected, 'serverConnected')
-            except Exception, e:
+            except Exception as e:
                 print('Error while disconnecting signal:', e)
 
     @inlineCallbacks

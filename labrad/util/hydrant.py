@@ -135,7 +135,7 @@ if __name__ == '__main__':
     cxn = labrad.connect()
     try:
         hoseDown(cxn.python_test_server.echo, n=10000, silent=False)
-    except Exception, e:
+    except Exception as e:
         print(e)
     else:
         print('Success!')

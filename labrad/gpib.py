@@ -308,7 +308,7 @@ class ManagedDeviceServer(LabradServer):
         del self.devices[name]
         try:
             yield dev.shutdown()
-        except Exception, e:
+        except Exception as e:
             self.log('Error while shutting down device "%s": %s' % (name, e))
 
     @inlineCallbacks

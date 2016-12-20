@@ -455,7 +455,7 @@ class ClientAsync(object):
             self._cxn.addListener(self._serverConnected, source=self._mgr.ID, ID=314159265, async=False)
             self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, async=False)
             yield self.refresh()
-        except Exception, e:
+        except Exception as e:
             print('error!')
             print(repr(e))
             raise
@@ -466,7 +466,7 @@ class ClientAsync(object):
         ID, name = data
         try:
             yield self._addServer(name, ID)
-        except Exception, e:
+        except Exception as e:
             print('Error adding server %d, "%s":' % (ID, name))
             print(str(e))
 
@@ -476,7 +476,7 @@ class ClientAsync(object):
         ID, name = data
         try:
             yield self._delServer(name)
-        except Exception, e:
+        except Exception as e:
             print('Error removing server %d, "%s":' % (ID, name))
             print(str(e))
 
@@ -529,7 +529,7 @@ class ClientAsync(object):
             self._cache[name] = server
         try:
             yield server.refresh()
-        except Exception, e:
+        except Exception as e:
             print('Error while refreshing server "%s":' % name)
             print(repr(e))
         else:
@@ -542,7 +542,7 @@ class ClientAsync(object):
         server = self.servers[name]
         try:
             yield server.refresh()
-        except Exception, e:
+        except Exception as e:
             print('Error while refreshing server "%s":' % name)
             print(repr(e))
             yield self._delServer(name)

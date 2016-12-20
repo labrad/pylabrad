@@ -209,7 +209,7 @@ class HasDynamicAttrs(object):
                     attr.refresh()
 
             self._refreshed = True
-        except Exception, e:
+        except Exception as e:
             print('Error refreshing dynamic attributes:')
             print(e, repr(e))
 

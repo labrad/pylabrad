@@ -344,7 +344,7 @@ def parseServerOptions(name, exit_on_failure=True, options=None):
         if config['port'] is None:
             tls_on = config['tls'] == 'on'
             config['port'] = C.MANAGER_PORT_TLS if tls_on else C.MANAGER_PORT
-    except usage.UsageError, errortext:
+    except usage.UsageError as errortext:
         print('%s: %s' % (sys.argv[0], errortext))
         print('%s: Try --help for usage details.' % (sys.argv[0]))
         if exit_on_failure:
