@@ -13,6 +13,10 @@ import labrad
 from labrad import crypto
 
 
+IN_CI = os.environ.get('CI', False)
+ci_only = pytest.mark.skipif(not IN_CI, reason='only runs in travis-ci')
+
+
 @contextlib.contextmanager
 def temp_tls_dirs():
     """Context manager to create temporary dirs for labrad TLS certs and keys.
@@ -98,18 +102,23 @@ def run_manager(tls_required, port=7778, tls_port=7779, startup_timeout=20):
 
 # Test that we can establish encrypted TLS connections to the manager
 
+@ci_only
 def test_connect_with_starttls():
     with run_manager(tls_required=True) as m:
         with labrad.connect(port=m.port, tls_mode='starttls-force',
                             password=m.password) as cxn:
             pass
 
+
+@ci_only
 def test_connect_with_optional_starttls():
     with run_manager(tls_required=False) as m:
         with labrad.connect(port=m.port, tls_mode='off',
                             password=m.password) as cxn:
             pass
 
+
+@ci_only
 def test_connect_with_tls():
     with run_manager(tls_required=True) as m:
         with labrad.connect(port=m.tls_port, tls_mode='on',
@@ -120,6 +129,7 @@ def test_connect_with_tls():
 # Test that connecting to the manager fails if the client fails to
 # use TLS when the manager expects it.
 
+@ci_only
 def test_expect_starttls_use_off():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
@@ -127,6 +137,8 @@ def test_expect_starttls_use_off():
                                 password=m.password) as cxn:
                 pass
 
+
+@ci_only
 def test_expect_tls_use_off():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
@@ -134,6 +146,8 @@ def test_expect_tls_use_off():
                                 password=m.password) as cxn:
                 pass
 
+
+@ci_only
 def test_expect_tls_use_starttls():
     with run_manager(tls_required=True) as m:
         with pytest.raises(Exception):
