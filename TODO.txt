@@ -2,7 +2,7 @@ pylabrad TODOs:
 
 GENERAL:
   when calling user-overridden methods, check whether they are generators and
-    print a warning since they probably forgot @inlineCallbacks
+    emit a warning since they probably forgot @inlineCallbacks
 
   Client/ClientAsync:
     create clones that work in different contexts by default

@@ -52,6 +52,8 @@ The version included with LabRAD has been slightly changed:
 
 """
 
+from __future__ import print_function
+
 from fractions import Fraction
 from math import floor, pi
 
@@ -199,7 +201,7 @@ class WithUnit(object):
     with the 'unit' property. For example, if you wanted to print the value
     and units separately:
 
-    >>> print "The value is {:3.2f} {}".format(x[x.unit], x.unit)
+    >>> print("The value is {:3.2f} {}".format(x[x.unit], x.unit))
     1.00 s
     """
 
@@ -1430,12 +1432,12 @@ if __name__ == '__main__':
 
     l = WithUnit(10., 'm')
     big_l = WithUnit(10., 'km')
-    print big_l + l
+    print(big_l + l)
     t = WithUnit(314159., 's')
 
     e = 2.7 * Hartree * Nav
-    print e.inUnitsOf('kcal/mol')
-    print e.inBaseUnits()
+    print(e.inUnitsOf('kcal/mol'))
+    print(e.inBaseUnits())
 
     freeze = 0 * Unit('degC')
-    print freeze['degF']
+    print(freeze['degF'])

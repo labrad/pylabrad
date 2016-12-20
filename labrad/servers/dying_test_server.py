@@ -30,6 +30,8 @@ timeout = 5
 ### END NODE INFO
 """
 
+from __future__ import print_function
+
 from labrad import util
 from labrad.server import LabradServer, setting, Signal
 from twisted.internet import defer, reactor
@@ -52,10 +54,10 @@ class DyingTestServer(LabradServer):
         raise Exception()
 
     def serverConnected(self, data):
-        print 'connected:', data
+        print('connected:', data)
 
     def serverDisconnected(self, data):
-        print 'disconnected:', data
+        print('disconnected:', data)
 
     log = Signal(555, 'log', '(ts)')
 
@@ -92,8 +94,8 @@ class DyingTestServer(LabradServer):
 
     @setting(41)
     def verbose_echo(self, c, data):
-        print type(data)
-        print repr(data)
+        print(type(data))
+        print(repr(data))
         return data
 
     @setting(5)

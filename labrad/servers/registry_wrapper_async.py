@@ -13,6 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import print_function
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from labrad.support import SafeIterDict
 
@@ -77,8 +79,8 @@ class RegistryWrapperAsync(SafeIterDict):
         for k in keys:
             _dict[k] = ans[k]
         self.update(_dict)
-        print 'done initing!'
-        print 'data:', self
+        print('done initing!')
+        print('data:', self)
 
     def __del__(self):
         """Remove the listener when we are garbage collected."""
@@ -86,10 +88,6 @@ class RegistryWrapperAsync(SafeIterDict):
 
     def _listen(self, listen):
         """Add or remove a listener for update messages."""
-        #def print_(*args):
-        #    print 'message:', args
-        #    #print self._cxn._cxn.listeners
-        #self._cxn._cxn.addListener(print_)
         if listen:
             func = self._cxn._cxn.addListener
         else:
@@ -113,7 +111,7 @@ class RegistryWrapperAsync(SafeIterDict):
     def _messageReceived(self, c, data):
         """Handle update messages from the registry."""
         name, isDir, addOrChange = data
-        print 'update message:', data
+        print('update message:', data)
         try:
             if addOrChange:
                 if isDir:
@@ -123,9 +121,9 @@ class RegistryWrapperAsync(SafeIterDict):
                 self[name] = val
             else:
                 del self[name]
-            print 'done updating!'
-            print 'data:', self
+            print('done updating!')
+            print('data:', self)
         except:
-            print 'Error while updating Registry Wrapper for', self._dir
+            print('Error while updating Registry Wrapper for', self._dir)
             from twisted.python.failure import Failure
-            print Failure().getBriefTraceback()
+            print(Failure().getBriefTraceback())

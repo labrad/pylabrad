@@ -30,6 +30,8 @@ timeout = 5
 ### END NODE INFO
 """
 
+from __future__ import print_function
+
 from labrad import types as T, util
 from labrad.server import LabradServer, setting
 from labrad.units import m, s
@@ -58,17 +60,16 @@ class PythonTestServer(LabradServer):
 
     @inlineCallbacks
     def stopServer(self):
-        print 'before yield'
+        print('before yield')
         yield None
-        #print (yield self.client.manager.convert_units(T.Value(5, 'GHz'), 'Hz'))
-        print 'after yield'
+        print('after yield')
 
     def serverConnected(self, ID, name):
-        print 'server connected:', ID, name
+        print('server connected:', ID, name)
         self.checkServerWrappers(name)
 
     def serverDisconnected(self, ID, name):
-        print 'server disconnected:', ID, name
+        print('server disconnected:', ID, name)
         self.checkServerWrappers(name)
 
     @inlineCallbacks
@@ -78,11 +79,11 @@ class PythonTestServer(LabradServer):
         mgrServers = set(s[1] for s in mgrServers)
         cxnServers = set(self.client.servers.keys())
         if cxnServers == mgrServers:
-            print 'self.client updated for server', name
+            print('self.client updated for server', name)
         else:
-            print 'self.client not properly refreshed:'
-            print '  servers that should be disconnected:', list(cxnServers - mgrServers)
-            print '  servers that have not been connected:', list(mgrServers - cxnServers)
+            print('self.client not properly refreshed:')
+            print('  servers that should be disconnected:', list(cxnServers - mgrServers))
+            print('  servers that have not been connected:', list(mgrServers - cxnServers))
 
     def initContext(self, c):
         c['delay'] = 1*s
@@ -128,8 +129,8 @@ class PythonTestServer(LabradServer):
 
     @setting(41, "Verbose Echo", data='?')
     def verbose_echo(self, c, data):
-        print type(data)
-        print repr(data)
+        print(type(data))
+        print(repr(data))
         return data
 
     @setting(5, "Exc in Handler", data='?')
@@ -193,7 +194,7 @@ class PythonTestServer(LabradServer):
 
     @setting(101, "Get", key='s', returns='?')
     def get(self, c, key):
-        print "getting tag: %s, value: %s" % (key, c['dict'][key])
+        print("getting tag: %s, value: %s" % (key, c['dict'][key]))
         return c['dict'][key]
 
     @setting(102, "Keys", returns='*s')

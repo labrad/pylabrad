@@ -13,6 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import print_function
+
 import copy, re, textwrap
 import contextlib
 import os
@@ -343,8 +345,8 @@ def parseServerOptions(name, exit_on_failure=True, options=None):
             tls_on = config['tls'] == 'on'
             config['port'] = C.MANAGER_PORT_TLS if tls_on else C.MANAGER_PORT
     except usage.UsageError, errortext:
-        print '%s: %s' % (sys.argv[0], errortext)
-        print '%s: Try --help for usage details.' % (sys.argv[0])
+        print('%s: %s' % (sys.argv[0], errortext))
+        print('%s: Try --help for usage details.' % (sys.argv[0]))
         if exit_on_failure:
             sys.exit(1)
         else:

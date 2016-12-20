@@ -6,6 +6,9 @@ a dictionary of the timing results.  perf_ tests can have
 an optional argument 'N' which is a number of iterations
 to run.
 """
+
+from __future__ import print_function
+
 import argparse
 import json
 import random
@@ -132,13 +135,13 @@ def main():
     result = run_tests()
 
     if args.format == 'json':
-        print json.dumps({k: v['ms'] for k, v in result.items()}, indent=2)
+        print(json.dumps({k: v['ms'] for k, v in result.items()}, indent=2))
     else:
         root = ET.Element('build')
         for k, v in sorted(result.items()):
             child = ET.SubElement(root, 'statisticValue',
                                   key=k, value='{:f}'.format(v['ms']))
-        print ET.tostring(root)
+        print(ET.tostring(root))
 
 
 if __name__ == "__main__":

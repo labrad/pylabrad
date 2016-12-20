@@ -19,6 +19,8 @@ labrad.gpib
 Superclass of GPIB device servers.
 """
 
+from __future__ import print_function
+
 from labrad import types as T, constants as C, util, errors
 from labrad.devices import DeviceWrapper, DeviceServer, DeviceLockedError
 from labrad.server import LabradServer, setting
@@ -275,7 +277,7 @@ class ManagedDeviceServer(LabradServer):
 
     @inlineCallbacks
     def handleDeviceMessage(self, device, server, address, isConnected=True):
-        print 'Device message:', device, server, address, isConnected
+        print('Device message:', device, server, address, isConnected)
         name = self.makeDeviceName(device, server, address)
         if isConnected: # add device
             if name in self.devices:

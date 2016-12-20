@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import absolute_import
+from __future__ import print_function
 
 import functools
 from types import MethodType
@@ -455,8 +456,8 @@ class ClientAsync(object):
             self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, async=False)
             yield self.refresh()
         except Exception, e:
-            print 'error!'
-            print repr(e)
+            print('error!')
+            print(repr(e))
             raise
 
     @inlineCallbacks
@@ -466,8 +467,8 @@ class ClientAsync(object):
         try:
             yield self._addServer(name, ID)
         except Exception, e:
-            print 'Error adding server %d, "%s":' % (ID, name)
-            print str(e)
+            print('Error adding server %d, "%s":' % (ID, name))
+            print(str(e))
 
     @inlineCallbacks
     def _serverDisconnected(self, _c, data):
@@ -476,8 +477,8 @@ class ClientAsync(object):
         try:
             yield self._delServer(name)
         except Exception, e:
-            print 'Error removing server %d, "%s":' % (ID, name)
-            print str(e)
+            print('Error removing server %d, "%s":' % (ID, name))
+            print(str(e))
 
     @property
     def onDisconnect(self):
@@ -529,8 +530,8 @@ class ClientAsync(object):
         try:
             yield server.refresh()
         except Exception, e:
-            print 'Error while refreshing server "%s":' % name
-            print repr(e)
+            print('Error while refreshing server "%s":' % name)
+            print(repr(e))
         else:
             self.servers[name, server._py_name, ID] = server
             setattr(self, server._py_name, server)
@@ -542,8 +543,8 @@ class ClientAsync(object):
         try:
             yield server.refresh()
         except Exception, e:
-            print 'Error while refreshing server "%s":' % name
-            print repr(e)
+            print('Error while refreshing server "%s":' % name)
+            print(repr(e))
             yield self._delServer(name)
 
     def _delServer(self, name):

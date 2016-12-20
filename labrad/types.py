@@ -27,6 +27,7 @@ and return types have been registered), we can do even better.
 """
 
 from __future__ import absolute_import
+from __future__ import print_function
 
 import collections
 import datetime
@@ -163,7 +164,7 @@ def parseTypeTag(s):
         else:
             return LRCluster(*types)
     except Exception:
-        print 'failed to parse:', s
+        print('failed to parse:', s)
         raise
 
 WHITESPACE = ' ,\t'

@@ -83,7 +83,7 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
         headless (bool): If False, the default, we open a web browser to perform
             the OAuth login and spin up a local http server to receive the
             authorization code. If True, or if we fail to open a webbrowser,
-            we print a url for the user to visit to get the authorization code,
+            we show a url for the user to visit to get the authorization code,
             which they must then paste into the terminal. The headless is useful
             in some scenarios such as when tunneling through ssh.
         timeout (int): Amount of time to wait for OAuth login flow to complete,

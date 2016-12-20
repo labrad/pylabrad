@@ -19,6 +19,8 @@ labrad.util.hydrant
 Generate random LabRAD data for use in testing.
 """
 
+from __future__ import print_function
+
 from random import choice, randint, gauss
 from datetime import datetime, timedelta
 
@@ -102,13 +104,13 @@ def hoseDown(setting, n=1000, silent=True):
         t = randType()
         v = randValue(t)
         if not silent:
-            print t
+            print(t)
         try:
             resp = setting(v)
             assert v == resp
         except:
-            print 'problem:', str(t), repr(t)
-            print str(T.flatten(v)[1]), str(T.flatten(resp)[1])
+            print('problem:', str(t), repr(t))
+            print(str(T.flatten(v)[1]), str(T.flatten(resp)[1]))
             raise
 
 def hoseDataVault(dv, n=1000, silent=True):
@@ -116,15 +118,15 @@ def hoseDataVault(dv, n=1000, silent=True):
         t = randType(noneOkay=False)
         v = randValue(t)
         if not silent:
-            print t
+            print(t)
         try:
             pname = 'p%03s' % i
             dv.add_parameter(pname, v)
             resp = dv.get_parameter(pname)
             assert v == resp
         except:
-            print 'problem:', str(t), repr(t)
-            print str(T.flatten(v)[1]), str(T.flatten(resp)[1])
+            print('problem:', str(t), repr(t))
+            print(str(T.flatten(v)[1]), str(T.flatten(resp)[1]))
             raise
 
 
@@ -134,9 +136,9 @@ if __name__ == '__main__':
     try:
         hoseDown(cxn.python_test_server.echo, n=10000, silent=False)
     except Exception, e:
-        print e
+        print(e)
     else:
-        print 'Success!'
+        print('Success!')
     finally:
-        print 'press <enter> to finish...'
+        print('press <enter> to finish...')
         raw_input()

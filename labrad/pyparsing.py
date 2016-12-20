@@ -21,7 +21,7 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-#from __future__ import generators
+from __future__ import print_function
 
 __doc__ = \
 """
@@ -40,7 +40,7 @@ Here is a program to parse "Hello, World!" (or any greeting of the form "<saluta
     greet = Word( alphas ) + "," + Word( alphas ) + "!"
 
     hello = "Hello, World!"
-    print hello, "->", greet.parseString( hello )
+    print(hello, "->", greet.parseString( hello ))
 
 The program outputs the following::
 
@@ -562,13 +562,13 @@ def line(loc, strg):
         return strg[lastCR+1:]
 
 def _defaultStartDebugAction(instring, loc, expr):
-    print "Match", _ustr(expr), "at loc", loc, "(%d,%d)" % (lineno(loc, instring), col(loc, instring))
+    print("Match", _ustr(expr), "at loc", loc, "(%d,%d)" % (lineno(loc, instring), col(loc, instring)))
 
 def _defaultSuccessDebugAction(instring, startloc, endloc, expr, toks):
-    print "Matched", _ustr(expr), "->", toks.asList()
+    print("Matched", _ustr(expr), "->", toks.asList())
 
 def _defaultExceptionDebugAction(instring, loc, expr, exc):
-    print "Exception raised:", _ustr(exc)
+    print("Exception raised:", _ustr(exc))
 
 def nullDebugAction(*args):
     """'Do-nothing' debug action, to suppress debugging output during parsing."""
@@ -689,7 +689,7 @@ class ParserElement(object):
                 if hasattr(f.__call__, "im_self"):
                     numargs -= 1
 
-        #~ print "adding function %s with %d args" % (f.func_name,numargs)
+        #~ print("adding function %s with %d args" % (f.func_name,numargs))
         if numargs == 3:
             return f
         else:
@@ -796,7 +796,7 @@ class ParserElement(object):
         debugging = self.debug #and doActions
 
         if debugging or self.failAction:
-            #~ print "Match", self, "at loc", loc, "(%d,%d)" % (lineno(loc, instring), col(loc, instring))
+            #~ print("Match", self, "at loc", loc, "(%d,%d)" % (lineno(loc, instring), col(loc, instring)))
             if self.debugActions[0]:
                 self.debugActions[0](instring, loc, self)
             if callPreParse and self.callPreparse:
@@ -810,7 +810,7 @@ class ParserElement(object):
                 except IndexError:
                     raise ParseException(instring, len(instring), self.errmsg, self)
             except ParseException, err:
-                #~ print "Exception raised:", err
+                #~ print("Exception raised:", err)
                 if self.debugActions[2]:
                     self.debugActions[2](instring, tokensStart, self, err)
                 if self.failAction:
@@ -844,7 +844,7 @@ class ParserElement(object):
                                                      asList=self.saveAsList and isinstance(tokens, (ParseResults, list)),
                                                      modal=self.modalResults)
                 except ParseException, err:
-                    #~ print "Exception raised in user parse action:", err
+                    #~ print("Exception raised in user parse action:", err)
                     if self.debugActions[2]:
                         self.debugActions[2](instring, tokensStart, self, err)
                     raise
@@ -858,7 +858,7 @@ class ParserElement(object):
                                                  modal=self.modalResults)
 
         if debugging:
-            #~ print "Matched",self,"->",retTokens.asList()
+            #~ print("Matched",self,"->",retTokens.asList())
             if self.debugActions[1]:
                 self.debugActions[1](instring, tokensStart, loc, self, retTokens)
 
@@ -2922,7 +2922,7 @@ def oneOf(strs, caseless=False, useRegex=True):
             i += 1
 
     if not caseless and useRegex:
-        #~ print strs,"->", "|".join( [ _escapeRegexChars(sym) for sym in symbols] )
+        #~ print(strs,"->", "|".join( [ _escapeRegexChars(sym) for sym in symbols] ))
         try:
             if len(symbols) == len("".join(symbols)):
                 return Regex("[%s]" % "".join([_escapeRegexRangeChars(sym) for sym in symbols]))
@@ -3225,20 +3225,20 @@ commaSeparatedList = delimitedList(Optional(quotedString | _commasepitem, defaul
 if __name__ == "__main__":
 
     def test(teststring):
-        print teststring, "->",
+        print(teststring, "->"),
         try:
             tokens = simpleSQL.parseString(teststring)
             tokenlist = tokens.asList()
-            print tokenlist
-            print "tokens = ", tokens
-            print "tokens.columns =", tokens.columns
-            print "tokens.tables =", tokens.tables
-            print tokens.asXML("SQL", True)
+            print(tokenlist)
+            print("tokens = ", tokens)
+            print("tokens.columns =", tokens.columns)
+            print("tokens.tables =", tokens.tables)
+            print(tokens.asXML("SQL", True))
         except ParseException, err:
-            print err.line
-            print " "*(err.column-1) + "^"
-            print err
-        print
+            print(err.line)
+            print(" "*(err.column-1) + "^")
+            print(err)
+        print()
 
     selectToken    = CaselessLiteral("select")
     fromToken      = CaselessLiteral("from")

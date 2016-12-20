@@ -21,6 +21,8 @@ as well as the protocol for connecting to the Manager and
 authenticating.
 """
 
+from __future__ import print_function
+
 import hashlib
 
 from twisted.internet import reactor, protocol, defer
@@ -303,7 +305,7 @@ class LabradProtocol(protocol.Protocol):
         Just prints out a (hopefully informative) message
         about any errors that may have occurred.
         """
-        print 'Unhandled error in message listener:', msgCtx, data, listener
+        print('Unhandled error in message listener:', msgCtx, data, listener)
         failure.printTraceback(elideFrameworkCode=1)
 
     # message handling
@@ -588,19 +590,19 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
         except Exception:
             # TODO: remove this retry. This is a temporary fix to support
             # compatibility until TLS is fully deployed.
-            print ('STARTTLS failed; will retry without encryption in case we '
-                   'are connecting to a legacy manager.')
+            print('STARTTLS failed; will retry without encryption in case we '
+                  'are connecting to a legacy manager.')
             p = yield connect(host, port, tls_mode='off')
-            print 'Connected without encryption.'
+            print('Connected without encryption.')
             p.manager_features = set()
             yield authenticate(p)
             returnValue(p)
         try:
             manager_features = yield ping(p)
         except Exception:
-            print 'STARTTLS failed due to untrusted server certificate:'
-            print 'SHA1 Fingerprint={}'.format(crypto.fingerprint(cert))
-            print
+            print('STARTTLS failed due to untrusted server certificate:')
+            print('SHA1 Fingerprint={}'.format(crypto.fingerprint(cert)))
+            print()
             while True:
                 ans = raw_input(
                         'Accept server certificate for host "{}"? (accept just '
@@ -610,7 +612,7 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
                 if ans in ['o', 's', 'r']:
                     break
                 else:
-                    print 'Invalid input:', ans
+                    print('Invalid input:', ans)
             if ans == 'r':
                 raise
             p = yield do_connect()
