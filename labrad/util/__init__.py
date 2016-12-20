@@ -19,6 +19,7 @@ import copy, re, textwrap
 import contextlib
 import os
 import sys
+from builtins import range
 
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -132,7 +133,7 @@ def timing(f, n=100, **kw):
     from datetime import datetime
 
     total = 0
-    for _ in xrange(n):
+    for _ in range(n):
         start = datetime.now()
         f(**kw)
         end = datetime.now()

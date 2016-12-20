@@ -1,7 +1,8 @@
-numpy >= 1.9.1
+future
 futures >= 3.0.4
-twisted >= 14.0.0
-pyparsing >= 2.1.0
+numpy >= 1.9.1
 pyOpenSSL >= 0.13
-service_identity
+pyparsing >= 2.1.0
 requests
+service_identity
+twisted >= 14.0.0

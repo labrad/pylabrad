@@ -24,12 +24,13 @@ authenticating.
 from __future__ import print_function
 
 import hashlib
+from builtins import input
 
 from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
-import labrad.types as T
 
+import labrad.types as T
 from labrad import auth, constants as C, crypto, errors, oauth, support, util
 from labrad.stream import packetStream, flattenPacket
 
@@ -50,7 +51,7 @@ class LabradProtocol(protocol.Protocol):
         self.request_handler = None
         # create a generator to assemble the packets
         self.packetStream = packetStream(self.packetReceived, self.endianness)
-        self.packetStream.next() # start the packet stream
+        next(self.packetStream) # start the packet stream
 
         self.onDisconnect = util.DeferredSignal()
 
@@ -87,7 +88,7 @@ class LabradProtocol(protocol.Protocol):
         called, or because of some network error.
         """
         self.disconnected = True
-        for d in self.requests.values():
+        for d in list(self.requests.values()):
             d.errback(Exception('Connection lost.'))
         if reason == protocol.connectionDone:
             self.onDisconnect.callback(None)
@@ -429,7 +430,10 @@ class LabradProtocol(protocol.Protocol):
                 # send password response
                 m = hashlib.md5()
                 m.update(challenge)
-                m.update(credential.password)
+                if isinstance(credential.password, bytes):
+                    m.update(credential.password)
+                else:
+                    m.update(credential.password.encode('UTF-8'))
                 try:
                     resp = yield self._sendManagerRequest(0, m.digest())
                 except Exception:
@@ -494,7 +498,10 @@ class LabradProtocol(protocol.Protocol):
         # Store name, which is always the first identification param.
         self.name = ident[0]
         # Send identification.
-        self.ID = yield self._sendManagerRequest(0, (1L,) + ident)
+        data = (1,) + ident
+        tag = 'w' + 's'*len(ident)
+        flat = T.flatten(data, tag)
+        self.ID = yield self._sendManagerRequest(0, flat)
 
 
 class MessageContext(object):
@@ -604,7 +611,7 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
             print('SHA1 Fingerprint={}'.format(crypto.fingerprint(cert)))
             print()
             while True:
-                ans = raw_input(
+                ans = input(
                         'Accept server certificate for host "{}"? (accept just '
                         'this [O]nce; [S]ave and always accept this cert; '
                         '[R]eject) '.format(host))

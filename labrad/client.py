@@ -30,10 +30,6 @@ from labrad.errors import Error
 from labrad.support import (mangle, indent, PrettyMultiDict, FlatPacket,
                             PacketRecord, PacketResponse, hexdump)
 
-class NotFoundError(Error):
-    code = 10
-    def __init__(self, key):
-        self.msg = 'Could not find "%s".' % key
 
 def unwrap(s, after='|'):
     def trim(line):
@@ -140,10 +136,7 @@ class DynamicAttrDict(PrettyMultiDict):
             # force refresh and try again
             if self._parent:
                 self._parent.refresh(now=True)
-            try:
-                return super(DynamicAttrDict, self).__getitem__(key)
-            except KeyError:
-                raise NotFoundError(key)
+            return super(DynamicAttrDict, self).__getitem__(key)
 
 
 class HasDynamicAttrs(object):
@@ -243,7 +236,10 @@ class HasDynamicAttrs(object):
         return sorted(set(self._attrs.keys() + self.__dict__.keys() + dir(type(self))))
     
     def __getattr__(self, key):
-        return self._attrs[key]
+        try:
+            return self._attrs[key]
+        except KeyError:
+            raise AttributeError(key)
 
     def __getitem__(self, key):
         return self._attrs[key]

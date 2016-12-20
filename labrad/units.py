@@ -54,6 +54,7 @@ The version included with LabRAD has been slightly changed:
 
 from __future__ import print_function
 
+import itertools
 from fractions import Fraction
 from math import floor, pi
 
@@ -480,7 +481,10 @@ class Value(WithUnit):
 
 WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
-WithUnit._numericTypes[long] = Value
+try:
+    WithUnit._numericTypes[long] = Value
+except NameError:
+    pass  # python 3 has no long type
 WithUnit._numericTypes[np.int32] = Value
 WithUnit._numericTypes[np.int64] = Value
 
@@ -761,8 +765,9 @@ class Unit(object):
     def base_unit(self):
         num = ''
         denom = ''
-        for unit, power in (zip(_base_names, self.powers) +
-                            self.lex_names.items()):
+        terms = itertools.chain(zip(_base_names, self.powers),
+                                self.lex_names.items())
+        for unit, power in terms:
             if power != 1 and power != -1:
                 unit += '^' + str(abs(power))
             if power < 0: denom += '/' + unit
@@ -781,6 +786,9 @@ class Unit(object):
 
     def __str__(self):
         return self.name
+
+    def __hash__(self):
+        return hash(self.name)
 
     def __eq__(self, other):
         if isinstance(other, str):
@@ -831,6 +839,8 @@ class Unit(object):
             return self._div_units(other)
         return WithUnit(1.0 / other, self)
 
+    __truediv__ = __div__  # python 3
+
     @cache.lru_cache()
     def _rdiv_units(self, other):
         if self.offset != 0 or other.offset != 0:
@@ -845,6 +855,8 @@ class Unit(object):
         if isinstance(other, Unit):
             return self._rdiv_units(other)
         return WithUnit(other, self**(-1))
+
+    __rtruediv__ = __rdiv__
 
     @cache.lru_cache()
     def __pow__(self, other):
@@ -1126,7 +1138,10 @@ class DimensionlessFloat(WithDimensionlessUnit, float):
 
 WithUnit._dimensionlessTypes[float] = DimensionlessFloat
 WithUnit._dimensionlessTypes[int] = DimensionlessFloat
-WithUnit._dimensionlessTypes[long] = DimensionlessFloat
+try:
+    WithUnit._dimensionlessTypes[long] = DimensionlessFloat
+except NameError:
+    pass  # python 3 has no long type
 WithUnit._dimensionlessTypes[np.float64] = DimensionlessFloat
 WithUnit._dimensionlessTypes[np.int64] = DimensionlessFloat
 WithUnit._dimensionlessTypes[np.float32] = DimensionlessFloat

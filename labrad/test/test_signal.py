@@ -1,4 +1,4 @@
-import Queue
+import queue
 
 import pytest
 
@@ -32,26 +32,26 @@ def _test_signals(signal_setting, fire_setting):
             msg_id = 12345
 
             # add a listener to enqueue all messages
-            queue = Queue.Queue()
+            q = queue.Queue()
             def handler(message_ctx, msg):
-                queue.put((message_ctx, msg))
+                q.put((message_ctx, msg))
             cxn._backend.cxn.addListener(handler, ID=msg_id)
 
             # we don't get messages before signing up
             server[fire_setting]('not listening')
-            with pytest.raises(Queue.Empty):
-                queue.get(block=True, timeout=1)
+            with pytest.raises(queue.Empty):
+                q.get(block=True, timeout=1)
 
             server[signal_setting](msg_id)
             server[fire_setting]('listening')
-            msg_ctx, msg = queue.get(block=True, timeout=1)
+            msg_ctx, msg = q.get(block=True, timeout=1)
             assert msg_ctx.source == server.ID
             assert msg == 'listening'
 
             server[signal_setting]()
             server[fire_setting]('not listening')
-            with pytest.raises(Queue.Empty):
-                queue.get(block=True, timeout=1)
+            with pytest.raises(queue.Empty):
+                q.get(block=True, timeout=1)
 
 
 def test_signal_can_be_defined_on_server_class():

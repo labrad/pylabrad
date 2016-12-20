@@ -28,6 +28,7 @@ import itertools
 import types
 
 import twisted.internet.defer as defer
+from past.builtins import basestring  # for python 2/3 compatibility
 
 from labrad import types as T, util
 

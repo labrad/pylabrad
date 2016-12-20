@@ -37,6 +37,8 @@ import struct
 import sys
 import time
 import warnings
+from builtins import range
+from future.utils import with_metaclass
 
 import numpy as np
 
@@ -48,6 +50,10 @@ try:
 except ImportError:
     InstanceType = None
 
+try:
+    long_type = long
+except NameError:
+    long_type = int  # python 3 has no long type
 
 SYSTEM_BYTE_ORDER = '<' if sys.byteorder == 'little' else '>'
 
@@ -295,7 +301,7 @@ def unflatten(s, t, endianness='>'):
     """
     if isinstance(t, str):
         t = parseTypeTag(t)
-    if isinstance(s, str):
+    if isinstance(s, bytes):
         s = Buffer(s)
     return t.__unflatten__(s, endianness)
 
@@ -447,16 +453,13 @@ def reprLRData(s):
 
 # LabRAD type classes
 
-class LRType(object):
+class LRType(with_metaclass(RegisterParser, object)):
     """Base class of all LabRAD type objects.
 
     These type classes manage parsing and creation of type tags,
     provide default unflatteners, and also provide methods to test
     type equality and compatibility.
     """
-
-    __metaclass__ = RegisterParser
-
     width = 0
     isFixedWidth = True
 
@@ -607,7 +610,7 @@ class LRNone(LRType, Singleton):
     def __flatten__(self, data, endianness):
         if data is not None:
             raise FlatteningError(data, self)
-        return '', self
+        return b'', self
 
 registerType(type(None), LRNone())
 # register LRNone parser for the empty string as well
@@ -625,7 +628,7 @@ class LRBool(LRType, Singleton):
     def __flatten__(self, b, endianness):
         if not isinstance(b, (bool, np.bool8)):
             raise FlatteningError(b, self)
-        return chr(b), self
+        return b'\x01' if b else b'\x00', self
 
 registerType(bool, LRBool())
 registerType(np.bool8, LRBool())
@@ -638,7 +641,7 @@ class LRInt(LRType, Singleton):
         return struct.unpack(endianness + 'i', s.get(4))[0]
 
     def __flatten__(self, n, endianness):
-        if not isinstance(n, (int, long, np.integer)):
+        if not isinstance(n, (int, long_type, np.integer)):
             raise FlatteningError(n, self)
         if n >= 0x80000000 or n < -0x80000000:
             raise ValueError("out of range for type i: {0}".format(n))
@@ -654,16 +657,19 @@ class LRWord(LRType, Singleton):
     tag = 'w'
     width = 4
     def __unflatten__(self, s, endianness):
-        return long(struct.unpack(endianness + 'I', s.get(4))[0])
+        return long_type(struct.unpack(endianness + 'I', s.get(4))[0])
 
     def __flatten__(self, n, endianness):
-        if not isinstance(n, (int, long, np.integer)):
+        if not isinstance(n, (int, long_type, np.integer)):
             raise FlatteningError(n, self)
         if n > 0xFFFFFFFF or n < 0:
             raise ValueError("out of range for type w: {0}".format(n))
         return struct.pack(endianness + 'I', n), self
 
-registerType(long, LRWord())
+try:
+    registerType(long, LRWord())
+except NameError:
+    pass  # python 3 has no long type
 registerType(np.uint32, LRWord())
 registerType(np.uint64, LRWord())
 
@@ -680,17 +686,29 @@ class LRStr(LRType, Singleton):
 
     def __unflatten__(self, s, endianness):
         n = struct.unpack(endianness + 'i', s.get(4))[0]
-        return s.get(n)
+        b = s.get(n)
+        if bytes == str:
+            return b  # in python 2, str and bytes are equivalent
+        else:
+            try:
+                return b.decode('UTF-8')
+            except UnicodeDecodeError:
+                return b
 
     def __flatten__(self, s, endianness):
-        if isinstance(s, unicode):
-            s = s.encode('UTF-8')
-        if not isinstance(s, str):
+        if isinstance(s, bytes):
+            b = s  # in python 2, str and bytes are equivalent
+        else:
+            b = s.encode('UTF-8')
+        if not isinstance(b, bytes):
             raise FlatteningError(s, self)
-        return struct.pack(endianness + 'I', len(s)) + s, self
+        return struct.pack(endianness + 'I', len(b)) + b, self
 
 registerType(str, LRStr())
-registerType(unicode, LRStr())
+try:
+    registerType(unicode, LRStr())
+except NameError:
+    pass  # python 3 has no unicode type
 
 class LRBytes(LRType, Singleton):
     """A raw 8-bit byte string."""
@@ -707,13 +725,13 @@ class LRBytes(LRType, Singleton):
         return s.get(n)
 
     def __flatten__(self, s, endianness):
-        if not isinstance(s, str):
+        if not isinstance(s, bytes):
             raise FlatteningError(s, self)
         return struct.pack(endianness + 'I', len(s)) + s, self
 
-# Since bytes is an alias for str in python 2.7, don't enable this
-# until we are ready to cut over.
-# registerType(bytes, LRBytes)
+# bytes is an alias for str in python 2.7, but in python 3 they are different.
+if bytes != str:
+    registerType(bytes, LRBytes())
 
 def timeOffset():
     now = time.time()
@@ -741,7 +759,7 @@ class LRTime(LRType, Singleton):
     def __flatten__(self, t, endianness):
         diff = t - timeOffset()
         secs = diff.days * (60 * 60 * 24) + diff.seconds
-        us = long(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
+        us = long_type(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
         return struct.pack(endianness + 'QQ', secs, us), self
 
 registerType(datetime.datetime, LRTime())
@@ -768,7 +786,7 @@ class LRValue(LRType):
 
     # Types which can be flattened by LRValue as 'v[]' via coercion to
     # float. See __flatten__.
-    CASTABLE_TYPES = [int, long]
+    CASTABLE_TYPES = [int, long_type]
 
     def __init__(self, unit=None):
         if isinstance(unit, U.Unit):
@@ -986,8 +1004,8 @@ class LRCluster(LRType):
                     strs.append(flat.bytes)
                     items.append(flat.tag)
             self.items = items # warning: type mutated here
-            return ''.join(strs), self
-        return ''.join(t.flatten(elem, endianness).bytes for t, elem in zip(self.items, c)), self
+            return b''.join(strs), self
+        return b''.join(t.flatten(elem, endianness).bytes for t, elem in zip(self.items, c)), self
 
 registerTypeFunc(tuple, LRCluster.__lrtype__)
 
@@ -1121,7 +1139,7 @@ class LRList(LRType):
             width = size * elem.width
         else:
             newBuf = Buffer(s)
-            width = sum(elem.__width__(newBuf, endianness) for _ in xrange(size))
+            width = sum(elem.__width__(newBuf, endianness) for _ in range(size))
         s.skip(width)
         return 4*n + width
 
@@ -1231,9 +1249,9 @@ class LRList(LRType):
         else:
             def unflattenNDlist(s, dims):
                 if len(dims) == 1:
-                    return [unflatten(s, self.elem, endianness) for _ in xrange(dims[0])]
+                    return [unflatten(s, self.elem, endianness) for _ in range(dims[0])]
                 else:
-                    return [unflattenNDlist(s, dims[1:]) for _ in xrange(dims[0])]
+                    return [unflattenNDlist(s, dims[1:]) for _ in range(dims[0])]
             result = unflattenNDlist(s, dims)
         return LazyList(result)
 
@@ -1286,9 +1304,9 @@ class LRList(LRType):
             if len(ls) != lengths[n]:
                 raise Exception('List is not rectangular.')
             if n+1 == self.depth:
-                return ''.join(self.elem.flatten(e, endianness).bytes for e in ls)
+                return b''.join(self.elem.flatten(e, endianness).bytes for e in ls)
             else:
-                return ''.join(flattenNDlist(row, n+1) for row in ls)
+                return b''.join(flattenNDlist(row, n+1) for row in ls)
         flat = flattenNDlist(L)
         lengths = [l or 0 for l in lengths]
         return struct.pack(endianness + ('i' * len(lengths)), *lengths) + flat, self
@@ -1319,8 +1337,8 @@ class LRList(LRType):
         else:
             elems = (self.elem.flatten(i, endianness=endianness).bytes
                      for i in a.flat)
-            return dims + ''.join(elems), self
-        return dims + a.tostring(), self
+            return dims + b''.join(elems), self
+        return dims + a.tobytes(), self
 
     def __flatten_ValueArray__(self, va, endianness):
         # Convert to appropriate unit and flatten as array

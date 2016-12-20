@@ -12,18 +12,27 @@ to see that this email address has been registered as a labrad user.
 from __future__ import absolute_import
 from __future__ import print_function
 
-import BaseHTTPServer
 import json
 import logging
 import os
 import threading
 import time
 import urllib
-import urlparse
 import webbrowser
+from builtins import input
 
 import requests
 from concurrent import futures
+
+try:
+    import BaseHTTPServer as http_server
+except ImportError:
+    import http.server as http_server  # python 3
+
+try:
+    import urlparse
+except ImportError:
+    import urllib.parse as urlparse
 
 
 log = logging.getLogger(__name__)
@@ -114,8 +123,8 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
         login_uri = _create_login_uri(client_id, redirect_uri)
         print('To obtain an OAuth authorization code, please navigate to the '
               'following URL in a browser:\n\n{}\n'.format(login_uri))
-        code = raw_input('When you have completed the login flow, enter the '
-                         'code here: ')
+        code = input('When you have completed the login flow, enter the '
+                     'code here: ')
         return redirect_uri, code
 
     if headless:
@@ -123,7 +132,7 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
     else:
         code_future = futures.Future()
 
-        class OAuthHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+        class OAuthHandler(http_server.BaseHTTPRequestHandler):
             def do_GET(self):
                 parsed_path = urlparse.urlparse(self.path)
                 params = urlparse.parse_qs(parsed_path.query)
@@ -138,7 +147,7 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
                 pass
 
         # Start local http server to receive redirect on random port
-        httpd = BaseHTTPServer.HTTPServer(('localhost', 0), OAuthHandler)
+        httpd = http_server.HTTPServer(('localhost', 0), OAuthHandler)
         _, local_port = httpd.server_address
 
         redirect_uri = 'http://localhost:{}'.format(local_port)

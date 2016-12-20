@@ -2,7 +2,7 @@ from labrad import types as T
 
 HEADER_TYPE = T.parseTypeTag('(ww)iww')
 PACKET_TYPE = T.parseTypeTag('(ww)iws')
-RECORD_TYPE = T.parseTypeTag('wss')
+RECORD_TYPE = T.parseTypeTag('wsy')
 
 def packetStream(packetHandler, endianness='>'):
     """A generator that assembles packets.
@@ -10,7 +10,7 @@ def packetStream(packetHandler, endianness='>'):
     Accepts a function packetHandler that will be called with four arguments
     whenever a packet is completed: source, context, request, records.
     """
-    buf = ''
+    buf = b''
     while True:
         # get packet header (20 bytes)
         while len(buf) < 20:
@@ -52,13 +52,13 @@ def flattenPacket(target, context, request, records, endianness='>'):
         data = records
     else:
         kw = {'endianness': endianness}
-        data = ''.join(flattenRecord(*rec, **kw) for rec in records)
+        data = b''.join(flattenRecord(*rec, **kw) for rec in records)
     flat = PACKET_TYPE.flatten((context, request, target, data), endianness)
     return flat.bytes
 
 def flattenRecords(records, endianness='>'):
     kw = {'endianness': endianness}
-    return ''.join(flattenRecord(*rec, **kw) for rec in records)
+    return b''.join(flattenRecord(*rec, **kw) for rec in records)
 
 def flattenRecord(ID, data, types=[], endianness='>'):
     """Flatten a piece of data into a record with datatype and property."""
@@ -67,7 +67,7 @@ def flattenRecord(ID, data, types=[], endianness='>'):
     except T.FlatteningError as e:
         e.msg = e.msg + "\nSetting ID %s." % (ID,)
         raise
-    flat_record = RECORD_TYPE.flatten((ID, str(flat.tag), str(flat.bytes)),
+    flat_record = RECORD_TYPE.flatten((ID, str(flat.tag), bytes(flat.bytes)),
                                       endianness)
     return flat_record.bytes
 

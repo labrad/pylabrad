@@ -111,7 +111,6 @@ class LabradTypesTests(unittest.TestCase):
             None,
             True, False,
             1, -1, 2, -2, 0x7FFFFFFF, -0x80000000,
-            1L, 2L, 3L, 4L, 0L, 0xFFFFFFFFL,
             '', 'a', '\x00\x01\x02\x03',
             datetime.now(),
 
@@ -145,7 +144,7 @@ class LabradTypesTests(unittest.TestCase):
             [['a', 'bb', 'ccc'], ['dddd', 'eeeee', 'ffffff']],
 
             # more complex stuff
-            [(1L, 'a'), (2L, 'b')],
+            [(1, 'a'), (2, 'b')],
         ]
         for data_in in tests:
             data_out = T.unflatten(*T.flatten(data_in))
@@ -261,7 +260,7 @@ class LabradTypesTests(unittest.TestCase):
             # handle unknown pieces inside clusters and lists
             (['a', 'b'], ['*?'], '*s'),
             ((1, 2, 'a'), ['ww?'], 'wws'),
-            ((1, 1L), ['??'], 'iw'),
+            ((1, 2), ['??'], 'iw'),
         ]
         for data, hints, tag in passingTests:
             self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
@@ -312,8 +311,8 @@ class LabradTypesTests(unittest.TestCase):
         a = np.array([1, 2, 3, 4, 5], dtype='int32')
         b = T.unflatten(*T.flatten(a))
         self.assertTrue(np.all(a == b))
-        self.assertTrue(T.flatten(np.int32(5))[0] == '\x00\x00\x00\x05')
-        self.assertTrue(T.flatten(np.int64(-5))[0] == '\xff\xff\xff\xfb')
+        self.assertTrue(T.flatten(np.int32(5))[0] == b'\x00\x00\x00\x05')
+        self.assertTrue(T.flatten(np.int64(-5))[0] == b'\xff\xff\xff\xfb')
         self.assertTrue(len(T.flatten(np.float64(3.15))[0]) == 8)
         with self.assertRaises(T.FlatteningError):
             T.flatten(np.int64(-5), T.LRWord())
@@ -353,8 +352,8 @@ class LabradTypesTests(unittest.TestCase):
         foo = T.flatten('foo bar')
         self.assertEquals(foo, T.flatten(u'foo bar'))
         self.assertEquals(str(foo.tag), 's')
-        self.assertEquals(T.unflatten(foo.bytes, 'y'), 'foo bar')
-        self.assertEquals(T.unflatten(*T.flatten('foo bar', ['y'])), 'foo bar')
+        self.assertEquals(T.unflatten(foo.bytes, 'y'), b'foo bar')
+        self.assertEquals(T.unflatten(*T.flatten(b'foo bar', ['y'])), b'foo bar')
 
     def testFlattenIntArrayToValueArray(self):
         x = np.array([1, 2, 3, 4], dtype='int64')

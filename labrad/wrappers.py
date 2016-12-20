@@ -17,7 +17,10 @@ from __future__ import absolute_import
 from __future__ import print_function
 
 import functools
-from types import MethodType
+try:
+    from types import UnboundMethodType
+except ImportError:
+    UnboundMethodType = None
 
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -135,7 +138,11 @@ class AsyncPacketWrapper(object):
                 self._packet.append(rec)
                 return self
             wrapped.name = setting.name
-            method = MethodType(wrapped, None, cls)
+            if UnboundMethodType is not None:
+                method = UnboundMethodType(wrapped, None, cls)
+            else:
+                # in python 3, unbound methods are just functions
+                method = wrapped
         cls._cache[setting.name] = method
         cls.settings[setting.name, setting._py_name, setting.ID] = method
         setattr(cls, setting._py_name, method)
