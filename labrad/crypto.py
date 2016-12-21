@@ -52,15 +52,17 @@ def tls_options(hostname, cert_string=None):
     if not TLS:
         raise Exception('Unable to connect to labrad with TLS. Please be sure '
                         'to install pyOpenSSL.')
+    if isinstance(hostname, bytes):
+        hostname = hostname.decode('utf-8')
     if cert_string is None:
         cert_string = load_cert(hostname)
     if cert_string is None:
         logging.info('No certificate found for host "{}" in {}. Will use '
                      'system certs to verify tls'.format(hostname, CERTS_PATH))
-        return ssl.optionsForClientTLS(hostname.decode('utf-8'))
+        return ssl.optionsForClientTLS(hostname)
     else:
         cert = ssl.Certificate.loadPEM(cert_string)
-        return ssl.optionsForClientTLS(hostname.decode('utf-8'), cert)
+        return ssl.optionsForClientTLS(hostname, cert)
 
 
 def save_cert(hostname, cert_string):
