@@ -616,14 +616,17 @@ class NodeServer(LabradServer):
 
     def initMessages(self, connect=True):
         """Set up message dispatching."""
-        attr = 'connect' if connect else 'disconnect'
-        method = getattr(dispatcher, attr)
         def f(receiver, signal):
             try:
-                method(receiver, signal)
+                if connect:
+                    dispatcher.connect(receiver, signal)
+                else:
+                    dispatcher.disconnect(receiver, signal)
             except dispatcher.DispatcherError as e:
-                msg = 'Error while setting up message dispatching. receiver={0}, method={1}, signal={2}.'
-                print(msg.format(receiver, attr, signal), e)
+                method = 'connect' if connect else 'disconnect'
+                msg = ('Error while setting up message dispatching: '
+                       'method={}, receiver={}, signal={}.')
+                print(msg.format(method, receiver, signal), e)
         # set up messages to be relayed out over LabRAD
         messages = ['server_starting', 'server_started',
                     'server_stopping', 'server_stopped',
