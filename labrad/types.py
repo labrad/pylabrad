@@ -29,6 +29,9 @@ and return types have been registered), we can do even better.
 from __future__ import absolute_import
 from __future__ import print_function
 
+from builtins import range
+from future.utils import with_metaclass
+
 import collections
 import datetime
 import itertools
@@ -37,8 +40,6 @@ import struct
 import sys
 import time
 import warnings
-from builtins import range
-from future.utils import with_metaclass
 
 import numpy as np
 

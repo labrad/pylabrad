@@ -1,7 +1,8 @@
 from __future__ import absolute_import
 
-import getpass
 from builtins import input
+
+import getpass
 
 from labrad import constants
 

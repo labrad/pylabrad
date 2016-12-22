@@ -22,13 +22,14 @@ Decorators that help in creating LabRAD servers.
 from __future__ import absolute_import
 from __future__ import print_function
 
+from past.builtins import basestring  # for python 2/3 compatibility
+
 import functools
 import inspect
 import itertools
 import types
 
 import twisted.internet.defer as defer
-from past.builtins import basestring  # for python 2/3 compatibility
 
 from labrad import types as T, util
 

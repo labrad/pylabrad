@@ -23,8 +23,9 @@ authenticating.
 
 from __future__ import print_function
 
-import hashlib
 from builtins import input
+
+import hashlib
 
 from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue

@@ -15,11 +15,12 @@
 
 from __future__ import print_function
 
+from builtins import range
+
 import copy, re, textwrap
 import contextlib
 import os
 import sys
-from builtins import range
 
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
