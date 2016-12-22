@@ -67,10 +67,10 @@ class SafeIterDict(dict):
     keys = lambda self: list(dict.keys(self))
     items = lambda self: list(dict.items(self))
     values = lambda self: list(dict.values(self))
-    iterkeys = lambda self: iter(self.keys())
-    iteritems = lambda self: iter(self.items())
-    itervalues = lambda self: iter(self.values())
-    __iter__ = lambda self: iter(self.keys())
+    iterkeys = lambda self: iter(list(self.keys()))
+    iteritems = lambda self: iter(list(self.items()))
+    itervalues = lambda self: iter(list(self.values()))
+    __iter__ = lambda self: iter(list(self.keys()))
 
 class MultiDict(SafeIterDict):
     """Dictionary with multiple keys to the same value."""

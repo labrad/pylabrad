@@ -107,7 +107,7 @@ class Signal(object):
                     del self.listeners[context]
         # disconnect a particular target in any context
         elif target is not None:
-            for context, targets in self.listeners.items():
+            for context, targets in list(self.listeners.items()):
                 if target in targets:
                     del targets[target]
                 if not len(targets) or context[0] == target:
@@ -533,7 +533,7 @@ class LabradServer(object):
 
     def _expireID(self, ID):
         """Expire all contexts with a given ID (high word)."""
-        for context in self.contexts.keys():
+        for context in list(self.contexts.keys()):
             if context[0] == ID:
                 self._expireContext(context)
 
