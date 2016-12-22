@@ -4,7 +4,6 @@ __author__ = "Patrick K. O'Brien <pobrien@orbtech.com>"
 __cvsid__ = "$Id: dispatcher.py 39667 2006-06-11 00:13:05Z RD $"
 __revision__ = "$Revision: 39667 $"[11:-2]
 
-import types
 import weakref
 
 
@@ -153,7 +152,6 @@ def send(signal, sender=Anonymous, **kwds):
 
 def _call(receiver, **kwds):
     """Call receiver with only arguments it can accept."""
-##    if type(receiver) is types.InstanceType:
     if hasattr(receiver, '__call__') and \
        (hasattr(receiver.__call__, '__func__') or hasattr(receiver.__call__, '__code__')):
         # receiver is a class instance; assume it is callable.
