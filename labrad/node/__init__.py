@@ -67,16 +67,16 @@ For rsyslogd on ubuntu, create the following file:
 
 from __future__ import print_function
 
-from ConfigParser import SafeConfigParser
-from datetime import datetime
+import io
 import logging
 import logging.handlers
 import os
 import shlex
 import socket
-import StringIO
 import sys
 import zipfile
+from configparser import ConfigParser
+from datetime import datetime
 
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
@@ -337,8 +337,8 @@ def createGenericServerCls(path, filename, conf):
     class cls(ServerProcess):
         pass
 
-    scp = SafeConfigParser()
-    scp.readfp(StringIO.StringIO(conf))
+    scp = ConfigParser()
+    scp.readfp(io.StringIO(conf))
 
     # general information
     cls.name = scp.get('info', 'name', raw=True)
