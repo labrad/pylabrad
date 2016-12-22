@@ -12,27 +12,21 @@ to see that this email address has been registered as a labrad user.
 from __future__ import absolute_import
 from __future__ import print_function
 
+from builtins import input
+from future.standard_library import install_aliases
+install_aliases()  # for http.server and urllib.parse
+
+import http.server
 import json
 import logging
 import os
 import threading
 import time
-import urllib
+import urllib.parse
 import webbrowser
-from builtins import input
-
-import requests
 from concurrent import futures
 
-try:
-    import BaseHTTPServer as http_server
-except ImportError:
-    import http.server as http_server  # python 3
-
-try:
-    import urlparse
-except ImportError:
-    import urllib.parse as urlparse
+import requests
 
 
 log = logging.getLogger(__name__)
@@ -132,22 +126,25 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
     else:
         code_future = futures.Future()
 
-        class OAuthHandler(http_server.BaseHTTPRequestHandler):
+        class OAuthHandler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
-                parsed_path = urlparse.urlparse(self.path)
-                params = urlparse.parse_qs(parsed_path.query)
+                parsed_path = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed_path.query)
                 code = params['code'][0]
                 code_future.set_result(code)
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/html')
                 self.end_headers()
-                self.wfile.write(_OAUTH_PAGE)
+                data = _OAUTH_PAGE
+                if not isinstance(data, bytes):
+                    data = data.encode('utf-8')
+                self.wfile.write(data)
 
             def log_request(self, *args, **kw):
                 pass
 
         # Start local http server to receive redirect on random port
-        httpd = http_server.HTTPServer(('localhost', 0), OAuthHandler)
+        httpd = http.server.HTTPServer(('localhost', 0), OAuthHandler)
         _, local_port = httpd.server_address
 
         redirect_uri = 'http://localhost:{}'.format(local_port)
@@ -198,7 +195,7 @@ def _create_login_uri(client_id, redirect_uri):
         'response_type': 'code',
         'client_id': client_id
     }
-    return '{}?{}'.format(OAUTH_URI, urllib.urlencode(params))
+    return '{}?{}'.format(OAUTH_URI, urllib.parse.urlencode(params))
 
 
 def _refresh_token(client_id, client_secret, refresh_token):
