@@ -310,8 +310,8 @@ class ServerProcess(ProcessProtocol):
 def findConfigBlock(path, filename):
     """Find a Node configuration block embedded in a file."""
     # markers to delimit node info block
-    BEGIN = "### BEGIN NODE INFO"
-    END = "### END NODE INFO"
+    BEGIN = b"### BEGIN NODE INFO"
+    END = b"### END NODE INFO"
     with open(os.path.join(path, filename), 'rb') as file:
         foundBeginning = False
         lines = []
@@ -321,10 +321,10 @@ def findConfigBlock(path, filename):
             elif line.upper().strip().startswith(END):
                 break
             elif foundBeginning:
-                line = line.replace('\r', '')
-                line = line.replace('\n', '')
+                line = line.replace(b'\r', b'')
+                line = line.replace(b'\n', b'')
                 lines.append(line)
-        return '\n'.join(lines) if lines else None
+        return b'\n'.join(lines) if lines else None
 
 
 def createGenericServerCls(path, filename, conf):
@@ -337,6 +337,8 @@ def createGenericServerCls(path, filename, conf):
     class cls(ServerProcess):
         pass
 
+    if isinstance(conf, bytes):
+        conf = conf.decode('utf-8')
     scp = ConfigParser()
     scp.readfp(io.StringIO(conf))
 
