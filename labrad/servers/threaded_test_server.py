@@ -70,7 +70,7 @@ class ThreadedTestServer(ThreadedServer):
     @setting(4, "Echo Delay", delay='v[s]', returns='v[s]')
     def echo_delay(self, c, delay=None):
         """Get or set the echo delay."""
-        self.log('Echo delay: %s' % delay)
+        self.log('Echo delay: {}'.format(delay))
         if delay is not None:
             c['delay'] = delay
         return c['delay']
@@ -98,7 +98,7 @@ class ThreadedTestServer(ThreadedServer):
     @setting(40, "Speed", speed='v[m/s]', returns='v[m/s]')
     def speed(self, c, speed=None):
         """Get or set the speed."""
-        self.log('Speed: %s' % speed)
+        self.log('Speed: {}'.format(speed))
         if speed is not None:
             c['speed'] = speed
         return c['speed']
@@ -147,7 +147,7 @@ class ThreadedTestServer(ThreadedServer):
 
     @setting(101, "Get", key='s', returns='?')
     def get(self, c, key):
-        print("getting tag: %s, value: %s" % (key, c['dict'][key]))
+        print("getting tag: {}, value: {}".format(key, c['dict'][key]))
         return c['dict'][key]
 
     @setting(102, "Keys", returns='*s')
