@@ -20,6 +20,9 @@ Decorators that help in creating LabRAD servers.
 """
 
 from __future__ import absolute_import
+from __future__ import print_function
+
+from past.builtins import basestring  # for python 2/3 compatibility
 
 import functools
 import inspect
@@ -52,7 +55,7 @@ def setting(lr_ID, lr_name=None, returns=[], unflatten=True, **params):
             func.getRegistrationInfo = handler.getRegistrationInfo
             return func
         except Exception:
-            print 'Error in setting {} ({}):'.format(func.__name__, lr_ID)
+            print('Error in setting {} ({}):'.format(func.__name__, lr_ID))
             raise
     return decorator
 

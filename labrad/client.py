@@ -19,6 +19,8 @@ labrad.client
 Contains a blocking client connection to labrad.
 """
 
+from __future__ import print_function
+
 import warnings
 
 from labrad import constants as C, types as T
@@ -28,10 +30,6 @@ from labrad.errors import Error
 from labrad.support import (mangle, indent, PrettyMultiDict, FlatPacket,
                             PacketRecord, PacketResponse, hexdump)
 
-class NotFoundError(Error):
-    code = 10
-    def __init__(self, key):
-        self.msg = 'Could not find "%s".' % key
 
 def unwrap(s, after='|'):
     def trim(line):
@@ -138,10 +136,7 @@ class DynamicAttrDict(PrettyMultiDict):
             # force refresh and try again
             if self._parent:
                 self._parent.refresh(now=True)
-            try:
-                return super(DynamicAttrDict, self).__getitem__(key)
-            except KeyError:
-                raise NotFoundError(key)
+            return super(DynamicAttrDict, self).__getitem__(key)
 
 
 class HasDynamicAttrs(object):
@@ -207,9 +202,9 @@ class HasDynamicAttrs(object):
                     attr.refresh()
 
             self._refreshed = True
-        except Exception, e:
-            print 'Error refreshing dynamic attributes:'
-            print e, repr(e)
+        except Exception as e:
+            print('Error refreshing dynamic attributes:')
+            print(e, repr(e))
 
     def _getAttrs(self):
         """Get the current list of attributes from labrad.
@@ -241,7 +236,10 @@ class HasDynamicAttrs(object):
         return sorted(set(self._attrs.keys() + self.__dict__.keys() + dir(type(self))))
     
     def __getattr__(self, key):
-        return self._attrs[key]
+        try:
+            return self._attrs[key]
+        except KeyError:
+            raise AttributeError(key)
 
     def __getitem__(self, key):
         return self._attrs[key]

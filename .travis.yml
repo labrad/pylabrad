@@ -2,13 +2,15 @@ language: python
 sudo: false
 python:
   - "2.7"
+  - "3.4"
+  - "3.5"
 install:
   - cat requirements.txt | perl -p -i -e 's/>=/==/g' > exact_requirements.txt
   - pip install -r exact_requirements.txt
   - pip install .
   - pip install pytest coveralls
 env:
-  - SCALABRAD_VERSION=0.5.1
+  - SCALABRAD_VERSION=0.8.0
 cache:
   directories:
     - $HOME/scalabrad-$SCALABRAD_VERSION

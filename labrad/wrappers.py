@@ -14,9 +14,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import absolute_import
+from __future__ import print_function
 
 import functools
-from types import MethodType
+try:
+    from types import UnboundMethodType
+except ImportError:
+    UnboundMethodType = None
 
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -134,7 +138,11 @@ class AsyncPacketWrapper(object):
                 self._packet.append(rec)
                 return self
             wrapped.name = setting.name
-            method = MethodType(wrapped, None, cls)
+            if UnboundMethodType is not None:
+                method = UnboundMethodType(wrapped, None, cls)
+            else:
+                # in python 3, unbound methods are just functions
+                method = wrapped
         cls._cache[setting.name] = method
         cls.settings[setting.name, setting._py_name, setting.ID] = method
         setattr(cls, setting._py_name, method)
@@ -454,9 +462,9 @@ class ClientAsync(object):
             self._cxn.addListener(self._serverConnected, source=self._mgr.ID, ID=314159265, async=False)
             self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, async=False)
             yield self.refresh()
-        except Exception, e:
-            print 'error!'
-            print repr(e)
+        except Exception as e:
+            print('error!')
+            print(repr(e))
             raise
 
     @inlineCallbacks
@@ -465,9 +473,9 @@ class ClientAsync(object):
         ID, name = data
         try:
             yield self._addServer(name, ID)
-        except Exception, e:
-            print 'Error adding server %d, "%s":' % (ID, name)
-            print str(e)
+        except Exception as e:
+            print('Error adding server %d, "%s":' % (ID, name))
+            print(str(e))
 
     @inlineCallbacks
     def _serverDisconnected(self, _c, data):
@@ -475,9 +483,9 @@ class ClientAsync(object):
         ID, name = data
         try:
             yield self._delServer(name)
-        except Exception, e:
-            print 'Error removing server %d, "%s":' % (ID, name)
-            print str(e)
+        except Exception as e:
+            print('Error removing server %d, "%s":' % (ID, name))
+            print(str(e))
 
     @property
     def onDisconnect(self):
@@ -528,9 +536,9 @@ class ClientAsync(object):
             self._cache[name] = server
         try:
             yield server.refresh()
-        except Exception, e:
-            print 'Error while refreshing server "%s":' % name
-            print repr(e)
+        except Exception as e:
+            print('Error while refreshing server "%s":' % name)
+            print(repr(e))
         else:
             self.servers[name, server._py_name, ID] = server
             setattr(self, server._py_name, server)
@@ -541,9 +549,9 @@ class ClientAsync(object):
         server = self.servers[name]
         try:
             yield server.refresh()
-        except Exception, e:
-            print 'Error while refreshing server "%s":' % name
-            print repr(e)
+        except Exception as e:
+            print('Error while refreshing server "%s":' % name)
+            print(repr(e))
             yield self._delServer(name)
 
     def _delServer(self, name):

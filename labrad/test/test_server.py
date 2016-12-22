@@ -1,4 +1,4 @@
-import Queue
+import queue
 import random
 
 import pytest
@@ -10,13 +10,13 @@ from labrad import util
 
 def test_server_expire_context_method_is_called():
     """Ensure that server's expireContext method is called when client disconnects."""
-    queue = Queue.Queue()
+    q = queue.Queue()
 
     class TestServer(LabradServer):
         name = "TestServer"
 
         def expireContext(self, c):
-            queue.put(c.ID)
+            q.put(c.ID)
 
         @setting(100)
         def echo(self, c, data):
@@ -25,9 +25,9 @@ def test_server_expire_context_method_is_called():
     with util.syncRunServer(TestServer()):
         with labrad.connect() as cxn:
             # create a random context owned by this connection
-            request_context = (cxn.ID, random.randint(0, 0xFFFFFFFFL))
+            request_context = (cxn.ID, random.randint(0, 2**32-1))
             cxn.testserver.echo('hello, world!', context=request_context)
-        expired_context = queue.get(block=True, timeout=1)
+        expired_context = q.get(block=True, timeout=1)
         assert expired_context == request_context
 
 

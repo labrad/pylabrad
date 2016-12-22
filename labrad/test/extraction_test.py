@@ -3,6 +3,8 @@
 # of labrad.types.Buffer, which is used in the parsing process.
 # fixing the implementation resulted in a substantial performance gain.
 
+from __future__ import print_function
+
 import time
 
 import numpy as np
@@ -13,7 +15,7 @@ def timeIt(f, *a, **kw):
     start = time.time()
     result = f(*a, **kw)
     end = time.time()
-    print f.__name__, '- elapsed:', end - start
+    print(f.__name__, '- elapsed:', end - start)
     return result
 
 def extractAverage(packets):

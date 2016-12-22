@@ -245,7 +245,7 @@ class LabradServer(object):
                     setting = self.settings[ID]
                     result = yield self._dispatch(setting.handleRequest, self, c.data, flat_data)
                     response.append((ID, result, setting.returns))
-                except Exception, e:
+                except Exception as e:
                     response.append((ID, self._getTraceback(e)))
                     break
             c.check() # make sure this context hasn't expired
@@ -434,7 +434,7 @@ class LabradServer(object):
         self.stopping = True
         try:
             yield self._dispatch(self.stopServer)
-        except Exception, e:
+        except Exception as e:
             self._error = failure.Failure(e)
         finally:
             try:

@@ -65,7 +65,7 @@ For rsyslogd on ubuntu, create the following file:
 :syslogtag,contains,"labrad"			/var/log/labrad.log;RSYSLOG_TraditionalFileFormat
 """
 
-from __future__ import with_statement
+from __future__ import print_function
 
 from ConfigParser import SafeConfigParser
 from datetime import datetime
@@ -145,9 +145,9 @@ class ServerProcess(ProcessProtocol):
     def _start(self):
         if self.started:
             return
-        print "starting '%s'..." % self.name
-        print "path:", self.path
-        print "args:", self.args
+        print("starting '%s'..." % self.name)
+        print("path:", self.path)
+        print("args:", self.args)
         self.starting = True
         self.startup = defer.Deferred()
         dispatcher.connect(self.serverConnected, 'serverConnected')
@@ -190,14 +190,14 @@ class ServerProcess(ProcessProtocol):
                 timeoutCall.cancel()
             try:
                 dispatcher.disconnect(self.serverConnected, 'serverConnected')
-            except Exception, e:
-                print 'Error while disconnecting signal:', e
+            except Exception as e:
+                print('Error while disconnecting signal:', e)
 
     @inlineCallbacks
     def _stop(self):
         if not self.started:
             return
-        print "stopping '%s'..." % self.name
+        print("stopping '%s'..." % self.name)
         self.stopping = True
         self.shutdown = defer.Deferred()
         self.emitMessage('server_stopping')
@@ -243,11 +243,11 @@ class ServerProcess(ProcessProtocol):
         call the appropriate deferred, depending on the current state.
         """
         if isinstance(reason.value, ProcessDone):
-            print "'%s': process closed cleanly." % self.name
+            print("'%s': process closed cleanly." % self.name)
         elif isinstance(reason.value, ProcessTerminated):
-            print "'%s': process terminated: %s" % (self.name, reason.value)
+            print("'%s': process terminated: %s" % (self.name, reason.value))
         else:
-            print "'%s': process ended: %s" % (self.name, reason)
+            print("'%s': process ended: %s" % (self.name, reason))
         self.started = False
         if self.starting:
             err = T.Error('Startup failed.', payload=self.output)
@@ -427,7 +427,7 @@ class Node(object):
         """Run the node in a loop, reconnecting after connection loss."""
         log = logging.getLogger('labrad.node')
         while True:
-            print 'Connecting to {}:{}...'.format(self.host, self.port)
+            print('Connecting to {}:{}...'.format(self.host, self.port))
             try:
                 p = yield protocol.connect(self.host, self.port, self.tls_mode,
                                            self.username, self.password)
@@ -448,7 +448,7 @@ class Node(object):
             dispatcher._boundMethods.clear()
 
             yield util.wakeupCall(0)
-            print 'Will try to reconnect in {} seconds...'.format(self.reconnectDelay)
+            print('Will try to reconnect in {} seconds...'.format(self.reconnectDelay))
             yield util.wakeupCall(self.reconnectDelay)
 
 
@@ -517,8 +517,8 @@ class NodeConfig(object):
     def _update(self, config, triggerRefresh=True):
         """Update instance variables from loaded config."""
         self.dirs, self.extensions, self.autostart = config
-        print 'config updated: dirs={}, extensions={}, autostart={}'.format(
-                self.dirs, self.extensions, self.autostart)
+        print('config updated: dirs={}, extensions={}, autostart={}'.format(
+        self.dirs, self.extensions, self.autostart))
         if triggerRefresh:
             self.parent.refreshServers()
 
@@ -621,7 +621,7 @@ class NodeServer(LabradServer):
                 method(receiver, signal)
             except dispatcher.DispatcherError as e:
                 msg = 'Error while setting up message dispatching. receiver={0}, method={1}, signal={2}.'
-                print msg.format(receiver, attr, signal), e
+                print(msg.format(receiver, attr, signal), e)
         # set up messages to be relayed out over LabRAD
         messages = ['server_starting', 'server_started',
                     'server_stopping', 'server_stopped',

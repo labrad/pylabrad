@@ -12,18 +12,21 @@ to see that this email address has been registered as a labrad user.
 from __future__ import absolute_import
 from __future__ import print_function
 
-import BaseHTTPServer
+from builtins import input
+from future.standard_library import install_aliases
+install_aliases()  # for http.server and urllib.parse
+
+import http.server
 import json
 import logging
 import os
 import threading
 import time
-import urllib
-import urlparse
+import urllib.parse
 import webbrowser
+from concurrent import futures
 
 import requests
-from concurrent import futures
 
 
 log = logging.getLogger(__name__)
@@ -83,7 +86,7 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
         headless (bool): If False, the default, we open a web browser to perform
             the OAuth login and spin up a local http server to receive the
             authorization code. If True, or if we fail to open a webbrowser,
-            we print a url for the user to visit to get the authorization code,
+            we show a url for the user to visit to get the authorization code,
             which they must then paste into the terminal. The headless is useful
             in some scenarios such as when tunneling through ssh.
         timeout (int): Amount of time to wait for OAuth login flow to complete,
@@ -114,8 +117,8 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
         login_uri = _create_login_uri(client_id, redirect_uri)
         print('To obtain an OAuth authorization code, please navigate to the '
               'following URL in a browser:\n\n{}\n'.format(login_uri))
-        code = raw_input('When you have completed the login flow, enter the '
-                         'code here: ')
+        code = input('When you have completed the login flow, enter the '
+                     'code here: ')
         return redirect_uri, code
 
     if headless:
@@ -123,22 +126,25 @@ def get_token(client_id, client_secret, headless=False, timeout=60):
     else:
         code_future = futures.Future()
 
-        class OAuthHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+        class OAuthHandler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
-                parsed_path = urlparse.urlparse(self.path)
-                params = urlparse.parse_qs(parsed_path.query)
+                parsed_path = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed_path.query)
                 code = params['code'][0]
                 code_future.set_result(code)
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/html')
                 self.end_headers()
-                self.wfile.write(_OAUTH_PAGE)
+                data = _OAUTH_PAGE
+                if not isinstance(data, bytes):
+                    data = data.encode('utf-8')
+                self.wfile.write(data)
 
             def log_request(self, *args, **kw):
                 pass
 
         # Start local http server to receive redirect on random port
-        httpd = BaseHTTPServer.HTTPServer(('localhost', 0), OAuthHandler)
+        httpd = http.server.HTTPServer(('localhost', 0), OAuthHandler)
         _, local_port = httpd.server_address
 
         redirect_uri = 'http://localhost:{}'.format(local_port)
@@ -189,7 +195,7 @@ def _create_login_uri(client_id, redirect_uri):
         'response_type': 'code',
         'client_id': client_id
     }
-    return '{}?{}'.format(OAUTH_URI, urllib.urlencode(params))
+    return '{}?{}'.format(OAUTH_URI, urllib.parse.urlencode(params))
 
 
 def _refresh_token(client_id, client_secret, refresh_token):

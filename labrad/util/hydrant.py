@@ -19,8 +19,12 @@ labrad.util.hydrant
 Generate random LabRAD data for use in testing.
 """
 
-from random import choice, randint, gauss
+from __future__ import print_function
+
+from builtins import input, range
+
 from datetime import datetime, timedelta
+from random import choice, randint, gauss
 
 from labrad import types as T
 
@@ -69,9 +73,15 @@ def randValue(t):
 def genNone(): return None
 def genBool(): return choice((True, False))
 def genInt(): return int(randint(-2**31, 2**31-1))
-def genWord(): return long(randint(0, 2**32-1))
+def genWord():
+    value = randint(0, 2**32-1)
+    try:
+        return long(value)
+    except NameError:
+        return value  # python 3 has no long type
+
 def genStr():
-    return ''.join(chr(randint(0, 255)) for _ in xrange(randint(0, 100)))
+    return ''.join(chr(randint(0, 255)) for _ in range(randint(0, 100)))
 
 def genTime():
     diff = timedelta(seconds=randint(-2**20, 2**20),
@@ -85,12 +95,12 @@ def genComplex(unit=None):
     return T.Complex(complex(gauss(0, 1), gauss(0, 1)), unit)
 
 def genList(elem, depth=1):
-    lengths = [randint(1, 2**(5-depth)) for _ in xrange(depth)]
+    lengths = [randint(1, 2**(5-depth)) for _ in range(depth)]
     def genNDList(ls):
         if len(ls) == 1:
-            return [randValue(elem) for _ in xrange(ls[0])]
+            return [randValue(elem) for _ in range(ls[0])]
         else:
-            return [genNDList(ls[1:]) for _ in xrange(ls[0])]
+            return [genNDList(ls[1:]) for _ in range(ls[0])]
     return genNDList(lengths)
 
 def genCluster(*items):
@@ -102,13 +112,13 @@ def hoseDown(setting, n=1000, silent=True):
         t = randType()
         v = randValue(t)
         if not silent:
-            print t
+            print(t)
         try:
             resp = setting(v)
             assert v == resp
         except:
-            print 'problem:', str(t), repr(t)
-            print str(T.flatten(v)[1]), str(T.flatten(resp)[1])
+            print('problem:', str(t), repr(t))
+            print(str(T.flatten(v)[1]), str(T.flatten(resp)[1]))
             raise
 
 def hoseDataVault(dv, n=1000, silent=True):
@@ -116,15 +126,15 @@ def hoseDataVault(dv, n=1000, silent=True):
         t = randType(noneOkay=False)
         v = randValue(t)
         if not silent:
-            print t
+            print(t)
         try:
             pname = 'p%03s' % i
             dv.add_parameter(pname, v)
             resp = dv.get_parameter(pname)
             assert v == resp
         except:
-            print 'problem:', str(t), repr(t)
-            print str(T.flatten(v)[1]), str(T.flatten(resp)[1])
+            print('problem:', str(t), repr(t))
+            print(str(T.flatten(v)[1]), str(T.flatten(resp)[1]))
             raise
 
 
@@ -133,10 +143,10 @@ if __name__ == '__main__':
     cxn = labrad.connect()
     try:
         hoseDown(cxn.python_test_server.echo, n=10000, silent=False)
-    except Exception, e:
-        print e
+    except Exception as e:
+        print(e)
     else:
-        print 'Success!'
+        print('Success!')
     finally:
-        print 'press <enter> to finish...'
-        raw_input()
+        print('press <enter> to finish...')
+        input()

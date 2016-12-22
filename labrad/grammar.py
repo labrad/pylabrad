@@ -19,8 +19,10 @@ labrad.grammar
 Grammars for parsing various LabRAD stuff with pyparsing.
 """
 
-from labrad.pyparsing import (Word, Literal, Group,
-                              Forward, Optional, alphas, nums, alphanums, stringEnd)
+from __future__ import absolute_import
+
+from pyparsing import (Word, Literal, Group, Forward, Optional, alphas, nums,
+                       alphanums, stringEnd)
 
 toInt = lambda s, l, t: [int(t[0])]
 

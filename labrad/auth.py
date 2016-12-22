@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+from builtins import input
+
 import getpass
 
 from labrad import constants
@@ -77,8 +79,8 @@ def get_username_and_password(host, port, prompt=True):
                 break
         return passwords[user]
     elif prompt:
-        user = raw_input('Enter username, or blank for the global user '
-                         '({}:{}): '.format(host, port))
+        user = input('Enter username, or blank for the global user '
+                     '({}:{}): '.format(host, port))
         password = _prompt_for_password(host, port, user)
         return Password(user, password)
     else:

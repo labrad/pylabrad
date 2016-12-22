@@ -15,6 +15,8 @@ timeout = 5
 ### END NODE INFO
 """
 
+from __future__ import print_function
+
 import time
 
 from labrad import types as T, util
@@ -38,15 +40,15 @@ class ThreadedTestServer(ThreadedServer):
         time.sleep(0.5)
 
     def stopServer(self):
-        print 'before sleep'
+        print('before sleep')
         time.sleep(0.5)
-        print 'after sleep'
+        print('after sleep')
 
     def serverConnected(self, ID, name):
-        print 'server connected:', ID, name
+        print('server connected:', ID, name)
 
     def serverDisconnected(self, ID, name):
-        print 'server disconnected:', ID, name
+        print('server disconnected:', ID, name)
 
     def initContext(self, c):
         c['delay'] = 1*s
@@ -103,8 +105,8 @@ class ThreadedTestServer(ThreadedServer):
 
     @setting(41, "Verbose Echo", data='?')
     def verbose_echo(self, c, data):
-        print type(data)
-        print repr(data)
+        print(type(data))
+        print(repr(data))
         return data
 
     @setting(5, "Exc in Handler", data='?')
@@ -145,7 +147,7 @@ class ThreadedTestServer(ThreadedServer):
 
     @setting(101, "Get", key='s', returns='?')
     def get(self, c, key):
-        print "getting tag: %s, value: %s" % (key, c['dict'][key])
+        print("getting tag: %s, value: %s" % (key, c['dict'][key]))
         return c['dict'][key]
 
     @setting(102, "Keys", returns='*s')

@@ -15,6 +15,11 @@
 
 import operator
 
+try:
+    _ = long
+except NameError:
+    long = int  # python 3 has no long type
+
 def gcd(a, b):
     """Compute the greatest common divisor of two ints."""
     a, b = b, a % b

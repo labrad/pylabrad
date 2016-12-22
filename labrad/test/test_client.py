@@ -90,7 +90,7 @@ class ClientTests(unittest.TestCase):
 
         # test using keys to refer to parts of a packet
         pkt2 = pts.packet()
-        resp = pkt2.echo(1L, key='one')\
+        resp = pkt2.echo(1, key='one')\
                    .echo_delay(T.Value(0.1, 's'))\
                    .delayed_echo('blah', key='two')\
                    .send()

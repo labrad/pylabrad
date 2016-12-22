@@ -12,17 +12,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
+import pickle
+import sys
 import unittest
+
 import numpy as np
 
-import sys
-import os
-import cPickle
-if __name__ == "__main__":
-    sys.path.insert(0, os.path.abspath('../..'))
 from labrad import units
-ValueArray = units.ValueArray
-Value = units.Value
+from labrad.units import Value, ValueArray
+
 
 class LabradUnitsTests(unittest.TestCase):
     def testParsing(self):
@@ -195,7 +194,7 @@ class LabradUnitsTests(unittest.TestCase):
         blank = units.Unit('')
 
         def round_trip(obj):
-            return cPickle.loads(cPickle.dumps(obj))
+            return pickle.loads(pickle.dumps(obj))
         self.assertEqual(round_trip(5*GHz), 5*GHz) # Value
         self.assertEqual(round_trip(GHz), GHz)     # Unit
         self.assertTrue((round_trip(np.arange(5)*ns) == np.arange(5)*ns).all()) # array
