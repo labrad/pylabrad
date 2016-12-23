@@ -322,7 +322,7 @@ class ManagedDeviceServer(LabradServer):
         if hasattr(self, 'deviceIdentFunc'):
             yield manager.register_ident_function(self.deviceIdentFunc)
         #Register ourself as a server who cares about devices
-        devs = yield manager.register_server(self.deviceWrappers.keys(), self.messageID)
+        devs = yield manager.register_server(list(self.deviceWrappers.keys()), self.messageID)
         # the devs list is authoritative any devices we have
         # that are _not_ on this list should be removed
         names = [self.makeDeviceName(*dev[:3]) for dev in devs]

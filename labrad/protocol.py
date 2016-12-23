@@ -26,6 +26,7 @@ from __future__ import print_function
 from builtins import input
 
 import hashlib
+import traceback
 
 from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -288,27 +289,17 @@ class LabradProtocol(protocol.Protocol):
             for key in keys:
                 for listener, async in self.listeners[key]:
                     func, args, kw = listener
-                    try:
-                        d = func(msgCtx, data, *args, **kw)
-                        if not isinstance(d, defer.Deferred):
-                            continue
-                        if async:
-                            d.addErrback(self._handleListenerError,
-                                         msgCtx, data, listener)
-                        else:
-                            yield d
-                    except Exception:
-                        self._handleListenerError(
-                            failure.Failure(), msgCtx, data, listener)
-
-    def _handleListenerError(self, failure, msgCtx, data, listener):
-        """Catch errors in message listeners.
-
-        Just prints out a (hopefully informative) message
-        about any errors that may have occurred.
-        """
-        print('Unhandled error in message listener:', msgCtx, data, listener)
-        failure.printTraceback(elideFrameworkCode=1)
+                    @inlineCallbacks
+                    def call_handler():
+                        try:
+                            yield func(msgCtx, data, *args, **kw)
+                        except Exception:
+                            print('Unhandled error in message listener:',
+                                  msgCtx, data, listener)
+                            traceback.print_exc()
+                    d = call_handler()
+                    if not async:
+                        yield d
 
     # message handling
     def addListener(self, listener, source=None, context=None, ID=None, async=True, args=(), kw={}):

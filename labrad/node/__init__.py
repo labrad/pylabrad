@@ -67,16 +67,16 @@ For rsyslogd on ubuntu, create the following file:
 
 from __future__ import print_function
 
-from ConfigParser import SafeConfigParser
-from datetime import datetime
+import io
 import logging
 import logging.handlers
 import os
 import shlex
 import socket
-import StringIO
 import sys
 import zipfile
+from configparser import ConfigParser
+from datetime import datetime
 
 from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
@@ -310,8 +310,8 @@ class ServerProcess(ProcessProtocol):
 def findConfigBlock(path, filename):
     """Find a Node configuration block embedded in a file."""
     # markers to delimit node info block
-    BEGIN = "### BEGIN NODE INFO"
-    END = "### END NODE INFO"
+    BEGIN = b"### BEGIN NODE INFO"
+    END = b"### END NODE INFO"
     with open(os.path.join(path, filename), 'rb') as file:
         foundBeginning = False
         lines = []
@@ -321,10 +321,10 @@ def findConfigBlock(path, filename):
             elif line.upper().strip().startswith(END):
                 break
             elif foundBeginning:
-                line = line.replace('\r', '')
-                line = line.replace('\n', '')
+                line = line.replace(b'\r', b'')
+                line = line.replace(b'\n', b'')
                 lines.append(line)
-        return '\n'.join(lines) if lines else None
+        return b'\n'.join(lines) if lines else None
 
 
 def createGenericServerCls(path, filename, conf):
@@ -337,8 +337,10 @@ def createGenericServerCls(path, filename, conf):
     class cls(ServerProcess):
         pass
 
-    scp = SafeConfigParser()
-    scp.readfp(StringIO.StringIO(conf))
+    if isinstance(conf, bytes):
+        conf = conf.decode('utf-8')
+    scp = ConfigParser()
+    scp.readfp(io.StringIO(conf))
 
     # general information
     cls.name = scp.get('info', 'name', raw=True)
@@ -614,14 +616,17 @@ class NodeServer(LabradServer):
 
     def initMessages(self, connect=True):
         """Set up message dispatching."""
-        attr = 'connect' if connect else 'disconnect'
-        method = getattr(dispatcher, attr)
         def f(receiver, signal):
             try:
-                method(receiver, signal)
+                if connect:
+                    dispatcher.connect(receiver, signal)
+                else:
+                    dispatcher.disconnect(receiver, signal)
             except dispatcher.DispatcherError as e:
-                msg = 'Error while setting up message dispatching. receiver={0}, method={1}, signal={2}.'
-                print(msg.format(receiver, attr, signal), e)
+                method = 'connect' if connect else 'disconnect'
+                msg = ('Error while setting up message dispatching: '
+                       'method={}, receiver={}, signal={}.')
+                print(msg.format(method, receiver, signal), e)
         # set up messages to be relayed out over LabRAD
         messages = ['server_starting', 'server_started',
                     'server_stopping', 'server_stopped',
