@@ -4,3 +4,7 @@ labrad/version.py
 pylabrad.egg-info/
 *.egg
 *.pyc
+
+# Text editor backup files
+*~
+*.swp
