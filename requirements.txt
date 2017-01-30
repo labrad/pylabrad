@@ -6,4 +6,5 @@ pyOpenSSL >= 0.13
 pyparsing >= 2.1.0
 requests
 service_identity
+six == 1.10.0
 twisted >= 14.0.0
