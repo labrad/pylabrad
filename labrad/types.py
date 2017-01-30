@@ -146,7 +146,7 @@ class BuiltinUnitsFactory(UnitsFactory):
         return builtin_units.DimensionlessArray(array)
 
     def is_complex(self, obj):
-        return isinstance(obj, builtin_units.Complex)
+        return isinstance(obj, (complex, builtin_units.Complex))
 
     def is_unit(self, obj):
         return isinstance(obj, builtin_units.Unit)
@@ -169,6 +169,26 @@ def registerUnitsFactory(factory):
     global _units_factory
     _units_factory = factory
 
+
+# Compatibility with modules that import the types module and directly
+# reference these methods. We could do these as a decorator, but it may not be
+# as performant as we would like.
+def Value(*args, **kw):
+    return _units_factory.Value(*args, **kw)
+
+def Complex(*args, **kw):
+    return _units_factory.Complex(*args, **kw)
+
+def Unit(*args, **kw):
+    return _units_factory.ValueArray(*args, **kw)
+
+def ValueArray(*args, **kw):
+    return _units_factory.ValueArray(*args, **kw)
+
+def DimensionlessArray(*args, **kw):
+    return _units_factory.ValueArray(*args, **kw)
+
+# TODO: Do we need the same for DimensionlessFloat, DimensionlessComplex?
 
 class RegisterParser(type):
     """A metaclass for LabRAD types that have parsers.
@@ -1001,7 +1021,8 @@ class LRComplex(LRValue):
     def __lrtype__(cls, c):
         if _units_factory.is_with_unit(c):
             return cls(c.unit)
-        elif _units_factory.is_complex(c) or _units_factory.is_dimensionless_complex():
+        elif (_units_factory.is_complex(c) or
+              _units_factory.is_dimensionless_complex(c)):
             return cls('')
         else:
             raise TypeError("No %s type for %s"%(cls, c))
