@@ -104,6 +104,11 @@ class UnitsFactory(six.with_metaclass(abc.ABCMeta)):
     def DimensionlessArray(self, array):
         raise NotImplementedError()
 
+    # Replacements for isinstance
+    @abc.abstractmethod
+    def is_value(self, obj):
+        raise NotImplementedError()
+
     @abc.abstractmethod
     def is_complex(self, obj):
         raise NotImplementedError()
@@ -144,6 +149,9 @@ class BuiltinUnitsFactory(UnitsFactory):
 
     def DimensionlessArray(self, array):
         return builtin_units.DimensionlessArray(array)
+
+    def is_value(self, obj):
+        return isinstance(obj, builtin_units.Value)
 
     def is_complex(self, obj):
         return isinstance(obj, (complex, builtin_units.Complex))
