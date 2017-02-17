@@ -282,6 +282,8 @@ class WithUnit(object):
         (float, complex, array), and unit is their common unit.
         """
         if isinstance(other, WithUnit):
+            if other.unit is self.unit:
+                return self._value, other._value, self.unit
             if self.isCompatible(other):
                 if self.unit.conversionFactorTo(other.unit) > 1:
                     unit = other.unit
@@ -415,6 +417,8 @@ class WithUnit(object):
 
     def __getitem__(self, unit):
         """Return value of physical quantity expressed in new units."""
+        if unit is self.unit:
+            return self._value
         if unit == self.unit:
             return self._value
         factor, offset = self.unit.conversionTupleTo(unit)
