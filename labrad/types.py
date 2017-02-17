@@ -32,10 +32,12 @@ from __future__ import print_function
 from builtins import range
 from future.utils import with_metaclass
 
+import abc
 import collections
 import datetime
 import itertools
 import re
+import six
 import struct
 import sys
 import time
@@ -43,8 +45,7 @@ import warnings
 
 import numpy as np
 
-import labrad.units as U
-from labrad.units import Value, Complex
+import labrad.units as builtin_units
 
 try:
     from types import InstanceType
@@ -79,6 +80,123 @@ class Singleton(object):
 # a registry of parsing functions, keyed by type tag
 _parsers = {} # type tag -> parse function
 
+
+# Initialize units library to the legacy implementation. This acts as a
+# singleton.
+class UnitsFactory(six.with_metaclass(abc.ABCMeta)):
+    @abc.abstractmethod
+    def Value(self, value, unit):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def Complex(self, value, unit):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def Unit(self, unit):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def ValueArray(self, array, unit):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def DimensionlessArray(self, array):
+        raise NotImplementedError()
+
+    # Replacements for isinstance
+    @abc.abstractmethod
+    def is_value(self, obj):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def is_complex(self, obj):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def is_unit(self, obj):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def is_with_unit(self, obj):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def is_dimensionless_complex(self, obj):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def is_dimensionless_float(self, obj):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def is_valuearray(self, obj):
+        raise NotImplementedError()
+
+
+class BuiltinUnitsFactory(UnitsFactory):
+    def Value(self, value, unit):
+        return builtin_units.Value(value, unit)
+
+    def Complex(self, value, unit):
+        return builtin_units.Complex(value, unit)
+
+    def Unit(self, unit):
+        return builtin_units.Unit(unit)
+
+    def ValueArray(self, array, unit):
+        return builtin_units.ValueArray(array, unit)
+
+    def DimensionlessArray(self, array):
+        return builtin_units.DimensionlessArray(array)
+
+    def is_value(self, obj):
+        return isinstance(obj, builtin_units.Value)
+
+    def is_complex(self, obj):
+        return isinstance(obj, (complex, builtin_units.Complex))
+
+    def is_unit(self, obj):
+        return isinstance(obj, builtin_units.Unit)
+
+    def is_with_unit(self, obj):
+        return isinstance(obj, builtin_units.WithUnit)
+
+    def is_dimensionless_complex(self, obj):
+        return isinstance(obj, builtin_units.DimensionlessComplex)
+
+    def is_dimensionless_float(self, obj):
+        return isinstance(obj, builtin_units.DimensionlessFloat)
+
+    def is_valuearray(self, obj):
+        return isinstance(obj, builtin_units.ValueArray)
+
+
+_units_factory = BuiltinUnitsFactory()
+def registerUnitsFactory(factory):
+    global _units_factory
+    _units_factory = factory
+
+
+# Compatibility with modules that import the types module and directly
+# reference these methods. We could do these as a decorator, but it may not be
+# as performant as we would like.
+def Value(*args, **kw):
+    return _units_factory.Value(*args, **kw)
+
+def Complex(*args, **kw):
+    return _units_factory.Complex(*args, **kw)
+
+def Unit(*args, **kw):
+    return _units_factory.ValueArray(*args, **kw)
+
+def ValueArray(*args, **kw):
+    return _units_factory.ValueArray(*args, **kw)
+
+def DimensionlessArray(*args, **kw):
+    return _units_factory.ValueArray(*args, **kw)
+
+# TODO: Do we need the same for DimensionlessFloat, DimensionlessComplex?
 
 class RegisterParser(type):
     """A metaclass for LabRAD types that have parsers.
@@ -422,14 +540,16 @@ def evalLRData(s):
     # to be None, and old data may have been saved that way. These shims
     # convert the unit to '' instead and then call the real constructors.
     def _Value(x, unit=''):
+        global _units_factory
         if unit is None:
             unit = ''
-        return U.Value(x, unit)
+        return _units_factory.Value(x, unit)
 
     def _Complex(x, unit=''):
+        global _units_factory
         if unit is None:
             unit = ''
-        return U.Complex(x, unit)
+        return _units_factory.Complex(x, unit)
 
     globs = globals()
     globs['Value'] = _Value
@@ -790,8 +910,10 @@ class LRValue(LRType):
     CASTABLE_TYPES = [int, long_type]
 
     def __init__(self, unit=None):
-        if isinstance(unit, U.Unit):
+        if _units_factory.is_unit(unit):
             unit = str(unit)
+        elif hasattr(unit, '__unit__'):
+            unit = unit.__unit__()
         self.unit = unit
 
     def __str__(self):
@@ -831,7 +953,8 @@ class LRValue(LRType):
             raise TypeError(msg)
         # We have a unit, and the other guy has a unit, so make sure our units
         # are compatible.
-        return U.Unit(self.unit).isCompatible(U.Unit(other.unit))
+        return _units_factory.Unit(self.unit).isCompatible(
+                _units_factory.Unit(other.unit))
 
     def isFullySpecified(self):
         return self.unit is not None
@@ -839,7 +962,7 @@ class LRValue(LRType):
     def __unflatten__(self, s, endianness):
         v = struct.unpack(endianness + 'd', s.get(8))[0]
         if self.unit is not None:
-            v = Value(v, self.unit)
+            v = _units_factory.Value(v, self.unit)
         return v
 
     @classmethod
@@ -849,11 +972,11 @@ class LRValue(LRType):
 
         We handle the follwing types:
             float -> LRValue('')
-            labrad.units.Value(unit) -> LRValue(str(unit))
+            _units_factory.Value(unit) -> LRValue(str(unit))
         """
-        if isinstance(v, U.WithUnit):
+        if _units_factory.is_with_unit(v):
             return cls(v.unit)
-        elif isinstance(v, (float, U.DimensionlessFloat)):
+        elif isinstance(v, float) or _units_factory.is_dimensionless_float(v):
             return cls('')
         else:
             raise TypeError("No %s type for %s"%(cls, v))
@@ -871,7 +994,7 @@ class LRValue(LRType):
         # TODO: implement full labrad unit conversion semantics in pylabrad
         # If v is not a unit-full object, only accept if our unit is
         # None or ''.
-        if not isinstance(v, U.WithUnit):
+        if not _units_factory.is_with_unit(v):
             if self.unit is not None and self.unit != '':
                 raise FlatteningError(v, self)
         else:
@@ -879,7 +1002,7 @@ class LRValue(LRType):
             v = v[self.unit]
         return v
 
-registerTypeFunc((float, Value), LRValue.__lrtype__)
+registerTypeFunc((float, builtin_units.Value), LRValue.__lrtype__)
 
 
 class LRComplex(LRValue):
@@ -892,7 +1015,7 @@ class LRComplex(LRValue):
         real, imag = struct.unpack(endianness + 'dd', s.get(16))
         c = complex(real, imag)
         if self.unit is not None:
-            c = Complex(c, self.unit)
+            c = _units_factory.Complex(c, self.unit)
         return c
 
     def __flatten__(self, c, endianness):
@@ -904,14 +1027,15 @@ class LRComplex(LRValue):
 
     @classmethod
     def __lrtype__(cls, c):
-        if isinstance(c, U.WithUnit):
+        if _units_factory.is_with_unit(c):
             return cls(c.unit)
-        elif isinstance(c, (complex, U.DimensionlessComplex)):
+        elif (_units_factory.is_complex(c) or
+              _units_factory.is_dimensionless_complex(c)):
             return cls('')
         else:
             raise TypeError("No %s type for %s"%(cls, c))
 
-registerTypeFunc((complex, Complex), LRComplex.__lrtype__)
+registerTypeFunc((complex, builtin_units.Complex), LRComplex.__lrtype__)
 
 
 class LRCluster(LRType):
@@ -1274,9 +1398,9 @@ class LRList(LRType):
         a.shape = dims + a.shape[1:] # handle clusters as elements
         if elem <= LRValue() or elem <= LRComplex():
             if elem.unit is not None and elem.unit != '':
-                a = U.ValueArray(a, elem.unit)
+                a = _units_factory.ValueArray(a, elem.unit)
             else:
-                a = U.DimensionlessArray(a)
+                a = _units_factory.DimensionlessArray(a)
         return a
 
     def __flatten__(self, L, endianness):
@@ -1292,7 +1416,7 @@ class LRList(LRType):
                 msg = "Can't flatten ndarray to {}".flatten(self)
                 raise TypeError(msg)
             return self.__flatten_array__(L, endianness)
-        if isinstance(L, U.ValueArray):
+        if _units_factory.is_valuearray(L):
             if L.ndim == 0:
                 raise TypeError("can't flatten 0-dimensional ValueArray")
             return self.__flatten_ValueArray__(L, endianness)
@@ -1357,8 +1481,8 @@ _known_dtypes = {
 
 registerTypeFunc(list, LRList.__lrtype__)
 registerTypeFunc(np.ndarray, LRList.__lrtype_array__)
-registerTypeFunc(U.ValueArray, LRList.__lrtype_ValueArray__)
-registerTypeFunc(U.DimensionlessArray, LRList.__lrtype_array__)
+registerTypeFunc(builtin_units.ValueArray, LRList.__lrtype_ValueArray__)
+registerTypeFunc(builtin_units.DimensionlessArray, LRList.__lrtype_array__)
 
 
 def nestedList(obj, n):
