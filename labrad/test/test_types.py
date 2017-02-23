@@ -29,53 +29,53 @@ from labrad.units import Value, ValueArray, Complex
 class LabradTypesTests(unittest.TestCase):
 
     def testTags(self):
-        """Test the parsing of type tags into LRType objects."""
+        """Test the parsing of type tags into Type objects."""
         tests = {
-            '_': T.LRNone(),
-            'b': T.LRBool(),
-            'i': T.LRInt(),
-            'w': T.LRWord(),
-            's': T.LRStr(),
-            't': T.LRTime(),
-            'y': T.LRBytes(),
+            '_': T.TNone(),
+            'b': T.TBool(),
+            'i': T.TInt(),
+            'w': T.TUInt(),
+            's': T.TStr(),
+            't': T.TTime(),
+            'y': T.TBytes(),
 
             # clusters
-            'ii': T.LRCluster(T.LRInt(), T.LRInt()),
-            'b(t)': T.LRCluster(T.LRBool(), T.LRCluster(T.LRTime())),
-            '(ss)': T.LRCluster(T.LRStr(), T.LRStr()),
-            '(s)': T.LRCluster(T.LRStr()),
-            '((siw))': T.LRCluster(T.LRCluster(T.LRStr(), T.LRInt(),
-                                               T.LRWord())),
+            'ii': T.TCluster(T.TInt(), T.TInt()),
+            'b(t)': T.TCluster(T.TBool(), T.TCluster(T.TTime())),
+            '(ss)': T.TCluster(T.TStr(), T.TStr()),
+            '(s)': T.TCluster(T.TStr()),
+            '((siw))': T.TCluster(T.TCluster(T.TStr(), T.TInt(),
+                                               T.TUInt())),
 
             # lists
-            '*b': T.LRList(T.LRBool()),
-            '*_': T.LRList(),
-            '*2b': T.LRList(T.LRBool(), depth=2),
-            '*2_': T.LRList(depth=2),
-            '*2v[Hz]': T.LRList(T.LRValue('Hz'), depth=2),
-            '*3v': T.LRList(T.LRValue(), depth=3),
-            '*v[]': T.LRList(T.LRValue(''), depth=1),
+            '*b': T.TList(T.TBool()),
+            '*_': T.TList(),
+            '*2b': T.TList(T.TBool(), depth=2),
+            '*2_': T.TList(depth=2),
+            '*2v[Hz]': T.TList(T.TValue('Hz'), depth=2),
+            '*3v': T.TList(T.TValue(), depth=3),
+            '*v[]': T.TList(T.TValue(''), depth=1),
 
             # unit types
-            'v': T.LRValue(),
-            'v[]': T.LRValue(''),
-            'v[m/s]': T.LRValue('m/s'),
-            'c': T.LRComplex(),
-            'c[]': T.LRComplex(''),
-            'c[m/s]': T.LRComplex('m/s'),
+            'v': T.TValue(),
+            'v[]': T.TValue(''),
+            'v[m/s]': T.TValue('m/s'),
+            'c': T.TComplex(),
+            'c[]': T.TComplex(''),
+            'c[m/s]': T.TComplex('m/s'),
 
             # errors
-            'E': T.LRError(),
-            'Ew': T.LRError(T.LRWord()),
-            'E(w)': T.LRError(T.LRCluster(T.LRWord())),
+            'E': T.TError(),
+            'Ew': T.TError(T.TUInt()),
+            'E(w)': T.TError(T.TCluster(T.TUInt())),
 
             # more complex stuff
-            '*b*i': T.LRCluster(T.LRList(T.LRBool()), T.LRList(T.LRInt())),
+            '*b*i': T.TCluster(T.TList(T.TBool()), T.TList(T.TInt())),
         }
         for tag, type_ in tests.items():
             self.assertEqual(T.parseTypeTag(tag), type_)
             newtag = str(type_)
-            if isinstance(type_, T.LRCluster) and tag[0] + tag[-1] != '()':
+            if isinstance(type_, T.TCluster) and tag[0] + tag[-1] != '()':
                 # just added parentheses in this case
                 self.assertEqual(newtag, '(%s)' % tag)
             else:
@@ -84,13 +84,13 @@ class LabradTypesTests(unittest.TestCase):
     def testTagComments(self):
         """Test the parsing of type tags with comments and whitespace."""
         tests = {
-            '': T.LRNone(),
-            ' ': T.LRNone(),
-            ': this is a test': T.LRNone(),
-            '  : this is a test': T.LRNone(),
-            '   i  ': T.LRInt(),
-            '   i  :': T.LRInt(),
-            '   i  : blah': T.LRInt(),
+            '': T.TNone(),
+            ' ': T.TNone(),
+            ': this is a test': T.TNone(),
+            '  : this is a test': T.TNone(),
+            '   i  ': T.TInt(),
+            '   i  :': T.TInt(),
+            '   i  : blah': T.TInt(),
         }
         for tag, type_ in tests.items():
             self.assertEqual(T.parseTypeTag(tag), type_)
@@ -315,7 +315,7 @@ class LabradTypesTests(unittest.TestCase):
         self.assertTrue(T.flatten(np.int64(-5))[0] == b'\xff\xff\xff\xfb')
         self.assertTrue(len(T.flatten(np.float64(3.15))[0]) == 8)
         with self.assertRaises(T.FlatteningError):
-            T.flatten(np.int64(-5), T.LRWord())
+            T.flatten(np.int64(-5), T.TUInt())
 
     def testNumpyArrayScalar(self):
         with self.assertRaises(TypeError):

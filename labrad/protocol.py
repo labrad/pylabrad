@@ -260,7 +260,7 @@ class LabradProtocol(protocol.Protocol):
         """Process incoming response."""
         if -request in self.requests: # reply has request number negated
             d = self.requests[-request]
-            errors = [r[1].unflatten() for r in flat_records if isinstance(r[1].tag, T.LRError)]
+            errors = [r[1].unflatten() for r in flat_records if isinstance(r[1].tag, T.TError)]
             if errors:
                 # fail on the first error
                 d.errback(errors[0])

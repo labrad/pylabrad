@@ -140,15 +140,15 @@ class Setting(object):
         if Nparams:
             for tag in params[args[0]]:
                 tt = T.parseTypeTag(tag)
-                if isinstance(tt, T.LRNone) and Nrequired > 1:
+                if isinstance(tt, T.TNone) and Nrequired > 1:
                     raise ValueError("First argument {} cannot accept '' "
                           "unless other arguments are optional".format(args[0]))
-                if isinstance(tt, (T.LRAny, T.LRCluster)) and self.expand_cluster=="optional":
+                if isinstance(tt, (T.TAny, T.TCluster)) and self.expand_cluster=="optional":
                     raise ValueError("First argument {} cannot accept type {} "
                           "because other arguments are optional".format(args[0], tt))
             for arg in args[1:]:
                 for tag in params[arg]:
-                    if isinstance(T.parseTypeTag(tag), T.LRNone):
+                    if isinstance(T.parseTypeTag(tag), T.TNone):
                         raise ValueError("Argument {} cannot accept ''".format(arg))
 
         # Build list of accepted data types.
@@ -169,14 +169,14 @@ class Setting(object):
 
         if (self.expand_cluster == "always" or
             (self.expand_cluster == "optional"
-             and isinstance(data_type, T.LRCluster))):
+             and isinstance(data_type, T.TCluster))):
             if self.unflatten:
                 data = flat_data.unflatten()
             else:
                 data = flat_data.tag.partial_unflatten(flat_data.bytes,
                                                        flat_data.endianness)
             return self.func(server, c, *data)
-        if self.allow_none and isinstance(data_type, T.LRNone):
+        if self.allow_none and isinstance(data_type, T.TNone):
             return self.func(server, c)
 
         if self.unflatten:
@@ -206,7 +206,7 @@ def combine_type_tags(tags):
         return tags[0]
 
     types = [T.parseTypeTag(tag) for tag in tags]
-    return str(T.LRCluster(*types))
+    return str(T.TCluster(*types))
 
 
 class MessageHandler(object):
@@ -267,10 +267,10 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                 # if accepted types were specified, add '' to the list
                 # we don't add '' if the list of accepted types is empty,
                 # since this would make '' the ONLY accepted type
-                if len(accepts_t) and T.LRNone() not in accepts_t:
+                if len(accepts_t) and T.TNone() not in accepts_t:
                     accepts_s.append(': defaults [%s=%r]' \
                                      % (args[0], defaults[0]))
-                    accepts_t.append(T.LRNone())
+                    accepts_t.append(T.TNone())
 
                 @functools.wraps(f)
                 def handleRequest(self, c, data):
@@ -291,21 +291,21 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                                     'when fewer than two args are required.')
                 for s in params[args[0]]:
                     t = T.parseTypeTag(s)
-                    if isinstance(t, (T.LRAny, T.LRCluster)):
+                    if isinstance(t, (T.TAny, T.TCluster)):
                         raise Exception('Cannot accept cluster or ? in first '
                                         'arg when fewer than two args are '
                                         'required.')
 
             # '' is not allowed on first arg when Nrequired > 1
             types = [T.parseTypeTag(s) for s in params.get(args[0], [])]
-            if Nrequired > 1 and T.LRNone() in types:
+            if Nrequired > 1 and T.TNone() in types:
                 raise Exception("'' not allowed when more than "
                                 "one arg is required.")
 
             # '' is never allowed on args after the first.
             for p in args[1:]:
                 types = [T.parseTypeTag(s) for s in params.get(p, [])]
-                if T.LRNone() in types:
+                if T.TNone() in types:
                     raise Exception("'' not allowed after first arg.")
 
             # allowed types are as follows:
@@ -319,22 +319,22 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                 if len(lists):
                     groups += _product(lists)
                 for i, group in reversed(list(enumerate(groups))):
-                    # if there are any LRNones in the group, we remove it
+                    # if there are any TNones in the group, we remove it
                     ts = [T.parseTypeTag(t) for t in group]
-                    if T.LRNone() in ts:
+                    if T.TNone() in ts:
                         groups.pop(i)
 
             accepts_t = []
             accepts_s = []
             for group in groups:
                 if len(group) > 1:
-                    t = T.LRCluster(*[T.parseTypeTag(t) for t in group])
+                    t = T.TCluster(*[T.parseTypeTag(t) for t in group])
                     s = ', '.join('%s{%s}' % (sub_t, arg)
                                   for sub_t, arg in zip(t, args))
                     s = '(%s)' % s
                 else:
                     t = T.parseTypeTag(group[0])
-                    if isinstance(t, T.LRCluster):
+                    if isinstance(t, T.TCluster):
                         raise Exception("Can't accept cluster in first param.")
                     s = '%s{%s}' % (group[0], args[0])
                 # add information about default values of unused params
@@ -346,11 +346,11 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
                 accepts_s.append(s)
 
             if Nrequired == 0:
-                if T.LRNone() not in accepts_t:
+                if T.TNone() not in accepts_t:
                     defstr = ', '.join('%s=%r' % (a, d)
                                        for a, d in zip(args, defaults))
                     accepts_s.append(': defaults [%s]' % defstr)
-                    accepts_t.append(T.LRNone())
+                    accepts_t.append(T.TNone())
 
                 @functools.wraps(f)
                 def handleRequest(self, c, data):
