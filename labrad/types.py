@@ -1465,14 +1465,6 @@ class Error(Exception):
         s, t, _ = flatten((self.code, self.msg, self.payload), endianness=endianness)
         return s, TError(t.items[2])
 
-class Int(int):
-    def __lrtype__(self):
-        return TInt()
-
-class Word(int):
-    def __lrtype__(self):
-        return TUInt()
-
 
 class LazyList(list):
     """A proxy object for LabRAD lists.
