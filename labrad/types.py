@@ -156,24 +156,24 @@ class Buffer(object):
 def parseTypeTag(s):
     """Parse a type tag into a LabRAD type object."""
     try:
-        if isinstance(s, LRType):
+        if isinstance(s, Type):
             return s
         s = stripComments(s)
         ## this is a workaround for a bug in the manager
         ## What bug? This needs to be explained.
         if s == '' or s[:1] == '_':
-            return LRNone()
+            return TNone()
         # Comments were already stripped, so why does the next line exist? DTS
         s = Buffer(stripComments(s))
         types = []
         while len(s):
             types.append(parseSingleType(s))
         if len(types) == 0:
-            return LRNone()
+            return TNone()
         elif len(types) == 1:
             return types[0]
         else:
-            return LRCluster(*types)
+            return TCluster(*types)
     except Exception:
         print('failed to parse:', s)
         raise
@@ -293,7 +293,7 @@ def unflatten(s, t, endianness='>'):
     """Unflatten labrad data into python data, given a prototype t.
 
     s - string or Buffer: data to be unflattened.
-    t - string or LRType subclass: the prototype. If string this is a LabRAD
+    t - string or Type subclass: the prototype. If string this is a LabRAD
         type tag.
 
     The prototype can be a labrad type tag or a prototype object
@@ -313,7 +313,7 @@ class FlatData(collections.namedtuple('FlatDataBase', ['bytes', 'tag', 'endianne
     Attributes:
 
         bytes:      The data as intended to be transmitted over the wire
-        tag:        The LabRAD data type in the form of an LRType object.
+        tag:        The LabRAD data type in the form of an Type object.
         endianness: The endiannes of the connection. '>' for big endian
                     and '<' for little endian.  Little endian is deprecated.
     """
@@ -393,7 +393,7 @@ def flatten(obj, types=None, endianness='>'):
     # Since we haven't found anything compatible, just try to
     # flatten to any of the suggested types. This covers cases
     # such as an allowed type 'v[]' and obj=4. In this case, the
-    # class representing 'v[]', namely LRValue(''), will handle
+    # class representing 'v[]', namely TValue(''), will handle
     # coercion of obj to the appropriate type.
     for t in types:
         try:
@@ -454,7 +454,7 @@ def reprLRData(s):
 
 # LabRAD type classes
 
-class LRType(with_metaclass(RegisterParser, object)):
+class Type(with_metaclass(RegisterParser, object)):
     """Base class of all LabRAD type objects.
 
     These type classes manage parsing and creation of type tags,
@@ -503,7 +503,7 @@ class LRType(with_metaclass(RegisterParser, object)):
         return cls()
 
     def __cmp__(self, other):
-        raise RuntimeError("Unreachable __cmp__ in LRType")
+        raise RuntimeError("Unreachable __cmp__ in Type")
 
     def __eq__(self, other):
         """Test whether this type is equal to another.
@@ -516,16 +516,16 @@ class LRType(with_metaclass(RegisterParser, object)):
         """
         Test whether this type is equal to on more specific than another.
 
-        By default, just check for equality, or that the other type is LRAny.
+        By default, just check for equality, or that the other type is TAny.
 
         This operator has a very specific meaning which is easy to
         misunderstand. For two types, X and Y, X<=Y if and only if a setting
         advertising 'Y' will happily accept a LaBRAD record with data of type
         'X'. The simplest example of this is a setting accepting '?'. Such a
         setting will happily accept 'i', 'b', or anything else. Therefore, we
-        have eg. LRInt()<=LRAny. A more complex example is 'v[Hz]' <= 'v'.
+        have eg. TInt()<=TAny. A more complex example is 'v[Hz]' <= 'v'.
         """
-        return type(self) == type(other) or type(other) == LRAny
+        return type(self) == type(other) or type(other) == TAny
 
     def isFullySpecified(self):
         return True
@@ -593,7 +593,7 @@ class LRType(with_metaclass(RegisterParser, object)):
         raise NotImplementedError
 
 
-class LRAny(LRType, Singleton):
+class TAny(Type, Singleton):
     """A placeholder for any single LabRAD type."""
     tag = '?'
 
@@ -601,7 +601,7 @@ class LRAny(LRType, Singleton):
         return False
 
 
-class LRNone(LRType, Singleton):
+class TNone(Type, Singleton):
     """An empty piece of LabRAD data."""
     tag = '_'
 
@@ -613,12 +613,12 @@ class LRNone(LRType, Singleton):
             raise FlatteningError(data, self)
         return b'', self
 
-registerType(type(None), LRNone())
-# register LRNone parser for the empty string as well
-_parsers[''] = LRNone.__parse__
+registerType(type(None), TNone())
+# register TNone parser for the empty string as well
+_parsers[''] = TNone.__parse__
 
 
-class LRBool(LRType, Singleton):
+class TBool(Type, Singleton):
     """A simple boolean."""
     tag = 'b'
     width = 1
@@ -631,10 +631,10 @@ class LRBool(LRType, Singleton):
             raise FlatteningError(b, self)
         return b'\x01' if b else b'\x00', self
 
-registerType(bool, LRBool())
-registerType(np.bool8, LRBool())
+registerType(bool, TBool())
+registerType(np.bool8, TBool())
 
-class LRInt(LRType, Singleton):
+class TInt(Type, Singleton):
     """A signed 32-bit integer."""
     tag = 'i'
     width = 4
@@ -648,12 +648,12 @@ class LRInt(LRType, Singleton):
             raise ValueError("out of range for type i: {0}".format(n))
         return struct.pack(endianness + 'i', n), self
 
-registerType(int, LRInt())
-registerType(np.int32, LRInt())
-registerType(np.int64, LRInt())
+registerType(int, TInt())
+registerType(np.int32, TInt())
+registerType(np.int64, TInt())
 
 
-class LRWord(LRType, Singleton):
+class TUInt(Type, Singleton):
     """An unsigned 32-bit integer."""
     tag = 'w'
     width = 4
@@ -668,14 +668,14 @@ class LRWord(LRType, Singleton):
         return struct.pack(endianness + 'I', n), self
 
 try:
-    registerType(long, LRWord())
+    registerType(long, TUInt())
 except NameError:
     pass  # python 3 has no long type
-registerType(np.uint32, LRWord())
-registerType(np.uint64, LRWord())
+registerType(np.uint32, TUInt())
+registerType(np.uint64, TUInt())
 
 
-class LRStr(LRType, Singleton):
+class TStr(Type, Singleton):
     """A string of bytes prefixed by a 32-bit length field."""
     tag = 's'
     isFixedWidth = False
@@ -705,13 +705,13 @@ class LRStr(LRType, Singleton):
             raise FlatteningError(s, self)
         return struct.pack(endianness + 'I', len(b)) + b, self
 
-registerType(str, LRStr())
+registerType(str, TStr())
 try:
-    registerType(unicode, LRStr())
+    registerType(unicode, TStr())
 except NameError:
     pass  # python 3 has no unicode type
 
-class LRBytes(LRType, Singleton):
+class TBytes(Type, Singleton):
     """A raw 8-bit byte string."""
     tag = 'y'
     isFixedWidth = False
@@ -732,7 +732,7 @@ class LRBytes(LRType, Singleton):
 
 # bytes is an alias for str in python 2.7, but in python 3 they are different.
 if bytes != str:
-    registerType(bytes, LRBytes())
+    registerType(bytes, TBytes())
 
 def timeOffset():
     now = time.time()
@@ -740,7 +740,7 @@ def timeOffset():
             - datetime.datetime.utcfromtimestamp(now)
             + datetime.datetime.fromtimestamp(now))
 
-class LRTime(LRType, Singleton):
+class TTime(Type, Singleton):
     """A timestamp in LabRAD format.
 
     Timestamp format comes from LabVIEW, and consists of two
@@ -763,10 +763,10 @@ class LRTime(LRType, Singleton):
         us = long_type(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
         return struct.pack(endianness + 'QQ', secs, us), self
 
-registerType(datetime.datetime, LRTime())
+registerType(datetime.datetime, TTime())
 
 '''
-class LRFloat(LRType, Singleton):
+class LRFloat(Type, Singleton):
     tag = 'f'
     width = 8
 
@@ -779,13 +779,13 @@ class LRFloat(LRType, Singleton):
 registerType(float, LRFloat)
 '''
 
-class LRValue(LRType):
+class TValue(Type):
     """Represents the type of a real number that carries units."""
 
     tag = 'v'
     width = 8
 
-    # Types which can be flattened by LRValue as 'v[]' via coercion to
+    # Types which can be flattened by TValue as 'v[]' via coercion to
     # float. See __flatten__.
     CASTABLE_TYPES = [int, long_type]
 
@@ -817,7 +817,7 @@ class LRValue(LRType):
         # or the other value does not.  In other words, the only case
         # disallowed is the case where we have no unit but the other
         # type does.  This prevents the unit from getting lost in the coercion.
-        if type(other) == LRAny:
+        if type(other) == TAny:
             return True
         if type(self) != type(other):
             return False
@@ -845,11 +845,11 @@ class LRValue(LRType):
     @classmethod
     def __lrtype__(cls, v):
         """
-        Get a LRValue instance for a python object.
+        Get a TValue instance for a python object.
 
         We handle the follwing types:
-            float -> LRValue('')
-            labrad.units.Value(unit) -> LRValue(str(unit))
+            float -> TValue('')
+            labrad.units.Value(unit) -> TValue(str(unit))
         """
         if isinstance(v, U.WithUnit):
             return cls(v.unit)
@@ -861,7 +861,7 @@ class LRValue(LRType):
     def __flatten__(self, v, endianness):
         v = self.__check_units__(v)
         v = float(v)
-        # If we are an LRValue(None), switch to LRValue('') so that wire
+        # If we are an TValue(None), switch to TValue('') so that wire
         # data has correct type tag, eg. 'v[]' instead of 'v'.
         if self.unit is None:
             self.unit = ''
@@ -879,10 +879,10 @@ class LRValue(LRType):
             v = v[self.unit]
         return v
 
-registerTypeFunc((float, Value), LRValue.__lrtype__)
+registerTypeFunc((float, Value), TValue.__lrtype__)
 
 
-class LRComplex(LRValue):
+class TComplex(TValue):
     """Represents the type of a complex number that carries units."""
 
     tag = 'c'
@@ -911,10 +911,10 @@ class LRComplex(LRValue):
         else:
             raise TypeError("No %s type for %s"%(cls, c))
 
-registerTypeFunc((complex, Complex), LRComplex.__lrtype__)
+registerTypeFunc((complex, Complex), TComplex.__lrtype__)
 
 
-class LRCluster(LRType):
+class TCluster(Type):
     """A cluster type for bundling pieces of data together."""
 
     tag = '('
@@ -955,7 +955,7 @@ class LRCluster(LRType):
         and all of our items are more specific than the corresponding
         items in the other cluster.
         """
-        return (type(other) == LRAny or
+        return (type(other) == TAny or
                 (type(self) == type(other) and
                  len(self.items) == len(other.items) and
                  all(s <= o for s, o in zip(self.items, other.items))))
@@ -992,11 +992,11 @@ class LRCluster(LRType):
             raise FlatteningError('Cannot flatten zero-length clusters')
         if len(c) != len(self.items):
             raise FlatteningError('Cannot flatten %s to %s' % (c, self.items))
-        if LRAny() in self.items:
+        if TAny() in self.items:
             strs = []
             items = []
             for t, elem in zip(self.items, c):
-                if t == LRAny():
+                if t == TAny():
                     flat = flatten(elem, endianness=endianness)
                     strs.append(flat.bytes)
                     items.append(flat.tag)
@@ -1008,10 +1008,10 @@ class LRCluster(LRType):
             return b''.join(strs), self
         return b''.join(t.flatten(elem, endianness).bytes for t, elem in zip(self.items, c)), self
 
-registerTypeFunc(tuple, LRCluster.__lrtype__)
+registerTypeFunc(tuple, TCluster.__lrtype__)
 
 
-#class LRChoice(LRType):
+#class LRChoice(Type):
 #    """Represents a choice among different data types."""
 #
 #    tag = '<'
@@ -1038,7 +1038,7 @@ registerTypeFunc(tuple, LRCluster.__lrtype__)
 #            elif len(cluster) == 1:
 #                choices.append(cluster[0])
 #            else:
-#                choices.append(LRCluster(*choices))
+#                choices.append(TCluster(*choices))
 #            if s.get(1) != '|': # pop off the '|'
 #                raise Exception('Expected "|" to delimit type choices.')
 #        if s.get(1) != '>':
@@ -1063,7 +1063,7 @@ registerTypeFunc(tuple, LRCluster.__lrtype__)
 #        items in the other cluster.
 #        """
 #        # FIXME: implement this
-#        return (type(other) == LRAny or
+#        return (type(other) == TAny or
 #                all(s <= other for s in self.choices))
 #
 #    def isFullySpecified(self):
@@ -1091,11 +1091,11 @@ registerTypeFunc(tuple, LRCluster.__lrtype__)
 #            raise FlatteningError('Cannot flatten zero-length clusters')
 #        if len(c) != len(self.items):
 #            raise FlatteningError('Cannot flatten %s to %s' % (c, self.items))
-#        if LRAny() in self.items:
+#        if TAny() in self.items:
 #            strs = []
 #            items = []
 #            for t, elem in zip(self.items, c):
-#                if t == LRAny():
+#                if t == TAny():
 #                    s, t = flatten(elem, endianness=endianness)
 #                    strs.append(s)
 #                    items.append(t)
@@ -1108,14 +1108,14 @@ registerTypeFunc(tuple, LRCluster.__lrtype__)
 #        return ''.join(t.flatten(elem, endianness) for t, elem in zip(self.items, c))
 
 
-class LRList(LRType):
+class TList(Type):
     """A multidimensional rectangular array type."""
 
     tag = '*'
 
-    ARRAY_TYPES = [LRValue(), LRComplex(), LRInt(), LRWord(), LRBool()]
+    ARRAY_TYPES = [TValue(), TComplex(), TInt(), TUInt(), TBool()]
 
-    def __init__(self, elem=LRNone(), depth=1):
+    def __init__(self, elem=TNone(), depth=1):
         self.elem = elem
         self.depth = depth
 
@@ -1154,7 +1154,7 @@ class LRList(LRType):
         n = n or 1 # if there were no digits, make a 1D list
         s = s.strip(WHITESPACE)
         if s[:1] == '_':
-            t = LRNone() # empty list
+            t = TNone() # empty list
             s.get() # drop underscore
         else:
             t = parseSingleType(s)
@@ -1175,7 +1175,7 @@ class LRList(LRType):
             else:
                 return iter(ls)
 
-        t = LRAny()
+        t = TAny()
         size = 0
         for elem in iterND(L):
             size += 1
@@ -1185,20 +1185,20 @@ class LRList(LRType):
             if t.isFullySpecified():
                 break
         if size == 0:
-            t = LRNone()
+            t = TNone()
         return cls(t, depth)
 
     @classmethod
     def __lrtype_array__(cls, L):
         #numpy.dtype overloads the == operator, and 'in'
         #uses ==, so our use of in here should be ok
-        if L.dtype == 'bool': t = LRBool()
-        elif L.dtype in ['>i4', '<i4']: t = LRInt()
-        elif L.dtype in ['>i8', '<i8']: t = LRInt()
-        elif L.dtype in ['>u4', '<u4']: t = LRWord()
-        elif L.dtype in ['>u8', '<u8']: t = LRWord()
-        elif L.dtype in ['>f8', '<f8']: t = LRValue('')
-        elif L.dtype in ['>c16', '<c16']: t = LRComplex('')
+        if L.dtype == 'bool': t = TBool()
+        elif L.dtype in ['>i4', '<i4']: t = TInt()
+        elif L.dtype in ['>i8', '<i8']: t = TInt()
+        elif L.dtype in ['>u4', '<u4']: t = TUInt()
+        elif L.dtype in ['>u8', '<u8']: t = TUInt()
+        elif L.dtype in ['>f8', '<f8']: t = TValue('')
+        elif L.dtype in ['>c16', '<c16']: t = TComplex('')
         else:
             raise Exception("Can't flatten array of %s" % L.dtype)
         return cls(t, depth=len(L.shape))
@@ -1206,9 +1206,9 @@ class LRList(LRType):
     @classmethod
     def __lrtype_ValueArray__(cls, L):
         if L[L.unit].dtype in ['>c16', '<c16']:
-            t = LRComplex(L.unit)
+            t = TComplex(L.unit)
         else:
-            t = LRValue(L.unit)
+            t = TValue(L.unit)
         return cls(t, depth=len(L._value.shape))
 
     def __le__(self, other):
@@ -1216,10 +1216,10 @@ class LRList(LRType):
 
         We check the list dimensionality (depth) and the element type.
         """
-        return (type(other) == LRAny or
+        return (type(other) == TAny or
                 (type(self) == type(other) and
                  self.depth == other.depth and
-                 (other.elem is None or type(other.elem) == LRNone or self.elem <= other.elem)))
+                 (other.elem is None or type(other.elem) == TNone or self.elem <= other.elem)))
 
     def __eq__(self, other):
         """Test whether this type is equal to another.
@@ -1231,7 +1231,7 @@ class LRList(LRType):
                 self.elem == other.elem)
 
     def isFullySpecified(self):
-        return type(self.elem) != LRNone and self.elem.isFullySpecified()
+        return type(self.elem) != TNone and self.elem.isFullySpecified()
 
     def __unflatten__(self, s, endianness):
         """Unflatten to numpy array if possible, or else nested python list."""
@@ -1264,15 +1264,15 @@ class LRList(LRType):
                 a.byteswap(True) # inplace
             return a
 
-        if elem == LRBool(): a = make('bool', 1)
-        elif elem == LRInt(): a = make('i4', 4)
-        elif elem == LRWord(): a = make('u4', 4)
-        elif elem <= LRValue(): a = make('f8', 8)
-        elif elem <= LRComplex(): a = make('c16', 16)
+        if elem == TBool(): a = make('bool', 1)
+        elif elem == TInt(): a = make('i4', 4)
+        elif elem == TUInt(): a = make('u4', 4)
+        elif elem <= TValue(): a = make('f8', 8)
+        elif elem <= TComplex(): a = make('c16', 16)
         else:
             raise TypeError("Cannot make numpy array with %s"%(elem,))
         a.shape = dims + a.shape[1:] # handle clusters as elements
-        if elem <= LRValue() or elem <= LRComplex():
+        if elem <= TValue() or elem <= TComplex():
             if elem.unit is not None and elem.unit != '':
                 a = U.ValueArray(a, elem.unit)
             else:
@@ -1287,7 +1287,7 @@ class LRList(LRType):
         if isinstance(L, np.ndarray):
             if L.ndim == 0:
                 raise TypeError("can't flatten 0-dimensional array")
-            if (self.elem <= LRValue() and
+            if (self.elem <= TValue() and
                     not (self.elem.unit is None or self.elem.unit == '')):
                 msg = "Can't flatten ndarray to {}".flatten(self)
                 raise TypeError(msg)
@@ -1296,7 +1296,7 @@ class LRList(LRType):
             if L.ndim == 0:
                 raise TypeError("can't flatten 0-dimensional ValueArray")
             return self.__flatten_ValueArray__(L, endianness)
-        if self.elem == LRAny():
+        if self.elem == TAny():
             self.elem = self.__lrtype__(L).elem
         lengths = [None] * self.depth
         def flattenNDlist(ls, n=0):
@@ -1318,7 +1318,7 @@ class LRList(LRType):
         if len(shape) != self.depth:
             raise Exception("Bad array shape.")
         dims = struct.pack(endianness + ('i' * len(shape)), *shape)
-        if self.elem == LRAny():
+        if self.elem == TAny():
             self.elem = self.__lrtype_array__(a).elem
 
         # determine what dtype we would like to have
@@ -1348,17 +1348,17 @@ class LRList(LRType):
 
 
 _known_dtypes = {
-    LRBool: 'u1',
-    LRInt: 'i4',
-    LRWord: 'u4',
-    LRValue: 'f8',
-    LRComplex: 'c16'
+    TBool: 'u1',
+    TInt: 'i4',
+    TUInt: 'u4',
+    TValue: 'f8',
+    TComplex: 'c16'
 }
 
-registerTypeFunc(list, LRList.__lrtype__)
-registerTypeFunc(np.ndarray, LRList.__lrtype_array__)
-registerTypeFunc(U.ValueArray, LRList.__lrtype_ValueArray__)
-registerTypeFunc(U.DimensionlessArray, LRList.__lrtype_array__)
+registerTypeFunc(list, TList.__lrtype__)
+registerTypeFunc(np.ndarray, TList.__lrtype_array__)
+registerTypeFunc(U.ValueArray, TList.__lrtype_ValueArray__)
+registerTypeFunc(U.DimensionlessArray, TList.__lrtype_array__)
 
 
 def nestedList(obj, n):
@@ -1367,16 +1367,16 @@ def nestedList(obj, n):
     return obj
 
 
-class LRError(LRType):
+class TError(Type):
     """LabRAD error type."""
 
     tag = 'E'
 
-    def __init__(self, payload=LRNone()):
+    def __init__(self, payload=TNone()):
         self.payload = payload
 
     def __str__(self):
-        if self.payload is LRNone():
+        if self.payload is TNone():
             return self.tag
         else:
             return self.tag + str(self.payload)
@@ -1387,7 +1387,7 @@ class LRError(LRType):
     @classmethod
     def __parse__(cls, s):
         payload = parseSingleType(s)
-        return LRError(payload)
+        return TError(payload)
 
     def __eq__(self, other):
         return type(self) == type(other) and self.payload == other.payload
@@ -1400,22 +1400,22 @@ class LRError(LRType):
 
     def __lrtype__(self, E):
         payload = getattr(E, 'payload', None)
-        return LRError(getType(payload))
+        return TError(getType(payload))
 
     isFixedWidth = False
 
     def __width__(self, s, endianness):
         s.skip(4)
-        return 4 + LRStr().__width__(s, endianness) + self.payload.__width__(s, endianness)
+        return 4 + TStr().__width__(s, endianness) + self.payload.__width__(s, endianness)
 
     def __unflatten__(self, s, endianness):
         """Unflatten to Error type to capture code, message and payload."""
-        if self.payload is LRNone():
-            t = LRCluster(LRInt(), LRStr())
+        if self.payload is TNone():
+            t = TCluster(TInt(), TStr())
             code, msg = unflatten(s, t, endianness)
             payload = None
         else:
-            t = LRCluster(LRInt(), LRStr(), self.payload)
+            t = TCluster(TInt(), TStr(), self.payload)
             code, msg, payload = unflatten(s, t, endianness)
         return Error(msg, code, payload)
 
@@ -1425,12 +1425,12 @@ class LRError(LRType):
         code = getattr(E, 'code', 0)
         msg = getattr(E, 'msg', repr(E))
         payload = getattr(E, 'payload', None)
-        t = LRCluster(LRInt(), LRStr(), self.payload)
+        t = TCluster(TInt(), TStr(), self.payload)
         s, t, _ = flatten((int(code), str(msg), payload), t, endianness)
         self.payload = t.items[2]
         return s, self
 
-registerTypeFunc(Exception, LRError().__lrtype__)
+registerTypeFunc(Exception, TError().__lrtype__)
 
 
 # data types
@@ -1459,19 +1459,11 @@ class Error(Exception):
         return 'Error(code=%r, msg=%r, payload=%r)' % (self.code, self.msg, self.payload)
 
     def __lrtype__(self):
-        return LRError(getType(self.payload))
+        return TError(getType(self.payload))
 
     def __lrflatten__(self, endianness):
         s, t, _ = flatten((self.code, self.msg, self.payload), endianness=endianness)
-        return s, LRError(t.items[2])
-
-class Int(int):
-    def __lrtype__(self):
-        return LRInt()
-
-class Word(int):
-    def __lrtype__(self):
-        return LRWord()
+        return s, TError(t.items[2])
 
 
 class LazyList(list):

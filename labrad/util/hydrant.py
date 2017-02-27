@@ -30,18 +30,18 @@ from labrad import types as T
 
 def randType(noneOkay=True, listOkay=True, nStructs=0):
     choices = [
-        T.LRNone,
-        T.LRBool,
-        T.LRInt,
-        T.LRWord,
-        T.LRStr,
-        T.LRBytes,
-        T.LRTime,
-        lambda: T.LRValue(randUnits()),
-        lambda: T.LRComplex(randUnits()),
-        lambda: T.LRCluster(*[randType(noneOkay=False, nStructs=nStructs+1)
+        T.TNone,
+        T.TBool,
+        T.TInt,
+        T.TUInt,
+        T.TStr,
+        T.TBytes,
+        T.TTime,
+        lambda: T.TValue(randUnits()),
+        lambda: T.TComplex(randUnits()),
+        lambda: T.TCluster(*[randType(noneOkay=False, nStructs=nStructs+1)
                               for _ in range(randint(1, 5))]),
-        lambda: T.LRList(randType(noneOkay=False, listOkay=False,
+        lambda: T.TList(randType(noneOkay=False, listOkay=False,
                                   nStructs=nStructs+1),
                          depth=randint(1, 3)),
     ]
@@ -57,17 +57,17 @@ def randUnits():
     return choice(('', 's', 'ms', 'us', 'm', 'm/s', 'V^2/Hz', 'V/Hz^1/2'))
 
 def randValue(t):
-    if isinstance(t, T.LRNone): return genNone()
-    if isinstance(t, T.LRBool): return genBool()
-    if isinstance(t, T.LRInt): return genInt()
-    if isinstance(t, T.LRWord): return genWord()
-    if isinstance(t, T.LRStr): return genStr()
-    if isinstance(t, T.LRBytes): return genStr()
-    if isinstance(t, T.LRTime): return genTime()
-    if isinstance(t, T.LRComplex): return genComplex(t.unit) # check complex before value
-    if isinstance(t, T.LRValue): return genValue(t.unit)
-    if isinstance(t, T.LRCluster): return genCluster(*t.items)
-    if isinstance(t, T.LRList): return genList(t.elem, t.depth)
+    if isinstance(t, T.TNone): return genNone()
+    if isinstance(t, T.TBool): return genBool()
+    if isinstance(t, T.TInt): return genInt()
+    if isinstance(t, T.TUInt): return genWord()
+    if isinstance(t, T.TStr): return genStr()
+    if isinstance(t, T.TBytes): return genStr()
+    if isinstance(t, T.TTime): return genTime()
+    if isinstance(t, T.TComplex): return genComplex(t.unit) # check complex before value
+    if isinstance(t, T.TValue): return genValue(t.unit)
+    if isinstance(t, T.TCluster): return genCluster(*t.items)
+    if isinstance(t, T.TList): return genList(t.elem, t.depth)
 
 
 def genNone(): return None
