@@ -1,12 +1,5 @@
-# gedit backup files
+# gedit & vim backup files
 *~
-
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-
-# C extensions
-*.so
 
 # Distribution / packaging
 .Python
@@ -55,25 +48,24 @@ docs/_build/
 # PyBuilder
 target/
 
-# Text editor backups, etc. #
-############################
+# Text editor backups, etc.
 *.swp
 *.swo
 *.swn
 
-# Compiled source #
-###################
+# Compiled source
 *.com
 *.class
 *.dll
 *.exe
 *.o
 *.so
+__pycache__/
 *.pyc
 *.pyo
  
-# Packages #
-############
+# Packages 
+# --------
 # it's better to unpack these files and commit the raw source
 # git has its own built in compression methods
 *.7z
@@ -85,14 +77,12 @@ target/
 *.tar
 *.zip
  
-# Logs and databases #
-######################
+# Logs and databases
 *.log
 *.sql
 *.sqlite
  
-# OS generated files #
-######################
+# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -102,7 +92,6 @@ ehthumbs.db
 Thumbs.db
 
 # IDE stuff #
-#############
 .cache-*
 .classpath
 .idea/
