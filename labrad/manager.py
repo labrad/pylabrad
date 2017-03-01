@@ -15,7 +15,8 @@
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from labrad import constants as C, types as T
+from labrad import constants as C
+from labrad.types import types as T
 
 class AsyncManager:
     """Provide an asynchronous interface to basic manager settings."""

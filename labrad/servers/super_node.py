@@ -19,9 +19,10 @@ Super Node
 This labrad server finds and controls all available nodes.
 """
 
-from labrad import types as T, util, errors, constants as C
+from labrad import util, errors, constants as C
 from labrad.devices import DeviceWrapper, DeviceServer
 from labrad.server import setting
+from labrad.types import types as T
 from labrad.wrappers import connectAsync
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue

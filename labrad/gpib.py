@@ -21,10 +21,11 @@ Superclass of GPIB device servers.
 
 from __future__ import print_function
 
-from labrad import types as T, constants as C, util, errors
+from labrad import constants as C, util, errors
 from labrad.devices import DeviceWrapper, DeviceServer, DeviceLockedError
 from labrad.server import LabradServer, setting
 from labrad.support import MultiDict
+from labrad.types import types as T
 
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue

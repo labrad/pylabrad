@@ -25,9 +25,10 @@ except ImportError:
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-from labrad import constants as C, manager, protocol, support, types as T
+from labrad import constants as C, manager, protocol, support
 from labrad.support import (indent, mangle, extractKey, MultiDict, PacketRecord,
                             PacketResponse, hexdump)
+from labrad.types import types as T
 
 
 class AsyncSettingWrapper(object):

@@ -33,11 +33,12 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionDone, ConnectionLost
 from twisted.python import failure, log, threadable
 
-from labrad import constants as C, types as T, util
+from labrad import constants as C, util
 import labrad.backend
 import labrad.client
 import labrad.concurrent
 from labrad.decorators import setting
+from labrad.types import types as T
 from labrad.wrappers import ClientAsync
 
 

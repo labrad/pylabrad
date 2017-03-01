@@ -23,12 +23,13 @@ from __future__ import print_function
 
 import warnings
 
-from labrad import constants as C, types as T
+from labrad import constants as C
 from labrad.backend import ManagerService
 from labrad.concurrent import map_future
 from labrad.errors import Error
 from labrad.support import (mangle, indent, PrettyMultiDict, FlatPacket,
                             PacketRecord, PacketResponse, hexdump)
+from labrad.types import types as T
 
 
 def unwrap(s, after='|'):

@@ -20,7 +20,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath('../..'))
 
-import labrad.types as T
+import labrad.types.types as T
 import labrad.units as U
 
 from labrad.units import Value, ValueArray, Complex

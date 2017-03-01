@@ -3,7 +3,7 @@ import pytest
 
 from labrad.decorators import setting
 from labrad.server import LabradServer
-from labrad import types
+from labrad.types import types
 
 
 class DummyServer(LabradServer):

@@ -32,7 +32,7 @@ from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
 
-import labrad.types as T
+import labrad.types.types as T
 from labrad import auth, constants as C, crypto, errors, oauth, support, util
 from labrad.stream import packetStream, flattenPacket
 
