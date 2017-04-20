@@ -4,5 +4,4 @@
 # other builds, so that we don't accumulate lots of packages locally.
 
 rm -r dist/
-python setup.py sdist --format=zip,gztar \
-                bdist_wheel
+python setup.py sdist bdist_wheel
