@@ -517,7 +517,7 @@ class ValueArray(WithUnit):
             return super(ValueArray, cls).__new__(cls, data, unit)
 
         it = iter(data)
-        first = it.next()
+        first = next(it)
         unit = first.unit
         first = first[unit] # convert to float
         rest = [x[unit] for x in it]
