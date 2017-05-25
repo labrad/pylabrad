@@ -32,8 +32,9 @@ timeout = 5
 
 from __future__ import print_function
 
-from labrad import types as T, util
+from labrad import util
 from labrad.server import LabradServer, setting
+from labrad.types import types as T
 from labrad.units import m, s
 from labrad.util import hydrant
 

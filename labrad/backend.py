@@ -11,7 +11,8 @@ import time
 from concurrent.futures import Future
 from twisted.internet import defer, reactor
 
-from labrad import concurrent, constants as C, support, thread, types as T
+from labrad import concurrent, constants as C, support, thread
+from labrad.types import types as T
 from labrad.wrappers import getConnection
 
 

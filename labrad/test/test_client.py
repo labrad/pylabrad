@@ -1,7 +1,7 @@
 import unittest
 
 import labrad
-from labrad import types as T
+from labrad.types import types as T
 from labrad.servers.test_server import PythonTestServer
 from labrad.util import syncRunServer
 

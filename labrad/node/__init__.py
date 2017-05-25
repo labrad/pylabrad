@@ -88,8 +88,9 @@ from twisted.python import usage
 from twisted.python.runtime import platformType
 
 import labrad
-from labrad import auth, protocol, util, types as T, constants as C
+from labrad import auth, protocol, util, constants as C
 from labrad.server import LabradServer, setting
+from labrad.types import types as T
 import labrad.support
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 

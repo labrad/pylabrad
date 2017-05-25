@@ -26,7 +26,7 @@ from builtins import input, range
 from datetime import datetime, timedelta
 from random import choice, randint, gauss
 
-from labrad import types as T
+from labrad.types import types as T
 
 def randType(noneOkay=True, listOkay=True, nStructs=0):
     choices = [

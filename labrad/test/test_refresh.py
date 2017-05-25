@@ -3,7 +3,8 @@ import time
 import pytest
 
 import labrad
-from labrad import types as T, util
+from labrad.types import types as T
+from labrad import util
 from labrad.server import LabradServer, setting
 
 class RefreshServer1(LabradServer):

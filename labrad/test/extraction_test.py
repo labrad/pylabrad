@@ -9,7 +9,7 @@ import time
 
 import numpy as np
 
-from labrad import types
+from labrad.types import types
 
 def timeIt(f, *a, **kw):
     start = time.time()

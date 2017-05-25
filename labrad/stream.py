@@ -1,4 +1,4 @@
-from labrad import types as T
+from labrad.types import types as T
 
 HEADER_TYPE = T.parseTypeTag('(ww)iww')
 PACKET_TYPE = T.parseTypeTag('(ww)iws')

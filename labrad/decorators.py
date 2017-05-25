@@ -27,11 +27,11 @@ from past.builtins import basestring  # for python 2/3 compatibility
 import functools
 import inspect
 import itertools
-import types
 
 import twisted.internet.defer as defer
 
-from labrad import types as T, util
+from labrad import util
+from labrad.types import types as T
 
 def _product(lists):
     """Return the cartesian product of a list of lists."""

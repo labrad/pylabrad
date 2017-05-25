@@ -20,7 +20,7 @@ Exception classes to provide convenient, informative error and debugging
 information.
 """
 
-from labrad.types import Error
+from labrad.types.types import Error
 
 ## Network
 
