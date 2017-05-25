@@ -367,12 +367,9 @@ class PacketWrapper(HasDynamicAttrs):
 
     def _wrapAttr(self, _parent, name, pyName, ID):
         s = self._server.settings[name]
-        def wrapped(*args, **kw):
-            key = kw.pop('key', None)
-            tag = kw.pop('tag', None) or s.accepts
-            if len(kw):
-                raise TypeError("{} got unexpected keyword arguments: "
-                                "{}".format(name, sorted(kw.keys())))
+        def wrapped(*args, key=None, tag=None):
+            if tag is None:
+                tag = s.accepts
             if not len(args):
                 args = None
             elif len(args) == 1:
