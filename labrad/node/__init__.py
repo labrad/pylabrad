@@ -78,19 +78,19 @@ import zipfile
 from configparser import ConfigParser
 from datetime import datetime
 
-from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
+from twisted.application.service import MultiService
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.error import ProcessDone, ProcessTerminated
+from twisted.internet.protocol import ProcessProtocol
 from twisted.python import usage
 from twisted.python.runtime import platformType
 
 import labrad
+import labrad.support
 from labrad import auth, protocol, util, types as T, constants as C
 from labrad.server import LabradServer, setting
-import labrad.support
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 
 
