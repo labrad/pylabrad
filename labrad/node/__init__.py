@@ -78,19 +78,19 @@ import zipfile
 from configparser import ConfigParser
 from datetime import datetime
 
-from twisted.application.service import MultiService
 from twisted.application.internet import TCPClient
+from twisted.application.service import MultiService
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.error import ProcessDone, ProcessTerminated
+from twisted.internet.protocol import ProcessProtocol
 from twisted.python import usage
 from twisted.python.runtime import platformType
 
 import labrad
+import labrad.support
 from labrad import auth, protocol, util, types as T, constants as C
 from labrad.server import LabradServer, setting
-import labrad.support
 from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
 
 
@@ -103,9 +103,10 @@ class ServerProcess(ProcessProtocol):
     timeout = 20
     shutdownTimeout = 5
 
-    def __init__(self, env):
+    def __init__(self, env, client):
         self.env = os.environ.copy()
         self.env.update(env, DIR=self.path, FILE=self.filename)
+        self.client = client
         cls = self.__class__
         self.name = interpEnvironmentVars(cls.instancename, self.env)
         self.args = shlex.split(self.cmdline)
@@ -593,9 +594,6 @@ class NodeServer(LabradServer):
         self.credential = credential
         self.servers = {}
         self.instances = {}
-        self.starters = {}
-        self.runners = {}
-        self.stoppers = {}
         self.initMessages(True)
 
     @inlineCallbacks
@@ -608,7 +606,7 @@ class NodeServer(LabradServer):
     def stopServer(self):
         """Stop this node by killing all subprocesses."""
         self.initMessages(False)
-        stoppages = [srv.stop() for srv in self.runners.values()]
+        stoppages = [inst.stop() for inst in self.instances.values()]
         return defer.DeferredList(stoppages)
 
 
@@ -651,26 +649,18 @@ class NodeServer(LabradServer):
 
     def subprocessStarting(self, sender):
         """Called when a subprocess begins connecting."""
-        self.starters[sender.name] = sender
 
     def subprocessStarted(self, sender):
         """Called when a subprocess successfully connects."""
-        if sender.name in self.starters:
-            del self.starters[sender.name]
-        self.runners[sender.name] = sender
 
     def subprocessStopping(self, sender):
         """Called when a subprocess successfully disconnects."""
-        if sender.name in self.runners:
-            del self.runners[sender.name]
-        self.stoppers[sender.name] = sender
 
     def subprocessStopped(self, sender):
         """Called when a subprocess successfully disconnects."""
-        if sender.name in self.runners:
-            del self.runners[sender.name]
-        if sender.name in self.stoppers:
-            del self.stoppers[sender.name]
+        instance_name = sender.name
+        if instance_name in self.instances:
+            del self.instances[instance_name]
 
 
     # status information
@@ -678,12 +668,13 @@ class NodeServer(LabradServer):
     def status(self):
         """Get information about all servers on this node."""
         def serverInfo(cls):
-            instances = [n for n, s in self.runners.items()
-                                    if s.__class__.name == cls.name]
+            instance_names = [inst.name for inst in self.instances.values()
+                                        if inst.__class__.name == cls.name and
+                                           inst.status == 'STARTED']
             return (cls.name, cls.__doc__ or '', cls.version,
-                    cls.instancename, cls.environVars, instances)
-        return [serverInfo(item[1])
-                for item in sorted(self.servers.items())]
+                    cls.instancename, cls.environVars, instance_names)
+        return [serverInfo(server_cls)
+                for server_name, server_cls in sorted(self.servers.items())]
 
 
     # server refresh
@@ -727,7 +718,6 @@ class NodeServer(LabradServer):
                             if conf is None:
                                 continue
                         s = createGenericServerCls(path, f, conf)
-                        s.client = self.client
                         if s.name not in configs:
                             configs[s.name] = {}
                         versions = configs.setdefault(s.name, {})
@@ -780,29 +770,31 @@ class NodeServer(LabradServer):
         if isinstance(self.credential, auth.Password):
             environ.update(LABRADUSER=self.credential.username,
                            LABRADPASSWORD=self.credential.password)
-        srv = self.servers[name](environ)
-        # TODO check whether an instance with this name already exists
-        self.instances[name] = srv
+        srv = self.servers[name](environ, self.client)
+        instance_name = srv.name
+        if instance_name in self.instances:
+            raise Exception("Server '%s' already running." % instance_name)
         yield srv.start()
-        returnValue(srv.name)
+        self.instances[instance_name] = srv
+        returnValue(instance_name)
 
-    @setting(2, name='s', returns='s')
-    def stop(self, c, name):
+    @setting(2, instance_name='s', returns='s')
+    def stop(self, c, instance_name):
         """Stop a running server instance."""
-        if name not in self.runners:
-            raise Exception("'%s' is not running." % name)
-        srv = self.runners[name]
-        yield srv.stop()
-        returnValue(srv.name)
+        if instance_name not in self.instances:
+            raise Exception("'%s' is not running." % instance_name)
+        yield self.instances[instance_name].stop()
+        returnValue(instance_name)
 
-    @setting(3, name='s', returns='s')
-    def restart(self, c, name):
+    @setting(3, instance_name='s', returns='s')
+    def restart(self, c, instance_name):
         """Restart a running server instance."""
-        if name not in self.runners:
-            raise Exception("'%s' is not running." % name)
-        srv = self.runners[name]
-        yield srv.restart()
-        returnValue(srv.name)
+        if instance_name not in self.instances:
+            raise Exception("'%s' is not running." % instance_name)
+        inst = self.instances[instance_name]
+        yield inst.restart()
+        self.instances[instance_name] = inst
+        returnValue(instance_name)
 
     @setting(10, returns='*s')
     def available_servers(self, c):
@@ -815,7 +807,8 @@ class NodeServer(LabradServer):
 
         Returns a list of tuples of server name and instance name.
         """
-        return sorted((s.__class__.name, n) for n, s in self.runners.items())
+        return sorted((s.__class__.name, s.name)
+                      for s in self.instances.values() if s.status == 'STARTED')
 
     @setting(12, returns='*s')
     def local_servers(self, c):
@@ -825,7 +818,7 @@ class NodeServer(LabradServer):
     @setting(13, returns='')
     def refresh_servers(self, c):
         """Refresh the list of available servers."""
-        yield self.refreshServers()
+        self.refreshServers()
 
     @setting(14, 'status',
              returns='*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})')
@@ -833,19 +826,19 @@ class NodeServer(LabradServer):
         """Get information about all servers on this node."""
         return self.status()
 
-    @setting(100, name='s', returns='*(ts)')
-    def server_output(self, c, name):
+    @setting(100, instance_name='s', returns='*(ts)')
+    def server_output(self, c, instance_name):
         """Get output from a server's stdout."""
-        if name not in self.runners:
-            raise Exception("'%s' is not running." % name)
-        return self.runners[name].output
+        if instance_name not in self.instances:
+            raise Exception("'%s' is not running." % instance_name)
+        return self.instances[instance_name].output
 
-    @setting(101, name='s', returns='')
-    def clear_output(self, c, name):
+    @setting(101, instance_name='s', returns='')
+    def clear_output(self, c, instance_name):
         """Clear the stdout buffer of a server."""
-        if name not in self.runners:
-            raise Exception("'%s' is not running." % name)
-        self.runners[name].clearOutput()
+        if instance_name not in self.instances:
+            raise Exception("'%s' is not running." % instance_name)
+        self.instances[instance_name].clearOutput()
 
     @setting(102, name='s', returns='s')
     def server_version(self, c, name):
@@ -862,7 +855,6 @@ class NodeServer(LabradServer):
         outputs something on its stdout, effectively giving a
         remote view of the server's console window.
         """
-        pass
 
     @setting(200, returns='')
     def autostart(self, c):
@@ -873,7 +865,7 @@ class NodeServer(LabradServer):
         the node first starts up, but can be invoked manually at any time
         thereafter.
         """
-        running = set(s.__class__.name for s in self.runners.values())
+        running = set(s.__class__.name for s in self.instances.values())
         to_start = [name for name in self.config.autostart
                          if name not in running]
         deferreds = [(name, self.start(c, name)) for name in to_start]
