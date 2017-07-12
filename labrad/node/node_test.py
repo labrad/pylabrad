@@ -75,6 +75,7 @@ class TestNode(object):
                 assert 'Python Test Server' in servers
                 assert 'Local Python Test Server' in servers
                 n.node_reg.set('directories', [])
+                time.sleep(1)  # TODO(maffoo): get rid of sleep here
                 n.node.refresh_servers()
                 assert n.node.available_servers() == []
 
