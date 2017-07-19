@@ -73,6 +73,7 @@ import os
 import shlex
 import socket
 import sys
+import weakref
 import zipfile
 from datetime import datetime
 
@@ -90,7 +91,7 @@ import labrad.support
 from labrad import auth, protocol, util, types as T, constants as C
 from labrad.node import server_config
 from labrad.server import LabradServer, setting
-from labrad.util import dispatcher, interpEnvironmentVars
+from labrad.util import interpEnvironmentVars
 
 
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
@@ -102,7 +103,7 @@ class ServerProcess(ProcessProtocol):
     timeout = 20
     shutdownTimeout = 5
 
-    def __init__(self, config, env, client):
+    def __init__(self, config, env, client, message_receiver):
         self.config = config
         self.env = env
         self.full_env = os.environ.copy()
@@ -119,6 +120,7 @@ class ServerProcess(ProcessProtocol):
         self.started = False
         self.stopping = False
         self.output = []
+        self.message_receiver = message_receiver
         self._lock = defer.DeferredLock()
         logname = 'labrad.' + labrad.support.mangle(self.name)
         self.logger = logging.getLogger(logname)
@@ -167,7 +169,6 @@ class ServerProcess(ProcessProtocol):
         print("args:", self.args)
         self.starting = True
         self.startup = defer.Deferred()
-        dispatcher.connect(self.serverConnected, 'serverConnected')
         self.emitMessage('server_starting')
         # This looks crazy.  On Unix, spawnProcess calls fork() and then
         # execvpe which expects an executable name and a series of arguments,
@@ -205,10 +206,6 @@ class ServerProcess(ProcessProtocol):
             self.starting = False
             if timeoutCall.active():
                 timeoutCall.cancel()
-            try:
-                dispatcher.disconnect(self.serverConnected, 'serverConnected')
-            except Exception as e:
-                print('Error while disconnecting signal:', e)
 
     @inlineCallbacks
     def _stop(self):
@@ -233,10 +230,8 @@ class ServerProcess(ProcessProtocol):
 
     def emitMessage(self, msg):
         """Emit a message to other parts of this application."""
-        dispatcher.send(msg,
-                        sender=self,
-                        server=self.server_name,
-                        instance=self.name)
+        self.message_receiver(msg, sender=self,
+                              server=self.server_name, instance=self.name)
 
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD.
@@ -361,11 +356,6 @@ class Node(object):
                     yield node.onShutdown()
                 except Exception:
                     log.error('Error during node shutdown', exc_info=True)
-
-            ## hack: manually clear the internal message dispatcher
-            dispatcher.connections.clear()
-            dispatcher.senders.clear()
-            dispatcher._boundMethods.clear()
 
             yield util.wakeupCall(0)
             print('Will try to reconnect in {} seconds...'.format(self.reconnectDelay))
@@ -511,7 +501,7 @@ class NodeServer(LabradServer):
         self.credential = credential
         self.servers = {}
         self.instances = {}
-        self.initMessages(True)
+        self.instances_to_notify = weakref.WeakSet()
 
     @inlineCallbacks
     def initServer(self):
@@ -522,39 +512,20 @@ class NodeServer(LabradServer):
 
     def stopServer(self):
         """Stop this node by killing all subprocesses."""
-        self.initMessages(False)
         stoppages = [inst.stop() for inst in self.instances.values()]
         return defer.DeferredList(stoppages)
 
 
     # message handling
 
-    def initMessages(self, connect=True):
-        """Set up message dispatching."""
-        def f(receiver, signal):
-            try:
-                if connect:
-                    dispatcher.connect(receiver, signal)
-                else:
-                    dispatcher.disconnect(receiver, signal)
-            except dispatcher.DispatcherError as e:
-                method = 'connect' if connect else 'disconnect'
-                msg = ('Error while setting up message dispatching: '
-                       'method={}, receiver={}, signal={}.')
-                print(msg.format(method, receiver, signal), e)
-        # set up messages to be relayed out over LabRAD
-        messages = ['server_starting', 'server_started',
-                    'server_stopping', 'server_stopped',
-                    'status']
-        for message in messages:
-            f(self._relayMessage, message)
-        # set up message handlers for subprocess events
-        f(self.subprocessStarting, 'server_starting')
-        f(self.subprocessStarted, 'server_started')
-        f(self.subprocessStopping, 'server_stopping')
-        f(self.subprocessStopped, 'server_stopped')
+    def on_subprocess_message(self, message, sender, **kw):
+        if message == 'server_stopped':
+            instance_name = sender.name
+            if instance_name in self.instances:
+                del self.instances[instance_name]
+        self._relayMessage(message, **kw)
 
-    def _relayMessage(self, signal, sender, **kw):
+    def _relayMessage(self, signal, **kw):
         """Send messages out to LabRAD."""
         kw['node'] = self.name
         mgr = self.client.manager
@@ -562,36 +533,22 @@ class NodeServer(LabradServer):
 
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD."""
-        dispatcher.send('serverConnected', ID=ID, name=name)
-
-    def subprocessStarting(self, sender):
-        """Called when a subprocess begins connecting."""
-
-    def subprocessStarted(self, sender):
-        """Called when a subprocess successfully connects."""
-
-    def subprocessStopping(self, sender):
-        """Called when a subprocess successfully disconnects."""
-
-    def subprocessStopped(self, sender):
-        """Called when a subprocess successfully disconnects."""
-        instance_name = sender.name
-        if instance_name in self.instances:
-            del self.instances[instance_name]
+        for inst in self.instances_to_notify:
+            inst.serverConnected(ID, name)
 
 
     # status information
 
     def status(self):
         """Get information about all servers on this node."""
-        def serverInfo(cls):
+        def serverInfo(config):
             instance_names = [inst.name for inst in self.instances.values()
-                                        if inst.__class__.name == cls.name and
+                                        if inst.server_name == config.name and
                                            inst.status == 'STARTED']
-            return (cls.name, cls.__doc__ or '', cls.version,
-                    cls.instance_name, cls.environ_vars, instance_names)
-        return [serverInfo(server_cls)
-                for server_name, server_cls in sorted(self.servers.items())]
+            return (config.name, config.description or '', config.version,
+                    config.instance_name, config.environ_vars, instance_names)
+        return [serverInfo(server_config)
+                for server_name, server_config in sorted(self.servers.items())]
 
 
     # server refresh
@@ -666,7 +623,7 @@ class NodeServer(LabradServer):
                 servers_dict[s.name] = s
         self.servers = servers_dict
         # send a message with the current server list
-        dispatcher.send('status', servers=self.status())
+        self._relayMessage('status', servers=self.status())
 
 
     # LabRAD settings
@@ -685,10 +642,12 @@ class NodeServer(LabradServer):
             environ.update(LABRADUSER=self.credential.username,
                            LABRADPASSWORD=self.credential.password)
         config = self.servers[name]
-        srv = ServerProcess(config, environ, self.client)
+        srv = ServerProcess(config, environ, client=self.client,
+                            message_receiver=self.on_subprocess_message)
         instance_name = srv.name
         if instance_name in self.instances:
             raise Exception("Server '%s' already running." % instance_name)
+        self.instances_to_notify.add(srv)
         yield srv.start()
         self.instances[instance_name] = srv
         returnValue(instance_name)
@@ -722,7 +681,7 @@ class NodeServer(LabradServer):
 
         Returns a list of tuples of server name and instance name.
         """
-        return sorted((s.__class__.name, s.name)
+        return sorted((s.server_name, s.name)
                       for s in self.instances.values() if s.status == 'STARTED')
 
     @setting(12, returns='*s')
@@ -780,7 +739,7 @@ class NodeServer(LabradServer):
         the node first starts up, but can be invoked manually at any time
         thereafter.
         """
-        running = set(s.__class__.name for s in self.instances.values())
+        running = set(s.server_name for s in self.instances.values())
         to_start = [name for name in self.config.autostart
                          if name not in running]
         deferreds = [(name, self.start(c, name)) for name in to_start]
