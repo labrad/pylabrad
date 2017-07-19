@@ -120,33 +120,25 @@ class TestNode(object):
             return servers
 
         with labrad.connect() as cxn:
-            with subscribe_to_node_messages(cxn) as message_queue:
-                with run_node('test', cxn) as n:
-                    servers = check_status_message(message_queue.get(timeout=1))
-                    assert 'Python Test Server' in servers
-                    assert 'Local Python Test Server' in servers
+            with run_node('test', cxn) as n:
+                servers = n.node.available_servers()
+                assert 'Python Test Server' in servers
+                assert 'Local Python Test Server' in servers
 
-                    servers = n.node.available_servers()
-                    assert 'Python Test Server' in servers
-                    assert 'Local Python Test Server' in servers
-
-                    clear_queue(message_queue)
-
+                with subscribe_to_node_messages(cxn) as message_queue:
                     n.node_reg.set('directories', [])
                     servers = check_status_message(message_queue.get(timeout=1))
                     assert servers == []
-                    assert n.node.available_servers() == []
+                assert n.node.available_servers() == []
 
-                    clear_queue(message_queue)
-
+                with subscribe_to_node_messages(cxn) as message_queue:
                     n.node_reg.set('directories', [SERVERS_DIR])
                     servers = check_status_message(message_queue.get(timeout=1))
                     assert 'Python Test Server' in servers
                     assert 'Local Python Test Server' in servers
-
-                    servers = n.node.available_servers()
-                    assert 'Python Test Server' in servers
-                    assert 'Local Python Test Server' in servers
+                servers = n.node.available_servers()
+                assert 'Python Test Server' in servers
+                assert 'Local Python Test Server' in servers
 
     def _test_start_server(self, node_name, name, instance_name, restart=False):
         expected_message = {
