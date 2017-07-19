@@ -10,7 +10,7 @@ from labrad.util import findEnvironmentVars
 class ServerConfig(object):
     def __init__(self, name, description, version, instance_name, cmdline, path,
                  filename, timeout, shutdown_mode, shutdown_timeout):
-        self.name = name
+        self.name = self.base_name = name
         self.description = description
         self.version = version
         self.version_tuple = version_tuple(version)

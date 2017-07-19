@@ -836,6 +836,49 @@ class NodeServer(LabradServer):
             pass
         yield self.config.update_autostart(sorted(autostart))
 
+    @setting(300, returns='?')
+    def outdated_list(self, c):
+        """Get a list of servers that are outdated."""
+        outdated = self._get_outdated()
+        if outdated:
+            return tuple(tuple(info.items()) for info in outdated)
+
+    @setting(301, returns='?')
+    def outdated_restart(self, c):
+        """Restart any servers that are outdated."""
+        outdated = self._get_outdated()
+        restarts = [self.restart(c, info['instance']) for info in outdated]
+        for info, restart in zip(outdated, restarts):
+            try:
+                yield restart
+            except Exception:
+                logging.error('Failed to restart "%s"', info['instance'],
+                              exc_info=True)
+                info['status'] = 'failed to restart'
+            else:
+                info['status'] = 'restarted'
+        if outdated:
+            returnValue(tuple(tuple(info.items()) for info in outdated))
+
+    def _get_outdated(self):
+        outdated = []
+        for instance_name, inst in self.instances.items():
+            server_name = inst.config.base_name
+            info = {
+                'server': server_name,
+                'instance': instance_name,
+                'running_version': inst.config.version
+            }
+            if server_name not in self.server_configs:
+                info['latest_version'] = '<none>'
+                outdated.append(info)
+                continue
+            current_config = self.server_configs[server_name]
+            if inst.config.version_tuple < current_config.version_tuple:
+                info['latest_version'] = current_config.version
+                outdated.append(info)
+        return outdated
+
     @setting(1000, returns='*(ss)')
     def node_version(self, c):
         """Return a list of key-value tuples containing info about this node."""
@@ -846,7 +889,7 @@ class NodeServer(LabradServer):
             'labrad version': labrad.__version__,
             'labrad revision': labrad.__revision__,
             'labrad date': labrad.__date__,
-            }
+        }
         return list(info.items())
 
 
