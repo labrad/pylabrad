@@ -23,7 +23,7 @@ NodeInfo = collections.namedtuple('NodeInfo', [
 
 
 @contextlib.contextmanager
-def run_node(node_name, cxn, timeout=20):
+def run_node(node_name, cxn, timeout=20, update_registry=True):
     proc = subprocess.Popen([
         sys.executable,
         '-m', 'labrad.node',
@@ -45,14 +45,15 @@ def run_node(node_name, cxn, timeout=20):
                                 .format(timeout))
             time.sleep(0.5)
 
-        node_reg = cxn.registry()
-        node_reg.cd(['', 'Nodes', node_name])
-        node_reg.set('autostart', [])
-        node_reg.set('directories', [SERVERS_DIR])
-        node_reg.set('extensions', ['.ini', '.py'])
-
         node = cxn[node_server_name]
-        node.refresh_servers()
+        node_reg = cxn.registry()
+
+        if update_registry:
+            node_reg.cd(['', 'Nodes', node_name])
+            node_reg.set('autostart', [])
+            node_reg.set('directories', [SERVERS_DIR])
+            node_reg.set('extensions', ['.ini', '.py'])
+            node.refresh_servers()
 
         yield NodeInfo(node, node_name, node_server_name, node_reg)
     finally:
@@ -110,35 +111,41 @@ def clear_queue(q):
 class TestNode(object):
 
     def test_node_autodetect(self):
-        def check_status_message(message):
-            message_name, contents = message
-            assert message_name == 'node.status'
-            contents = dict(contents)
-            assert set(contents.keys()) == {'node', 'servers'}
-            assert contents['node'] == 'node test'
-            servers = [server[0] for server in contents['servers']]
-            return servers
-
         with labrad.connect() as cxn:
             with run_node('test', cxn) as n:
                 servers = n.node.available_servers()
                 assert 'Python Test Server' in servers
                 assert 'Local Python Test Server' in servers
 
-                with subscribe_to_node_messages(cxn) as message_queue:
+                with subscribe_to_node_messages(cxn) as mq:
                     n.node_reg.set('directories', [])
-                    servers = check_status_message(message_queue.get(timeout=1))
+                    servers = self._check_status_message(mq.get(timeout=1))
                     assert servers == []
                 assert n.node.available_servers() == []
 
-                with subscribe_to_node_messages(cxn) as message_queue:
+                with subscribe_to_node_messages(cxn) as mq:
                     n.node_reg.set('directories', [SERVERS_DIR])
-                    servers = check_status_message(message_queue.get(timeout=1))
+                    servers = self._check_status_message(mq.get(timeout=1))
                     assert 'Python Test Server' in servers
                     assert 'Local Python Test Server' in servers
                 servers = n.node.available_servers()
                 assert 'Python Test Server' in servers
                 assert 'Local Python Test Server' in servers
+
+    def test_node_status_on_startup(self):
+        with labrad.connect() as cxn:
+            with subscribe_to_node_messages(cxn) as mq:
+                with run_node('test', cxn, update_registry=False) as n:
+                    self._check_status_message(mq.get(timeout=1))
+
+    def _check_status_message(self, message):
+        message_name, contents = message
+        assert message_name == 'node.status'
+        contents = dict(contents)
+        assert set(contents.keys()) == {'node', 'servers'}
+        assert contents['node'] == 'node test'
+        servers = [server[0] for server in contents['servers']]
+        return servers
 
     def _test_start_server(self, node_name, name, instance_name, restart=False):
         expected_message = {
