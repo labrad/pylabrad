@@ -67,7 +67,6 @@ For rsyslogd on ubuntu, create the following file:
 
 from __future__ import print_function
 
-import io
 import logging
 import logging.handlers
 import os
@@ -75,7 +74,6 @@ import shlex
 import socket
 import sys
 import zipfile
-from configparser import ConfigParser
 from datetime import datetime
 
 from twisted.application.internet import TCPClient
@@ -90,8 +88,9 @@ from twisted.python.runtime import platformType
 import labrad
 import labrad.support
 from labrad import auth, protocol, util, types as T, constants as C
+from labrad.node import server_config
 from labrad.server import LabradServer, setting
-from labrad.util import dispatcher, findEnvironmentVars, interpEnvironmentVars
+from labrad.util import dispatcher, interpEnvironmentVars
 
 
 LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
@@ -103,14 +102,19 @@ class ServerProcess(ProcessProtocol):
     timeout = 20
     shutdownTimeout = 5
 
-    def __init__(self, env, client):
-        self.env = os.environ.copy()
-        self.env.update(env, DIR=self.path, FILE=self.filename)
+    def __init__(self, config, env, client):
+        self.config = config
+        self.env = env
+        self.full_env = os.environ.copy()
+        self.full_env.update(env)
+        if config.filename:
+            self.full_env['FILE'] = config.filename
+        if config.path:
+            self.full_env['DIR'] = config.path
         self.client = client
-        cls = self.__class__
-        self.name = interpEnvironmentVars(cls.instancename, self.env)
-        self.args = shlex.split(self.cmdline)
-        self.args = [interpEnvironmentVars(a, self.env) for a in self.args]
+        self.name = interpEnvironmentVars(config.instance_name, self.full_env)
+        self.args = shlex.split(config.cmdline)
+        self.args = [interpEnvironmentVars(a, self.full_env) for a in self.args]
         self.starting = False
         self.started = False
         self.stopping = False
@@ -118,6 +122,18 @@ class ServerProcess(ProcessProtocol):
         self._lock = defer.DeferredLock()
         logname = 'labrad.' + labrad.support.mangle(self.name)
         self.logger = logging.getLogger(logname)
+
+    @property
+    def server_name(self):
+        return self.config.name
+
+    @property
+    def path(self):
+        return self.config.path or os.curdir()
+
+    @property
+    def timeout(self):
+        return self.config.timeout
 
     @property
     def status(self):
@@ -177,7 +193,7 @@ class ServerProcess(ProcessProtocol):
             raise RuntimeError("Unsupported platform %s" % platformType)
 
         self.proc = reactor.spawnProcess(self, executable, self.args,
-                                         env=self.env, path=self.path)
+                                         env=self.full_env, path=self.path)
         timeoutCall = reactor.callLater(self.timeout, self.kill)
         try:
             yield self.startup
@@ -219,7 +235,7 @@ class ServerProcess(ProcessProtocol):
         """Emit a message to other parts of this application."""
         dispatcher.send(msg,
                         sender=self,
-                        server=self.__class__.name,
+                        server=self.server_name,
                         instance=self.name)
 
     def serverConnected(self, ID, name):
@@ -306,105 +322,6 @@ class ServerProcess(ProcessProtocol):
     def clearOutput(self):
         """Clear the log of stdout."""
         self.output = []
-
-
-def findConfigBlock(path, filename):
-    """Find a Node configuration block embedded in a file."""
-    # markers to delimit node info block
-    BEGIN = b"### BEGIN NODE INFO"
-    END = b"### END NODE INFO"
-    with open(os.path.join(path, filename), 'rb') as file:
-        foundBeginning = False
-        lines = []
-        for line in file:
-            if line.upper().strip().startswith(BEGIN):
-                foundBeginning = True
-            elif line.upper().strip().startswith(END):
-                break
-            elif foundBeginning:
-                line = line.replace(b'\r', b'')
-                line = line.replace(b'\n', b'')
-                lines.append(line)
-        return b'\n'.join(lines) if lines else None
-
-
-def createGenericServerCls(path, filename, conf):
-    """Create a ServerProcess class representing a generic server.
-
-    Options for this server are passed in as a string in standard
-    .ini format.  We use a string rather than a file to allow this
-    configuration to be extracted from a larger file if necessary.
-    """
-    class cls(ServerProcess):
-        pass
-
-    if isinstance(conf, bytes):
-        conf = conf.decode('utf-8')
-    scp = ConfigParser()
-    scp.readfp(io.StringIO(conf))
-
-    # general information
-    cls.name = scp.get('info', 'name', raw=True)
-    cls.__doc__ = scp.get('info', 'description', raw=True)
-    if scp.has_option('info', 'version'):
-        cls.version = scp.get('info', 'version', raw=True)
-    else:
-        cls.version = '0.0'
-    try:
-        cls.instancename = scp.get('info', 'instancename', raw=True)
-    except:
-        cls.instancename = cls.name
-    cls.environVars = findEnvironmentVars(cls.instancename)
-    cls.isLocal = len(cls.environVars) > 0
-
-    # startup
-    platform_cmdline_option = 'cmdline_{}'.format(sys.platform)
-    if scp.has_option('startup', platform_cmdline_option):
-        # use platform-specific command line
-        cls.cmdline = scp.get('startup', platform_cmdline_option, raw=True)
-    else:
-        # use generic command line
-        cls.cmdline = scp.get('startup', 'cmdline', raw=True)
-    cls.path = path
-    cls.filename = filename
-    try:
-        cls.timeout = float(scp.getint('startup', 'timeout'))
-    except:
-        pass
-
-    # shutdown
-    if scp.has_option('shutdown', 'message'):
-        cls.shutdownMode = 'message', int(scp.get('shutdown', 'message', raw=True))
-    elif scp.has_option('shutdown', 'setting'):
-        cls.shutdownMode = 'setting', scp.get('shutdown', 'setting', raw=True)
-    try:
-        cls.shutdownTimeout = float(scp.getint('shutdown', 'timeout'))
-    except:
-        pass
-
-    return cls
-
-
-def version_tuple(version):
-    """Get a tuple from a version string that can be used for comparison.
-
-    Version strings are typically of the form A.B.C-X where A, B and C
-    are numbers, and X is extra text denoting dev status (e.g. alpha or beta).
-    Given this structure, we cannot just use string comparison to get the order
-    of versions; instead we parse the version into a tuple
-
-    ((int(A), int(B), int(C)), version)
-
-    If we cannot parse the numeric part, we just use the empty tuple for the
-    first entry, and for such tuples the comparison will just fall back to
-    alphabetic comparison on the full versions string.
-    """
-    numstr, _, _extra = version.partition('-')
-    try:
-        nums = tuple(int(n) for n in numstr.split('.'))
-    except Exception:
-        nums = ()
-    return (nums, version)
 
 
 class Node(object):
@@ -672,7 +589,7 @@ class NodeServer(LabradServer):
                                         if inst.__class__.name == cls.name and
                                            inst.status == 'STARTED']
             return (cls.name, cls.__doc__ or '', cls.version,
-                    cls.instancename, cls.environVars, instance_names)
+                    cls.instance_name, cls.environ_vars, instance_names)
         return [serverInfo(server_cls)
                 for server_name, server_cls in sorted(self.servers.items())]
 
@@ -714,15 +631,12 @@ class NodeServer(LabradServer):
                                     break
                             zf.close()
                         else:
-                            conf = findConfigBlock(path, f)
+                            conf = server_config.find_config_block(path, f)
                             if conf is None:
                                 continue
-                        s = createGenericServerCls(path, f, conf)
-                        if s.name not in configs:
-                            configs[s.name] = {}
-                        versions = configs.setdefault(s.name, {})
-                        classes = versions.setdefault(s.version, [])
-                        classes.append(s)
+                        config = server_config.from_string(conf, f, path)
+                        versions = configs.setdefault(config.name, {})
+                        versions.setdefault(config.version, []).append(config)
                     except Exception:
                         fname = os.path.join(path, f)
                         logging.error('Error while loading config file "%s":' % fname,
@@ -742,7 +656,7 @@ class NodeServer(LabradServer):
                                 conflicting_files))
 
             servers = [ss[0] for ss in versions.values()]
-            servers.sort(key=lambda s: version_tuple(s.version))
+            servers.sort(key=lambda s: s.version_tuple)
             if len(servers) > 1:
                 # modify server name for all but the latest version
                 for s in servers[:-1]:
@@ -770,7 +684,8 @@ class NodeServer(LabradServer):
         if isinstance(self.credential, auth.Password):
             environ.update(LABRADUSER=self.credential.username,
                            LABRADPASSWORD=self.credential.password)
-        srv = self.servers[name](environ, self.client)
+        config = self.servers[name]
+        srv = ServerProcess(config, environ, self.client)
         instance_name = srv.name
         if instance_name in self.instances:
             raise Exception("Server '%s' already running." % instance_name)
