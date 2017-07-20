@@ -103,7 +103,7 @@ class ServerProcess(ProcessProtocol):
     timeout = 20
     shutdownTimeout = 5
 
-    def __init__(self, config, env, client, message_receiver):
+    def __init__(self, config, env, client, on_message):
         """Initialize a ServerProcess instance.
 
         Args:
@@ -113,10 +113,10 @@ class ServerProcess(ProcessProtocol):
                 passed to the subprocess. These will override variables in the
                 environment of the node process itself.
             client (labrad.wrappers.ClientAsync): Client connection to labrad.
-            message_receiver (Callable[[ServerProcess, str], None]): Called
-                when state changes happen for this server process, such as when
-                it starts and stops. Will be called with a reference to this
-                ServerProcess instances and a string giving the state change.
+            on_message (Callable[[ServerProcess, str], None]): Called when state
+                changes happen for this server process, such as when it starts
+                and stops. Will be called with a reference to this ServerProcess
+                instance and a string giving the state change.
         """
         self.config = config
         self.env = env
@@ -134,7 +134,7 @@ class ServerProcess(ProcessProtocol):
         self.started = False
         self.stopping = False
         self.output = []
-        self.message_receiver = message_receiver
+        self.on_message = on_message
         self._lock = defer.DeferredLock()
         logname = 'labrad.' + labrad.support.mangle(self.name)
         self.logger = logging.getLogger(logname)
@@ -244,7 +244,7 @@ class ServerProcess(ProcessProtocol):
 
     def emitMessage(self, msg):
         """Emit a message to other parts of this application."""
-        self.message_receiver(self, msg)
+        self.on_message(self, msg)
 
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD.
@@ -697,7 +697,7 @@ class NodeServer(LabradServer):
                            LABRADPASSWORD=self.credential.password)
         config = self.server_configs[name]
         srv = ServerProcess(config, environ, client=self.client,
-                            message_receiver=self.on_subprocess_message)
+                            on_message=self.on_subprocess_message)
         instance_name = srv.name
         if instance_name in self.instances:
             raise Exception("Server '%s' already running." % instance_name)
