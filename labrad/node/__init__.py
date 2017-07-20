@@ -560,6 +560,17 @@ class NodeServer(LabradServer):
     # message handling
 
     def on_subprocess_message(self, sender, message):
+        """Called when a subprocess sends a message.
+
+        Args:
+            sender (ServerProcess): The subprocess that sent the message.
+            message (str): Message describing the change in the subprocess
+                state, such as 'server_started', 'server_stopped', etc.
+                If the server stopped, we remove the sending instance from the
+                instances map. Other messages will be sent out as labrad named
+                messages to notify interested listeners, such as the node web
+                interface.
+        """
         if message == 'server_stopped':
             instance_name = sender.name
             if instance_name in self.instances:
