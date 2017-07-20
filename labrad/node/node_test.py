@@ -3,6 +3,7 @@ from __future__ import absolute_import, print_function
 import collections
 import contextlib
 import os
+import queue
 import subprocess
 import sys
 import time
@@ -22,7 +23,7 @@ NodeInfo = collections.namedtuple('NodeInfo', [
 
 
 @contextlib.contextmanager
-def run_node(node_name, cxn, timeout=20):
+def run_node(node_name, cxn, timeout=20, update_registry=True):
     proc = subprocess.Popen([
         sys.executable,
         '-m', 'labrad.node',
@@ -44,14 +45,15 @@ def run_node(node_name, cxn, timeout=20):
                                 .format(timeout))
             time.sleep(0.5)
 
-        node_reg = cxn.registry()
-        node_reg.cd(['', 'Nodes', node_name])
-        node_reg.set('autostart', [])
-        node_reg.set('directories', [SERVERS_DIR])
-        node_reg.set('extensions', ['.ini', '.py'])
-
         node = cxn[node_server_name]
-        node.refresh_servers()
+        node_reg = cxn.registry()
+
+        if update_registry:
+            node_reg.cd(['', 'Nodes', node_name])
+            node_reg.set('autostart', [])
+            node_reg.set('directories', [SERVERS_DIR])
+            node_reg.set('extensions', ['.ini', '.py'])
+            node.refresh_servers()
 
         yield NodeInfo(node, node_name, node_server_name, node_reg)
     finally:
@@ -66,6 +68,46 @@ def check_server(cxn, instance_name, connected):
     assert (instance_name in cxn.servers) == connected
 
 
+@contextlib.contextmanager
+def subscribe_to_node_messages(cxn):
+    messages = [
+        'node.server_starting',
+        'node.server_started',
+        'node.server_stopping',
+        'node.server_stopped',
+        'node.status',
+    ]
+    msg_map = {cxn.context()[1]: message_name for message_name in messages}
+
+    message_queue = queue.Queue()
+    def handler(message_ctx, msg):
+        sender_id, msg_body = msg
+        i = message_ctx.target
+        if i in msg_map:
+            message_name = msg_map[i]
+            message_queue.put((message_name, msg_body))
+
+    for i, message in msg_map.items():
+        cxn.manager.subscribe_to_named_message(message, i, True)
+    cxn._backend.cxn.addListener(handler)
+    try:
+        yield message_queue
+    finally:
+        cxn._backend.cxn.removeListener(handler)
+        for i, message_name in msg_map.items():
+            cxn.manager.subscribe_to_named_message(message, i, False)
+
+
+def clear_queue(q):
+    items = []
+    while True:
+        try:
+            items.append(q.get_nowait())
+        except queue.Empty:
+            break
+    return items
+
+
 class TestNode(object):
 
     def test_node_autodetect(self):
@@ -74,22 +116,87 @@ class TestNode(object):
                 servers = n.node.available_servers()
                 assert 'Python Test Server' in servers
                 assert 'Local Python Test Server' in servers
-                n.node_reg.set('directories', [])
-                time.sleep(1)  # TODO(maffoo): get rid of sleep here
-                n.node.refresh_servers()
+
+                with subscribe_to_node_messages(cxn) as mq:
+                    n.node_reg.set('directories', [])
+                    servers = self._check_status_message(mq.get(timeout=1))
+                    assert servers == []
                 assert n.node.available_servers() == []
 
+                with subscribe_to_node_messages(cxn) as mq:
+                    n.node_reg.set('directories', [SERVERS_DIR])
+                    servers = self._check_status_message(mq.get(timeout=1))
+                    assert 'Python Test Server' in servers
+                    assert 'Local Python Test Server' in servers
+                servers = n.node.available_servers()
+                assert 'Python Test Server' in servers
+                assert 'Local Python Test Server' in servers
+
+    def test_node_status_on_startup(self):
+        with labrad.connect() as cxn:
+            with subscribe_to_node_messages(cxn) as mq:
+                with run_node('test', cxn, update_registry=False) as n:
+                    self._check_status_message(mq.get(timeout=1))
+
+    def _check_status_message(self, message):
+        message_name, contents = message
+        assert message_name == 'node.status'
+        contents = dict(contents)
+        assert set(contents.keys()) == {'node', 'servers'}
+        assert contents['node'] == 'node test'
+        servers = [server[0] for server in contents['servers']]
+        return servers
+
     def _test_start_server(self, node_name, name, instance_name, restart=False):
+        expected_message = {
+            'node': 'node {}'.format(node_name),
+            'server': name,
+            'instance': instance_name
+        }
+
+        def check_messages(message_queue, expected_names, timeout=1):
+            """Check that we receive expected messages within the timeout."""
+            remaining_names = list(expected_names)
+            deadline = time.time() + timeout
+            while remaining_names:
+                try:
+                    remaining = max(0, deadline - time.time())
+                    message = message_queue.get(timeout=remaining)
+                except queue.Empty:
+                    raise Exception('messages not received before timeout: {}'
+                                    .format(expected_names))
+                message_name, message_params = message
+                if message_name == remaining_names[0]:
+                    remaining_names.remove(message_name)
+                    assert dict(message_params) == expected_message
+
         with labrad.connect() as cxn:
             with run_node(node_name, cxn) as n:
-                n.node.start(name)
+                with subscribe_to_node_messages(cxn) as mq:
+                    n.node.start(name)
+                    check_messages(mq, [
+                        'node.server_starting',
+                        'node.server_started',
+                    ])
                 check_server(cxn, instance_name, connected=True)
                 assert cxn[instance_name].echo('woot') == 'woot'
                 if restart:
-                    n.node.restart(instance_name)
+                    with subscribe_to_node_messages(cxn) as mq:
+                        n.node.restart(instance_name)
+                        check_messages(mq, [
+                            'node.server_stopping',
+                            'node.server_stopped',
+                            'node.server_starting',
+                            'node.server_started',
+                        ])
                     check_server(cxn, instance_name, connected=True)
                     assert cxn[instance_name].echo('yay') == 'yay'
-                n.node.stop(instance_name)
+                with subscribe_to_node_messages(cxn) as mq:
+                    n.node.stop(instance_name)
+                    check_messages(mq, [
+                        'node.server_stopping',
+                        'node.server_stopped',
+                    ])
                 check_server(cxn, instance_name, connected=False)
 
     def test_node_can_start_global_server(self):
