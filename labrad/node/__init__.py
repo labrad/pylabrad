@@ -200,10 +200,6 @@ class ServerProcess(ProcessProtocol):
         """Stop this server instance."""
         return self._lock.run(self._stop)
 
-    def restart(self):
-        """Restart this server instance."""
-        return self._lock.run(self._restart)
-
     @inlineCallbacks
     def _start(self):
         if self.started:
@@ -243,11 +239,6 @@ class ServerProcess(ProcessProtocol):
         finished[0] = True
         self.stopping = False
         self.emitMessage('server_stopped')
-
-    @inlineCallbacks
-    def _restart(self):
-        yield self._stop()
-        yield self._start()
 
     def emitMessage(self, msg):
         """Emit a message to other parts of this application."""
@@ -727,8 +718,8 @@ class NodeServer(LabradServer):
         if instance_name not in self.instances:
             raise Exception("'%s' is not running." % instance_name)
         inst = self.instances[instance_name]
-        yield inst.restart()
-        self.instances[instance_name] = inst
+        yield inst.stop()
+        yield self.start(c, inst.server_name, inst.env)
         returnValue(instance_name)
 
     @setting(10, returns='*s')
