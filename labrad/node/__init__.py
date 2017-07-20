@@ -525,7 +525,7 @@ class NodeServer(LabradServer):
 
         # Mapping from server name to ServerConfig that describes how to launch
         # instances of the server.
-        self.servers = {}
+        self.server_configs = {}
 
         # Mapping from instance name to ServerProcess object. Instances are
         # added to this mapping when they are successfully started and removed
@@ -583,14 +583,15 @@ class NodeServer(LabradServer):
 
     def status(self):
         """Get information about all servers on this node."""
-        def serverInfo(config):
+        def server_info(config):
             instance_names = [inst.name for inst in self.instances.values()
                                         if inst.server_name == config.name and
                                            inst.status == 'STARTED']
             return (config.name, config.description or '', config.version,
                     config.instance_name, config.environ_vars, instance_names)
-        return [serverInfo(server_config)
-                for server_name, server_config in sorted(self.servers.items())]
+
+        return [server_info(config)
+                for _name, config in sorted(self.server_configs.items())]
 
 
     # server refresh
@@ -641,7 +642,7 @@ class NodeServer(LabradServer):
                         logging.error('Error while loading config file "%s":' % fname,
                                   exc_info=True)
 
-        servers_dict = {}
+        server_configs = {}
         for versions in configs.values():
             for servers in versions.values():
                 if len(servers) > 1:
@@ -662,8 +663,8 @@ class NodeServer(LabradServer):
                     s.name = '{}-{}'.format(s.name, s.version)
 
             for s in servers:
-                servers_dict[s.name] = s
-        self.servers = servers_dict
+                server_configs[s.name] = s
+        self.server_configs = server_configs
         # send a message with the current server list
         self._relayMessage('status', servers=self.status())
 
@@ -673,7 +674,7 @@ class NodeServer(LabradServer):
     @setting(1, name='s', environ='*(ss)', returns='s')
     def start(self, c, name, environ={}):
         """Start an instance of a server."""
-        if name not in self.servers:
+        if name not in self.server_configs:
             raise Exception("Unknown server: '%s'." % name)
         environ = dict(environ) # copy context environment
         environ.update(LABRADNODE=self.nodename,
@@ -683,7 +684,7 @@ class NodeServer(LabradServer):
         if isinstance(self.credential, auth.Password):
             environ.update(LABRADUSER=self.credential.username,
                            LABRADPASSWORD=self.credential.password)
-        config = self.servers[name]
+        config = self.server_configs[name]
         srv = ServerProcess(config, environ, client=self.client,
                             message_receiver=self.on_subprocess_message)
         instance_name = srv.name
@@ -715,7 +716,7 @@ class NodeServer(LabradServer):
     @setting(10, returns='*s')
     def available_servers(self, c):
         """Get a list of available servers."""
-        return sorted(self.servers.keys())
+        return sorted(self.server_configs.keys())
 
     @setting(11, returns='*(ss)')
     def running_servers(self, c):
@@ -729,7 +730,7 @@ class NodeServer(LabradServer):
     @setting(12, returns='*s')
     def local_servers(self, c):
         """Get a list of local servers."""
-        return sorted(n for n, s in self.servers.items() if s.isLocal)
+        return sorted(n for n, s in self.server_configs.items() if s.isLocal)
 
     @setting(13, returns='')
     def refresh_servers(self, c):
@@ -759,9 +760,9 @@ class NodeServer(LabradServer):
     @setting(102, name='s', returns='s')
     def server_version(self, c, name):
         """Get version information for a server."""
-        if name not in self.servers:
+        if name not in self.server_configs:
             raise Exception("'%s' not found." % name)
-        return self.servers[name].version
+        return self.server_configs[name].version
 
     @setting(103, name='s', enable='b', returns='')
     def stream_output(self, c, name, enable):
@@ -799,7 +800,7 @@ class NodeServer(LabradServer):
     @setting(202, name='s', returns='')
     def autostart_add(self, c, name):
         """Add a server to the autostart list."""
-        if name not in self.servers:
+        if name not in self.server_configs:
             raise Exception("Unknown server: '%s'." % name)
         autostart = set(self.config.autostart)
         autostart.add(name)
