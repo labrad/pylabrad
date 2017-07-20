@@ -104,6 +104,20 @@ class ServerProcess(ProcessProtocol):
     shutdownTimeout = 5
 
     def __init__(self, config, env, client, message_receiver):
+        """Initialize a ServerProcess instance.
+
+        Args:
+            config (server_config.ServerConfig): Configuration information
+                describing how the node should launch this process.
+            env (Dict[str, str]): Map of environment variables that should be
+                passed to the subprocess. These will override variables in the
+                environment of the node process itself.
+            client (labrad.wrappers.ClientAsync): Client connection to labrad.
+            message_receiver (Callable[[ServerProcess, str], None]): Called
+                when state changes happen for this server process, such as when
+                it starts and stops. Will be called with a reference to this
+                ServerProcess instances and a string giving the state change.
+        """
         self.config = config
         self.env = env
         self.full_env = os.environ.copy()
@@ -230,8 +244,7 @@ class ServerProcess(ProcessProtocol):
 
     def emitMessage(self, msg):
         """Emit a message to other parts of this application."""
-        self.message_receiver(msg, sender=self,
-                              server=self.server_name, instance=self.name)
+        self.message_receiver(self, msg)
 
     def serverConnected(self, ID, name):
         """Called when a server connects to LabRAD.
@@ -493,19 +506,47 @@ class NodeServer(LabradServer):
     name = 'node %LABRADNODE%'
 
     def __init__(self, nodename, host, port, credential):
+        """Initialize a NodeServer instance.
+
+        Args:
+            nodename (str): The name of this node, e.g. from the LABRADNODE
+                environment variable.
+            host (str): The host where the labrad manager is running.
+            port (int): The port where the labrad manager is running.
+            credential (labrad.auth.Password): Credentials for connecting to the
+                labrad manager.
+        """
         LabradServer.__init__(self)
         self.nodename = nodename
         self.name = 'node %s' % nodename
         self.host = host
         self.port = port
         self.credential = credential
+
+        # Mapping from server name to ServerConfig that describes how to launch
+        # instances of the server.
         self.servers = {}
+
+        # Mapping from instance name to ServerProcess object. Instances are
+        # added to this mapping when they are successfully started and removed
+        # when they send a message indicating that the server process has
+        # stopped.
         self.instances = {}
+
+        # ServerProcess instances that will be notified when new servers connect
+        # to labrad. ServerProcesses use this information to determine when the
+        # subprocesses that they launch have successfully connected to labrad.
+        # We use a separate collection here than self.instances because
+        # ServerProcess instances need to receive the server connection
+        # notification in order to startup, but they are not added to
+        # self.instances until after they have started up successfully.
+        # TODO: ServerProcess instances should manage notifications on their
+        # own, since they have access to a labrad client.
         self.instances_to_notify = weakref.WeakSet()
 
     @inlineCallbacks
     def initServer(self):
-        """Initialize this server."""
+        """Initialize this server after connecting to the labrad manager."""
         self.config = yield NodeConfig.create(self)
         self.refreshServers()
         self.autostart(None)
@@ -518,12 +559,13 @@ class NodeServer(LabradServer):
 
     # message handling
 
-    def on_subprocess_message(self, message, sender, **kw):
+    def on_subprocess_message(self, sender, message):
         if message == 'server_stopped':
             instance_name = sender.name
             if instance_name in self.instances:
                 del self.instances[instance_name]
-        self._relayMessage(message, **kw)
+        self._relayMessage(message, server=sender.server_name,
+                           instance=sender.name)
 
     def _relayMessage(self, signal, **kw):
         """Send messages out to LabRAD."""
