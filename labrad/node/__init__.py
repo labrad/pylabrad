@@ -152,6 +152,36 @@ class ServerProcess(ProcessProtocol):
         return self.config.timeout
 
     @property
+    def executable(self):
+        """Get the executable to pass to twisted's spawnProcess method.
+
+        On Unix, spawnProcess calls fork() and then execvpe which expects an
+        executable name and a series of arguments, and tries to resolve the
+        executable using PATH. On windows, it calls createProcess, which expects
+        a command string and an optional executable. If the executable argument
+        is present, it must be an absolute path including .exe suffix. If
+        executable is not present, the first part of the command string is used,
+        and invokes the %PATH% and extension search.
+
+        Twisted spawnProcess only supports posix (including Mac) and win32, so
+        we just abandon anything else. The relevant twisted code is:
+
+            twisted/internet/process.py:_BaseProcess
+            twisted/internet/dumbwin32proc.py:Process
+
+        Note that the twisted docs for spawnProcess say that the full executable
+        path is required, but this is not in fact the case. See:
+
+            http://twistedmatrix.com/documents/current/api/twisted.internet.interfaces.IReactorProcess.spawnProcess.html
+        """
+        if platformType == 'posix':
+            return self.args[0]
+        elif platformType == 'win32':
+            return None
+        else:
+            raise RuntimeError("Unsupported platform %s" % platformType)
+
+    @property
     def status(self):
         if self.starting:
             return 'STARTING'
@@ -184,30 +214,7 @@ class ServerProcess(ProcessProtocol):
         self.starting = True
         self.startup = defer.Deferred()
         self.emitMessage('server_starting')
-        # This looks crazy.  On Unix, spawnProcess calls fork() and then
-        # execvpe which expects an executable name and a series of arguments,
-        # and tries to resolve the executable using PATH.  On windows,
-        # it calls createProcess, which expects a command string and an
-        # optional executable.  If the executable argument is present,
-        # it must be an absolute path including .exe suffix.  If executable
-        # is not present, the first part of the command string is used,
-        # and invokes the %PATH% and extension search.
-        #
-        # Twisted spawnProcess only supports posix (including Mac) and
-        # win32, so we just abandon anything else.
-        # Relevant code is in twisted/internet/process.py:_BaseProcess and
-        # twisted/internet/dumbwin32proc.py:Process. The twisted docs for
-        # spawnProcess say that the full executable path is required, but
-        # this is not in fact the case. See:
-        # http://twistedmatrix.com/documents/current/api/twisted.internet.interfaces.IReactorProcess.spawnProcess.html
-        if platformType == 'posix':
-            executable = self.args[0]
-        elif platformType == 'win32':
-            executable = None
-        else:
-            raise RuntimeError("Unsupported platform %s" % platformType)
-
-        self.proc = reactor.spawnProcess(self, executable, self.args,
+        self.proc = reactor.spawnProcess(self, self.executable, self.args,
                                          env=self.full_env, path=self.path)
         timeoutCall = reactor.callLater(self.timeout, self.kill)
         try:
