@@ -20,9 +20,9 @@ class ServerConfig(object):
         self.cmdline = cmdline
         self.path = path
         self.filename = filename
-        self.timeout = timeout
+        self.timeout = 20 if timeout is None else timeout
         self.shutdown_mode = shutdown_mode
-        self.shutdown_timeout = shutdown_timeout
+        self.shutdown_timeout = 5 if shutdown_timeout is None else shutdown_timeout
 
 
 def from_string(conf, filename=None, path=None, platform=sys.platform):
@@ -62,6 +62,8 @@ def from_string(conf, filename=None, path=None, platform=sys.platform):
         shutdown_mode = 'message', int(scp.get('shutdown', 'message', raw=True))
     elif scp.has_option('shutdown', 'setting'):
         shutdown_mode = 'setting', scp.get('shutdown', 'setting', raw=True)
+    else:
+        shutdown_mode = None
     try:
         shutdown_timeout = float(scp.getint('shutdown', 'timeout'))
     except:

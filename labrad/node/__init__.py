@@ -73,7 +73,6 @@ import os
 import shlex
 import socket
 import sys
-import weakref
 import zipfile
 from datetime import datetime
 
@@ -91,17 +90,27 @@ import labrad.support
 from labrad import auth, protocol, util, types as T, constants as C
 from labrad.node import server_config
 from labrad.server import LabradServer, setting
-from labrad.util import interpEnvironmentVars
+from labrad.util import DeferredSignal, interpEnvironmentVars, mux
 
 
-LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
+# Maximum number of lines of stdout to keep per server.
+LOG_LENGTH = 1000
+
+
+# Named message fired by the manager when new servers connect.
+SERVER_CONNECTED = 'Server Connect'
 
 
 class ServerProcess(ProcessProtocol):
     """A class to represent a running server instance."""
 
-    timeout = 20
-    shutdownTimeout = 5
+    # Messages that will be fired when we transition to various statuses
+    STATUS_MESSAGES = {
+        'STARTING': 'server_starting',
+        'STARTED': 'server_started',
+        'STOPPING': 'server_stopping',
+        'STOPPED': 'server_stopped',
+    }
 
     def __init__(self, config, env, client, on_message):
         """Initialize a ServerProcess instance.
@@ -130,14 +139,15 @@ class ServerProcess(ProcessProtocol):
         self.name = interpEnvironmentVars(config.instance_name, self.full_env)
         self.args = shlex.split(config.cmdline)
         self.args = [interpEnvironmentVars(a, self.full_env) for a in self.args]
-        self.starting = False
-        self.started = False
-        self.stopping = False
+        self.status = None
         self.output = []
         self.on_message = on_message
         self._lock = defer.DeferredLock()
         logname = 'labrad.' + labrad.support.mangle(self.name)
         self.logger = logging.getLogger(logname)
+
+        # Signal that will fire when the server process is shutdown.
+        self.on_shutdown = DeferredSignal()
 
     @property
     def server_name(self):
@@ -152,168 +162,170 @@ class ServerProcess(ProcessProtocol):
         return self.config.timeout
 
     @property
-    def status(self):
-        if self.starting:
-            return 'STARTING'
-        elif self.started:
-            return 'STARTED'
-        elif self.stopping:
-            return 'STOPPING'
-        else:
-            return 'STOPPED'
+    def executable(self):
+        """Get the executable to pass to twisted's spawnProcess method.
 
-    def start(self):
-        """Start this server instance."""
-        return self._lock.run(self._start)
+        On Unix, spawnProcess calls fork() and then execvpe which expects an
+        executable name and a series of arguments, and tries to resolve the
+        executable using PATH. On windows, it calls createProcess, which expects
+        a command string and an optional executable. If the executable argument
+        is present, it must be an absolute path including .exe suffix. If
+        executable is not present, the first part of the command string is used,
+        and invokes the %PATH% and extension search.
 
-    def stop(self):
-        """Stop this server instance."""
-        return self._lock.run(self._stop)
+        Twisted spawnProcess only supports posix (including Mac) and win32, so
+        we just abandon anything else. The relevant twisted code is:
 
-    def restart(self):
-        """Restart this server instance."""
-        return self._lock.run(self._restart)
+            twisted/internet/process.py:_BaseProcess
+            twisted/internet/dumbwin32proc.py:Process
 
-    @inlineCallbacks
-    def _start(self):
-        if self.started:
-            return
-        print("starting '%s'..." % self.name)
-        print("path:", self.path)
-        print("args:", self.args)
-        self.starting = True
-        self.startup = defer.Deferred()
-        self.emitMessage('server_starting')
-        # This looks crazy.  On Unix, spawnProcess calls fork() and then
-        # execvpe which expects an executable name and a series of arguments,
-        # and tries to resolve the executable using PATH.  On windows,
-        # it calls createProcess, which expects a command string and an
-        # optional executable.  If the executable argument is present,
-        # it must be an absolute path including .exe suffix.  If executable
-        # is not present, the first part of the command string is used,
-        # and invokes the %PATH% and extension search.
-        #
-        # Twisted spawnProcess only supports posix (including Mac) and
-        # win32, so we just abandon anything else.
-        # Relevant code is in twisted/internet/process.py:_BaseProcess and
-        # twisted/internet/dumbwin32proc.py:Process. The twisted docs for
-        # spawnProcess say that the full executable path is required, but
-        # this is not in fact the case. See:
-        # http://twistedmatrix.com/documents/current/api/twisted.internet.interfaces.IReactorProcess.spawnProcess.html
+        Note that the twisted docs for spawnProcess say that the full executable
+        path is required, but this is not in fact the case. See:
+
+            http://twistedmatrix.com/documents/current/api/twisted.internet.interfaces.IReactorProcess.spawnProcess.html
+        """
         if platformType == 'posix':
-            executable = self.args[0]
+            return self.args[0]
         elif platformType == 'win32':
-            executable = None
+            return None
         else:
             raise RuntimeError("Unsupported platform %s" % platformType)
 
-        self.proc = reactor.spawnProcess(self, executable, self.args,
+    def set_status(self, value):
+        """Transition to the given status and notify message listeners."""
+        message = self.STATUS_MESSAGES[value]
+        self.status = value
+        self.logger.info(value)
+        self.on_message(self, message)
+
+    @inlineCallbacks
+    def start(self):
+        self.set_status('STARTING')
+        self.logger.info("path: {}".format(self.path))
+        self.logger.info("args: {}".format(self.args))
+
+        msg_ctx = self.client.context()
+        msg_id = msg_ctx[1]
+
+        connected = defer.Deferred()
+
+        def on_server_connect(message_ctx, msg):
+            """Handler that will be called when labrad servers connect.
+
+            If we see a server whose name matches the one we are trying to
+            start, we assume that the server process we spawned has successfully
+            connected. So, we fire the `connected` Deferred.
+            """
+            _ID, name = msg
+            if name == self.name:
+                connected.callback(None)
+
+        # start listening for server connect messages
+        manager = self.client.manager
+        manager.addListener(on_server_connect, context=msg_ctx)
+        yield manager.subscribe_to_named_message(
+            SERVER_CONNECTED, msg_id, True, context=msg_ctx)
+
+        # start the server process
+        self.proc = reactor.spawnProcess(self, self.executable, self.args,
                                          env=self.full_env, path=self.path)
-        timeoutCall = reactor.callLater(self.timeout, self.kill)
+
+        # wait for the server to connect to labrad, shutdown, or timeout,
+        # whichever comes first.
+        selected = yield mux.select({
+            'connected': connected,
+            'shutdown': self.on_shutdown(),
+            'timeout': mux.after(self.timeout)
+        })
+
+        # stop listening for server connect messages
         try:
-            yield self.startup
-            self.emitMessage('server_started')
-        except:
-            self.emitMessage('server_stopped')
-            raise
-        finally:
-            self.starting = False
-            if timeoutCall.active():
-                timeoutCall.cancel()
+            manager.removeListener(on_server_connect, context=msg_ctx)
+            yield manager.subscribe_to_named_message(
+                SERVER_CONNECTED, msg_id, False, context=msg_ctx)
+        except Exception:
+            self.logger.info('Error while unsubscribing from labrad messages',
+                             exc_info=True)
+
+        if selected.key == 'timeout':
+            yield self._kill()
+            raise T.Error('Failed to connect to labrad in {} seconds.'
+                          .format(self.timeout), payload=self.output)
+        if selected.key == 'shutdown':
+            raise T.Error('Process exited before connecting to labrad.',
+                          payload=self.output)
+
+        # we're connected!
+        self.set_status('STARTED')
+
+    def stop(self):
+        """Stop this server instance.
+
+        We protect this with a lock so that multiple calls to stop the server
+        will not interfere with each other. Rather, subsequent calls to stop
+        will wait for the initial call to finish before returning.
+        """
+        return self._lock.run(self._stop)
 
     @inlineCallbacks
     def _stop(self):
-        if not self.started:
+        if self.status == 'STOPPED':
             return
-        print("stopping '%s'..." % self.name)
-        self.stopping = True
-        self.shutdown = defer.Deferred()
-        self.emitMessage('server_stopping')
-        # hack: marker to tell the kill func that it worked
-        finished = [False]
-        self.kill(finished)
-        yield self.shutdown
-        finished[0] = True
-        self.stopping = False
-        self.emitMessage('server_stopped')
+
+        self.set_status('STOPPING')
+
+        if self.config.shutdown_mode is not None:
+            # Try to do an orderly shutdown.
+            mode, ID = self.config.shutdown_mode
+            if mode == 'message':
+                try:
+                    self.client.servers[self.name].sendMessage(ID)
+                except:
+                    self.logger.info('Error while shutting down with message',
+                                     exc_info=True)
+            elif mode == 'setting':
+                try:
+                    yield self.client.servers[self.name][ID]()
+                except:
+                    self.logger.info('Error while shutting down with setting',
+                                     exc_info=True)
+
+            selected = yield mux.select({
+                'shutdown': self.on_shutdown(),
+                'timeout': mux.after(self.config.shutdown_timeout)
+            })
+
+            if selected.key == 'shutdown':
+                return
+
+        # Shutdown failed or not configured, so just kill the process.
+        yield self._kill()
 
     @inlineCallbacks
-    def _restart(self):
-        yield self._stop()
-        yield self._start()
+    def _kill(self):
+        """Send a signal to kill the subprocess and wait for it to exit."""
+        try:
+            self.proc.signalProcess('KILL')
+        except:
+            self.logger.error('Error killing subprocess', exc_info=True)
+        yield self.on_shutdown()
 
-    def emitMessage(self, msg):
-        """Emit a message to other parts of this application."""
-        self.on_message(self, msg)
-
-    def serverConnected(self, ID, name):
-        """Called when a server connects to LabRAD.
-
-        If the name matches our name, we'll assume this server
-        started successfully.  This may not be the case (e.g. if
-        two nodes are trying to start the same server simultaneously),
-        but there's no way to find out from LabRAD which node
-        a given server is running on, so this will have to do.
-        """
-        if name == self.name:
-            self.ID = ID
-            if self.starting:
-                self.started = True
-                self.startup.callback(self)
+    # ProcessProtocol callbacks called by the subprocess.
 
     def processEnded(self, reason):
         """Called when the server process ends.
 
-        We check to see the reason why this process failed, and then
-        call the appropriate deferred, depending on the current state.
+        We set the status to STOPPED and call the shutdown callback to notify
+        anyone waiting for us to shutdown.
         """
         if isinstance(reason.value, ProcessDone):
-            print("'%s': process closed cleanly." % self.name)
+            self.logger.info("process closed cleanly.")
         elif isinstance(reason.value, ProcessTerminated):
-            print("'%s': process terminated: %s" % (self.name, reason.value))
+            self.logger.info("process terminated: {}".format(reason.value))
         else:
-            print("'%s': process ended: %s" % (self.name, reason))
-        self.started = False
-        if self.starting:
-            err = T.Error('Startup failed.', payload=self.output)
-            self.startup.errback(err)
-        elif self.stopping:
-            self.shutdown.callback(None)
-        else:
-            # looks like this thing died on its own
-            self.emitMessage('server_stopped')
-
-    @inlineCallbacks
-    def kill(self, finished=None):
-        """Kill the server process."""
-        if not self.started:
-            return
-        try:
-            servers = self.client.servers
-            if hasattr(self, 'shutdownMode') and self.name in servers:
-                mode, ID = self.shutdownMode
-                if mode == 'message':
-                    # try to shutdown by sending a message
-                    servers[self.name].sendMessage(ID)
-                elif mode == 'setting':
-                    # try to shutdown by calling a setting
-                    try:
-                        yield servers[self.name][ID]()
-                    except:
-                        pass
-                yield util.wakeupCall(self.shutdownTimeout)
-
-            # hack to let us know that we did indeed finish killing the server
-            if finished is not None:
-                if finished[0]:
-                    return
-
-            # if we're not dead yet, kill with a vengeance
-            if self.started:
-                self.proc.signalProcess('KILL')
-        except Exception:
-            logging.error('Error while trying to kill server process for "%s":' % self.name,
-                          exc_info=True)
+            self.logger.info("process ended: {}".format(reason))
+        self.set_status('STOPPED')
+        self.on_shutdown.callback()
 
     def outReceived(self, data):
         """Called when the server prints to stdout."""
@@ -533,17 +545,6 @@ class NodeServer(LabradServer):
         # stopped.
         self.instances = {}
 
-        # ServerProcess instances that will be notified when new servers connect
-        # to labrad. ServerProcesses use this information to determine when the
-        # subprocesses that they launch have successfully connected to labrad.
-        # We use a separate collection here than self.instances because
-        # ServerProcess instances need to receive the server connection
-        # notification in order to startup, but they are not added to
-        # self.instances until after they have started up successfully.
-        # TODO: ServerProcess instances should manage notifications on their
-        # own, since they have access to a labrad client.
-        self.instances_to_notify = weakref.WeakSet()
-
     @inlineCallbacks
     def initServer(self):
         """Initialize this server after connecting to the labrad manager."""
@@ -571,10 +572,6 @@ class NodeServer(LabradServer):
                 messages to notify interested listeners, such as the node web
                 interface.
         """
-        if message == 'server_stopped':
-            instance_name = sender.name
-            if instance_name in self.instances:
-                del self.instances[instance_name]
         self._relayMessage(message, server=sender.server_name,
                            instance=sender.name)
 
@@ -583,11 +580,6 @@ class NodeServer(LabradServer):
         kw['node'] = self.name
         mgr = self.client.manager
         mgr.send_named_message('node.' + signal, tuple(kw.items()))
-
-    def serverConnected(self, ID, name):
-        """Called when a server connects to LabRAD."""
-        for inst in self.instances_to_notify:
-            inst.serverConnected(ID, name)
 
 
     # status information
@@ -701,28 +693,45 @@ class NodeServer(LabradServer):
         instance_name = srv.name
         if instance_name in self.instances:
             raise Exception("Server '%s' already running." % instance_name)
-        self.instances_to_notify.add(srv)
         yield srv.start()
         self.instances[instance_name] = srv
+
+        # remove instance from instance dict when it shuts down
+        @inlineCallbacks
+        def handle_shutdown():
+            yield srv.on_shutdown()
+            self._remove_instance(instance_name)
+        handle_shutdown()
+
         returnValue(instance_name)
 
     @setting(2, instance_name='s', returns='s')
     def stop(self, c, instance_name):
         """Stop a running server instance."""
-        if instance_name not in self.instances:
-            raise Exception("'%s' is not running." % instance_name)
-        yield self.instances[instance_name].stop()
+        yield self._stop(instance_name)
         returnValue(instance_name)
 
     @setting(3, instance_name='s', returns='s')
     def restart(self, c, instance_name):
         """Restart a running server instance."""
+        inst = yield self._stop(instance_name)
+        yield self.start(c, inst.server_name, inst.env)
+        returnValue(instance_name)
+
+    @inlineCallbacks
+    def _stop(self, instance_name):
+        """Stop a running server instance, and return the instance."""
         if instance_name not in self.instances:
             raise Exception("'%s' is not running." % instance_name)
         inst = self.instances[instance_name]
-        yield inst.restart()
-        self.instances[instance_name] = inst
-        returnValue(instance_name)
+        yield inst.stop()
+        # ensure instance is removed from instance dict before we return
+        self._remove_instance(instance_name) 
+        returnValue(inst)
+
+    def _remove_instance(self, instance_name):
+        if instance_name in self.instances:
+            del self.instances[instance_name]
 
     @setting(10, returns='*s')
     def available_servers(self, c):
