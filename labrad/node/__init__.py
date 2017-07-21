@@ -93,7 +93,12 @@ from labrad.server import LabradServer, setting
 from labrad.util import DeferredSignal, interpEnvironmentVars, mux
 
 
-LOG_LENGTH = 1000 # maximum number of lines of stdout to keep per server
+# Maximum number of lines of stdout to keep per server.
+LOG_LENGTH = 1000
+
+
+# Named message fired by the manager when new servers connect.
+SERVER_CONNECTED = 'Server Connect'
 
 
 class ServerProcess(ProcessProtocol):
@@ -210,11 +215,10 @@ class ServerProcess(ProcessProtocol):
             if name == self.name:
                 connected.callback(None)
 
-        message = 'Server Connect'
         manager = self.client.manager
         manager.addListener(on_server_connect, context=msg_ctx)
         yield manager.subscribe_to_named_message(
-            message, msg_id, True, context=msg_ctx)
+            SERVER_CONNECTED, msg_id, True, context=msg_ctx)
 
         # start the server process
         self.proc = reactor.spawnProcess(self, self.executable, self.args,
@@ -230,7 +234,7 @@ class ServerProcess(ProcessProtocol):
         try:
             manager.removeListener(on_server_connect, context=msg_ctx)
             yield manager.subscribe_to_named_message(
-                message, msg_id, False, context=msg_ctx)
+                SERVER_CONNECTED, msg_id, False, context=msg_ctx)
         except Exception:
             self.logger.info('Error while unsubscribing from labrad messages',
                              exc_info=True)
