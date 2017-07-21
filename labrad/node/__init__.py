@@ -211,6 +211,12 @@ class ServerProcess(ProcessProtocol):
         connected = defer.Deferred()
 
         def on_server_connect(message_ctx, msg):
+            """Handler that will be called when labrad servers connect.
+
+            If we see a server whose name matches the one we are trying to
+            start, we assume that the server process we spawned has successfully
+            connected. So, we fire the `connected` Deferred.
+            """
             _ID, name = msg
             if name == self.name:
                 connected.callback(None)
@@ -224,7 +230,8 @@ class ServerProcess(ProcessProtocol):
         self.proc = reactor.spawnProcess(self, self.executable, self.args,
                                          env=self.full_env, path=self.path)
 
-        # wait for the server to connect, shutdown, or timeout
+        # wait for the server to connect to labrad, shutdown, or timeout,
+        # whichever comes first.
         selected = yield mux.select(
             connected=connected,
             shutdown=self.on_shutdown(),
