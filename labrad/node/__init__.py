@@ -231,7 +231,7 @@ class ServerProcess(ProcessProtocol):
             manager.removeListener(on_server_connect, context=msg_ctx)
             yield manager.subscribe_to_named_message(
                 message, msg_id, False, context=msg_ctx)
-        except Exception as e:
+        except Exception:
             self.logger.info('Error while unsubscribing from labrad messages',
                              exc_info=True)
 
