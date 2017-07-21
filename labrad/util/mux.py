@@ -3,25 +3,27 @@ from twisted.internet import defer
 from labrad import util
 
 
-def select(**kwargs):
+def after(delay):
+    """Return a Deferred that will fire after the given delay (in seconds).
+
+    This can be useful to implement a "timeout" option when calling select.
+    """
+    return util.wakeupCall(delay)
+
+
+def select(options):
     """Select from among a set of Deferreds the first one that fires.
 
     Args:
-        **kwargs: Map from key name (str) to Deferred. The key associated with
-            the first Deferred that fires will be returned in the resulting
-            Selection to identify which one fired. In addition to Deferreds,
-            the special keyword arg 'timeout' can be specified as a number
-            giving a timeout in seconds. This will cause the selection to
-            timeout if none of the other provided Deferreds fire before the
-            specified time elapses.
+        options (Dict[str, Deferred]): Map from key name (str) to Deferred. The
+            key associated with the first Deferred that fires will be returned
+            in the resulting Selection to identify which one fired.
 
     Returns:
         (Deferred[Selection]): A Deferred that will fire with a Selection that
         contains the key of the selected Deferred and the resulting value or
         error.
     """
-    if 'timeout' in kwargs:
-        kwargs['timeout'] = util.wakeupCall(kwargs['timeout'])
     result = defer.Deferred()
     @defer.inlineCallbacks
     def handle(key, deferred):
@@ -36,7 +38,7 @@ def select(**kwargs):
                 result.callback(Selection(key, error=e))
             except defer.AlreadyCalledError:
                 pass
-    for key, deferred in kwargs.items():
+    for key, deferred in options.items():
         handle(key, deferred)
     return result
 

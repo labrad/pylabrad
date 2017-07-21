@@ -204,7 +204,6 @@ class ServerProcess(ProcessProtocol):
         self.logger.info("path: {}".format(self.path))
         self.logger.info("args: {}".format(self.args))
 
-        # start listening for server connect messages
         msg_ctx = self.client.context()
         msg_id = msg_ctx[1]
 
@@ -221,6 +220,7 @@ class ServerProcess(ProcessProtocol):
             if name == self.name:
                 connected.callback(None)
 
+        # start listening for server connect messages
         manager = self.client.manager
         manager.addListener(on_server_connect, context=msg_ctx)
         yield manager.subscribe_to_named_message(
@@ -232,10 +232,11 @@ class ServerProcess(ProcessProtocol):
 
         # wait for the server to connect to labrad, shutdown, or timeout,
         # whichever comes first.
-        selected = yield mux.select(
-            connected=connected,
-            shutdown=self.on_shutdown(),
-            timeout=self.timeout)
+        selected = yield mux.select({
+            'connected': connected,
+            'shutdown': self.on_shutdown(),
+            'timeout': mux.after(self.timeout)
+        })
 
         # stop listening for server connect messages
         try:
@@ -289,9 +290,10 @@ class ServerProcess(ProcessProtocol):
                     self.logger.info('Error while shutting down with setting',
                                      exc_info=True)
 
-            selected = yield mux.select(
-                shutdown=self.on_shutdown(),
-                timeout=self.config.shutdown_timeout)
+            selected = yield mux.select({
+                'shutdown': self.on_shutdown(),
+                'timeout': mux.after(self.config.shutdown_timeout)
+            })
 
             if selected.key == 'shutdown':
                 return
