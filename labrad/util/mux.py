@@ -45,13 +45,13 @@ def select(options):
 
 class Selection(object):
     """The result of the first firing Deferred from a call to select."""
-    def __init__(self, key, value=None, error=None):
+    def __init__(self, key, result=None, error=None):
         self.key = key
-        self.value = value
-        self.error = error
+        self._result = result
+        self._error = error
 
     def result(self):
         """Get the result (or raise the error) from the selected Deferred."""
-        if self.error is not None:
-            raise self.error
-        return self.value
+        if self._error is not None:
+            raise self._error
+        return self._result
