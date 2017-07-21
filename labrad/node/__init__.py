@@ -235,11 +235,11 @@ class ServerProcess(ProcessProtocol):
             self.logger.info('Error while unsubscribing from labrad messages',
                              exc_info=True)
 
-        if selected('timeout'):
+        if selected.key == 'timeout':
             yield self._kill()
             raise T.Error('Failed to connect to labrad in {} seconds.'
                           .format(self.timeout), payload=self.output)
-        if selected('shutdown'):
+        if selected.key == 'shutdown':
             raise T.Error('Process exited before connecting to labrad.',
                           payload=self.output)
 
@@ -282,7 +282,7 @@ class ServerProcess(ProcessProtocol):
                 shutdown=self.on_shutdown(),
                 timeout=self.config.shutdown_timeout)
 
-            if selected('shutdown'):
+            if selected.key == 'shutdown':
                 return
 
         # Shutdown failed or not configured, so just kill the process.

@@ -48,17 +48,6 @@ class Selection(object):
         self.value = value
         self.error = error
 
-    def __call__(self, key):
-        """Check if the selection key matches the given key.
-
-        Args:
-            key (str): The key to compare against the selected key.
-
-        Returns:
-            (bool): True if the given key matches what was selected, else False.
-        """
-        return key == self.key
-
     def result(self):
         """Get the result (or raise the error) from the selected Deferred."""
         if self.error is not None:
