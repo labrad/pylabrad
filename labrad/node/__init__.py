@@ -101,6 +101,10 @@ LOG_LENGTH = 1000
 SERVER_CONNECTED = 'Server Connect'
 
 
+# Labrad type of the node status info.
+STATUS_TYPE = '*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})'
+
+
 class ServerProcess(ProcessProtocol):
     """A class to represent a running server instance."""
 
@@ -668,8 +672,11 @@ class NodeServer(LabradServer):
             for s in servers:
                 server_configs[s.name] = s
         self.server_configs = server_configs
-        # send a message with the current server list
-        self._relayMessage('status', servers=self.status())
+        # Send a message with the current server list. We pre-flatten the server
+        # status information to the correct type to work around a problem with
+        # type inference while flattening (#342).
+        status_data = T.flatten(self.status(), STATUS_TYPE)
+        self._relayMessage('status', servers=status_data)
 
 
     # LabRAD settings
@@ -757,8 +764,7 @@ class NodeServer(LabradServer):
         """Refresh the list of available servers."""
         self.refreshServers()
 
-    @setting(14, 'status',
-             returns='*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})')
+    @setting(14, 'status', returns=STATUS_TYPE)
     def get_status(self, c):
         """Get information about all servers on this node."""
         return self.status()
