@@ -10,6 +10,7 @@ import time
 
 import labrad
 from labrad.servers import test_server
+from labrad.test import util
 
 
 # Directory where test servers are located.
@@ -238,3 +239,52 @@ class TestNode(object):
                 check_server(cxn, 'test Local Python Test Server', connected=True)
             check_server(cxn, 'Python Test Server', connected=False)
             check_server(cxn, 'test Local Python Test Server', connected=False)
+
+    def test_node_detects_outdated_servers(self):
+        config_template = """
+            [info]
+            name = Python Test Server
+            version = {version}
+            description = Basic python server.
+
+            [startup]
+            cmdline = %PYTHON% -m labrad.servers.test_server
+            timeout = 20
+
+            [shutdown]
+            message = 987654321
+            timeout = 5
+        """
+        with labrad.connect() as cxn:
+            with run_node('test', cxn) as n:
+                with util.temp_directory() as temp_dir:
+                    # start running an existing server version
+                    n.node.start('Python Test Server')
+                    assert len(n.node.running_servers()) == 1
+                    assert n.node.outdated_list() == None
+
+                    # configure the node to see a newer version
+                    with open(os.path.join(temp_dir, 'server2.ini'), 'w') as f:
+                        f.write(config_template.format(version='2.0.0'))
+                    n.node_reg.set('directories', [temp_dir, SERVERS_DIR])
+                    time.sleep(0.5)  # TODO(#344): get rid of this pause
+                    n.node.refresh_servers()
+
+                    outdated_list = n.node.outdated_list()
+                    assert outdated_list is not None
+                    assert len(outdated_list) == 1
+                    outdated = dict(outdated_list[0])
+                    assert outdated['server'] == 'Python Test Server'
+                    assert outdated['running_version'] == '1.0.0'
+                    assert outdated['latest_version'] == '2.0.0'
+
+                    # restart outdate server
+                    outdated_restart = n.node.outdated_restart()
+                    assert outdated_restart is not None
+                    assert len(outdated_restart) == 1
+                    restarted = dict(outdated_restart[0])
+                    assert restarted['server'] == 'Python Test Server'
+                    assert restarted['latest_version'] == '2.0.0'
+                    assert restarted['status'] == 'restarted'
+                    assert len(n.node.running_servers()) == 1
+                    assert n.node.outdated_list() is None
