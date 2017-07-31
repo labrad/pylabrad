@@ -13,8 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import os, sys
-__path__ = [os.path.abspath(os.path.join(x, 'labrad', 'servers'))
-            for x in sys.path]
-
-__all__ = []
+# This makes labrad.servers into a "namespace" package, which makes it possible
+# to have additional labrad/servers directories on the PYTHONPATH. They will
+# all be searched in sequence for additional modules and subpackages.
+from pkgutil import extend_path
+__path__ = extend_path(__path__, __name__)
