@@ -66,7 +66,7 @@ class SettingWrapper(object):
 
     def future(self, *args, **kw):
         wrap = kw.pop('wrap', True)
-        tag = kw.pop('tag', None) or self.accepts
+        tag = kw.pop('tag', None) or self.accepts_type
         if not len(args):
             args = None
         elif len(args) == 1:
@@ -82,6 +82,11 @@ class SettingWrapper(object):
     def accepts(self):
         self._refresh()
         return self._accepts
+
+    @property
+    def accepts_type(self):
+        self._refresh()
+        return self._accepts_type
 
     @property
     def returns(self):
@@ -103,6 +108,7 @@ class SettingWrapper(object):
             info = self._mgr.getSettingInfoByName(self._server.ID, self.name)
             self.__doc__, self._accepts, self._returns, self._notes, self.ID = info
             self._refreshed = True
+            self._accepts_type = [T.parseTypeTag(s) for s in self._accepts]
 
     def refresh(self):
         # mark that we need to refresh.  This doesn't happen immediately,
