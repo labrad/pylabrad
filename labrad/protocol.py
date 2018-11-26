@@ -287,7 +287,7 @@ class LabradProtocol(protocol.Protocol):
                               for i in (ID, None)
                               if (s, c, i) in self.listeners)
             for key in keys:
-                for listener, async in self.listeners[key]:
+                for listener, sync in self.listeners[key]:
                     func, args, kw = listener
                     @inlineCallbacks
                     def call_handler():
@@ -298,24 +298,24 @@ class LabradProtocol(protocol.Protocol):
                                   msgCtx, data, listener)
                             traceback.print_exc()
                     d = call_handler()
-                    if not async:
+                    if sync:
                         yield d
 
     # message handling
-    def addListener(self, listener, source=None, context=None, ID=None, async=True, args=(), kw={}):
+    def addListener(self, listener, source=None, context=None, ID=None, sync=False, args=(), kw={}):
         """Add a listener for messages with the specified attributes.
 
         When a message with the specified source, context and ID is received,
         listener will be called with the message data, along with the args and
-        keyword args specified here.  async determines how message listeners
-        that return deferreds are to be handled.  If async is True, the message
+        keyword args specified here.  sync determines how message listeners
+        that return deferreds are to be handled.  If sync is False, the message
         dispatcher will not wait for the deferred returned by a listener to fire.
-        However, if async is False, the dispatcher will wait for this deferred
+        However, if sync is True, the dispatcher will wait for this deferred
         before firing any more messages.
         """
         key = (source, context, ID)
         listeners = self.listeners.setdefault(key, [])
-        listeners.append(((listener, args, kw), async))
+        listeners.append(((listener, args, kw), sync))
 
     def removeListener(self, listener, source=None, context=None, ID=None):
         """Remove a listener for messages."""
