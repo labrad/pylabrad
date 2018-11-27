@@ -302,7 +302,7 @@ class LabradProtocol(protocol.Protocol):
                         yield d
 
     # message handling
-    def addListener(self, listener, source=None, context=None, ID=None, sync=False, args=(), kw={}):
+    def addListener(self, listener, source=None, context=None, ID=None, sync=False, args=(), kw={}, **kwargs):
         """Add a listener for messages with the specified attributes.
 
         When a message with the specified source, context and ID is received,
@@ -313,6 +313,13 @@ class LabradProtocol(protocol.Protocol):
         However, if sync is True, the dispatcher will wait for this deferred
         before firing any more messages.
         """
+        # this function used to have an async parameter with inverted logic to
+        # the current sync parameter. This had to be changed as python 3.7 made
+        # async a keyword. This workaround allows to maintain the old API for
+        # older python versions.
+        if 'async' in kwargs:
+            sync = not kwargs['async']
+
         key = (source, context, ID)
         listeners = self.listeners.setdefault(key, [])
         listeners.append(((listener, args, kw), sync))
