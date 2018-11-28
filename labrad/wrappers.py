@@ -460,8 +460,8 @@ class ClientAsync(object):
         try:
             yield self._mgr.subscribeToNamedMessage('Server Connect', 314159265, True)
             yield self._mgr.subscribeToNamedMessage('Server Disconnect', 314159266, True)
-            self._cxn.addListener(self._serverConnected, source=self._mgr.ID, ID=314159265, async=False)
-            self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, async=False)
+            self._cxn.addListener(self._serverConnected, source=self._mgr.ID, ID=314159265, sync=True)
+            self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, sync=True)
             yield self.refresh()
         except Exception as e:
             print('error!')

@@ -417,8 +417,8 @@ class LabradServer(object):
         # sign up for notifications from the manager
         yield mgr.subscribe_to_named_message('Server Connect', 55443322, True)
         yield mgr.subscribe_to_named_message('Server Disconnect', 66554433, True)
-        self._cxn.addListener(self._serverConnected, source=mgr.ID, ID=55443322, async=False)
-        self._cxn.addListener(self._serverDisconnected, source=mgr.ID, ID=66554433, async=False)
+        self._cxn.addListener(self._serverConnected, source=mgr.ID, ID=55443322, sync=True)
+        self._cxn.addListener(self._serverDisconnected, source=mgr.ID, ID=66554433, sync=True)
 
         #yield mgr.notify_on_connect.connect(self._serverConnected)
         #yield mgr.notify_on_disconnect.connect(self._serverDisconnected)
