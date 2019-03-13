@@ -445,7 +445,7 @@ class ManagedDeviceServer(LabradServer):
         disconnects and later reconnects under the same name.
         """
         IDs, names = self.deviceLists()
-        return zip(IDs, names)
+        return list(zip(IDs, names))
 
     @setting(2, 'Select Device',
                 key=[': Select first device',
