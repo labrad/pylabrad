@@ -1,3 +1,4 @@
+dist: xenial
 language: python
 sudo: false
 python:
@@ -5,11 +6,10 @@ python:
   - "3.4"
   - "3.5"
   - "3.6"
-  - "3.7-dev"
+  - "3.7"
   - "3.8-dev"
 matrix:
   allow_failures:
-  - python: "3.7-dev"
   - python: "3.8-dev"
 install:
   - cat requirements.txt | perl -p -i -e 's/>=/==/g' > exact_requirements.txt

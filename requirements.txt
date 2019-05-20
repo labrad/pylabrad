@@ -2,7 +2,8 @@ attrs >= 19.1.*
 configparser
 future
 futures >= 3.0.*
-numpy >= 1.12.*
+numpy >= 1.12.*; python_version < '3.7'
+numpy >= 1.15.*; python_version >= '3.7'
 pyOpenSSL >= 16.2.*
 pyparsing >= 2.1.*
 requests
