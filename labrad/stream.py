@@ -10,21 +10,26 @@ def packetStream(packetHandler, endianness='>'):
     Accepts a function packetHandler that will be called with four arguments
     whenever a packet is completed: source, context, request, records.
     """
-    buf = b''
+    # buf = b''
+    buf = bytearray()
     while True:
         # get packet header (20 bytes)
         while len(buf) < 20:
-            buf += yield 0
+            # buf += yield 0
+            data = yield 0
+            buf.extend(bytearray(data))
         hdr, buf = buf[:20], buf[20:]
-        context, request, source, length = T.unflatten(hdr, HEADER_TYPE, endianness=endianness)
+        context, request, source, length = T.unflatten(bytes(hdr), HEADER_TYPE, endianness=endianness)
 
         # get packet data
         while len(buf) < length:
-            buf += yield 0
+            # buf += yield 0
+            data = yield 0
+            buf.extend(bytearray(data))
         s, buf = buf[:length], buf[length:]
 
         # unflatten the data
-        records = unflattenRecords(s, endianness=endianness)
+        records = unflattenRecords(bytes(s), endianness=endianness)
 
         packetHandler(source, context, request, records)
 
@@ -70,4 +75,3 @@ def flattenRecord(ID, data, types=[], endianness='>'):
     flat_record = RECORD_TYPE.flatten((ID, str(flat.tag), bytes(flat.bytes)),
                                       endianness)
     return flat_record.bytes
-
