@@ -7,10 +7,11 @@ python:
   - "3.5"
   - "3.6"
   - "3.7"
-  - "3.8-dev"
+  - "3.8"
+  - "3.9-dev"
 matrix:
   allow_failures:
-  - python: "3.8-dev"
+  - python: "3.9-dev"
 install:
   - cat requirements.txt | perl -p -i -e 's/>=/==/g' > exact_requirements.txt
   - pip install -r exact_requirements.txt
