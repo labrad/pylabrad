@@ -1,4 +1,3 @@
-attrs >= 19.1.*
 configparser
 future
 futures >= 3.0.*
