@@ -79,7 +79,6 @@ from datetime import datetime
 from twisted.application.internet import TCPClient
 from twisted.application.service import MultiService
 from twisted.internet import defer, reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ProcessDone, ProcessTerminated
 from twisted.internet.protocol import ProcessProtocol
 from twisted.python import usage
@@ -202,8 +201,8 @@ class ServerProcess(ProcessProtocol):
         self.logger.info(value)
         self.on_message(self, message)
 
-    @inlineCallbacks
-    def start(self):
+    @util.ensure_deferred
+    async def start(self):
         self.set_status('STARTING')
         self.logger.info("path: {}".format(self.path))
         self.logger.info("args: {}".format(self.args))
@@ -227,7 +226,7 @@ class ServerProcess(ProcessProtocol):
         # start listening for server connect messages
         manager = self.client.manager
         manager.addListener(on_server_connect, context=msg_ctx)
-        yield manager.subscribe_to_named_message(
+        await manager.subscribe_to_named_message(
             SERVER_CONNECTED, msg_id, True, context=msg_ctx)
 
         # start the server process
@@ -236,7 +235,7 @@ class ServerProcess(ProcessProtocol):
 
         # wait for the server to connect to labrad, shutdown, or timeout,
         # whichever comes first.
-        selected = yield mux.select({
+        selected = await mux.select({
             'connected': connected,
             'shutdown': self.on_shutdown(),
             'timeout': mux.after(self.timeout)
@@ -245,14 +244,14 @@ class ServerProcess(ProcessProtocol):
         # stop listening for server connect messages
         try:
             manager.removeListener(on_server_connect, context=msg_ctx)
-            yield manager.subscribe_to_named_message(
+            await manager.subscribe_to_named_message(
                 SERVER_CONNECTED, msg_id, False, context=msg_ctx)
         except Exception:
             self.logger.info('Error while unsubscribing from labrad messages',
                              exc_info=True)
 
         if selected.key == 'timeout':
-            yield self._kill()
+            await self._kill()
             raise T.Error('Failed to connect to labrad in {} seconds.'
                           .format(self.timeout), payload=self.output)
         if selected.key == 'shutdown':
@@ -271,8 +270,8 @@ class ServerProcess(ProcessProtocol):
         """
         return self._lock.run(self._stop)
 
-    @inlineCallbacks
-    def _stop(self):
+    @util.ensure_deferred
+    async def _stop(self):
         if self.status == 'STOPPED':
             return
 
@@ -289,12 +288,12 @@ class ServerProcess(ProcessProtocol):
                                      exc_info=True)
             elif mode == 'setting':
                 try:
-                    yield self.client.servers[self.name][ID]()
+                    await self.client.servers[self.name][ID]()
                 except:
                     self.logger.info('Error while shutting down with setting',
                                      exc_info=True)
 
-            selected = yield mux.select({
+            selected = await mux.select({
                 'shutdown': self.on_shutdown(),
                 'timeout': mux.after(self.config.shutdown_timeout)
             })
@@ -303,16 +302,16 @@ class ServerProcess(ProcessProtocol):
                 return
 
         # Shutdown failed or not configured, so just kill the process.
-        yield self._kill()
+        await self._kill()
 
-    @inlineCallbacks
-    def _kill(self):
+    @util.ensure_deferred
+    async def _kill(self):
         """Send a signal to kill the subprocess and wait for it to exit."""
         try:
             self.proc.signalProcess('KILL')
         except:
             self.logger.error('Error killing subprocess', exc_info=True)
-        yield self.on_shutdown()
+        await self.on_shutdown()
 
     # ProcessProtocol callbacks called by the subprocess.
 
@@ -366,29 +365,29 @@ class Node(object):
         self.password = password
         self.tls_mode = tls_mode
 
-    @inlineCallbacks
-    def run(self):
+    @util.ensure_deferred
+    async def run(self):
         """Run the node in a loop, reconnecting after connection loss."""
         log = logging.getLogger('labrad.node')
         while True:
             print('Connecting to {}:{}...'.format(self.host, self.port))
             try:
-                p = yield protocol.connect(self.host, self.port, self.tls_mode,
+                p = await protocol.connect(self.host, self.port, self.tls_mode,
                                            self.username, self.password)
                 node = NodeServer(self.nodename, self.host, self.port,
                                   p.credential)
-                yield node.startup(p)
+                await node.startup(p)
             except Exception:
                 log.error('Node failed to start', exc_info=True)
             else:
                 try:
-                    yield node.onShutdown()
+                    await node.onShutdown()
                 except Exception:
                     log.error('Error during node shutdown', exc_info=True)
 
-            yield util.wakeupCall(0)
+            await util.wakeupCall(0)
             print('Will try to reconnect in {} seconds...'.format(self.reconnectDelay))
-            yield util.wakeupCall(self.reconnectDelay)
+            await util.wakeupCall(self.reconnectDelay)
 
 
 class NodeConfig(object):
@@ -404,12 +403,12 @@ class NodeConfig(object):
     """
 
     @classmethod
-    @inlineCallbacks
-    def create(cls, parent):
+    @util.ensure_deferred
+    async def create(cls, parent):
         """Loads node configuration from the registry."""
         instance = cls(parent)
-        yield instance._init()
-        returnValue(instance)
+        await instance._init()
+        return instance
 
     def __init__(self, parent):
         self.parent = parent
@@ -419,8 +418,8 @@ class NodeConfig(object):
         self._reg = cxn.registry
         self._ctx = cxn.context()
 
-    @inlineCallbacks
-    def _init(self):
+    @util.ensure_deferred
+    async def _init(self):
         """Initialize by loading from the registry.
 
         Copy from the default directory, creating it if necessary.
@@ -430,24 +429,24 @@ class NodeConfig(object):
         p = self._packet()
         p.cd(['', 'Nodes'], True)
         p.dir()
-        ans = yield p.send()
+        ans = await p.send()
         dirs, keys = ans.dir
 
         # load defaults (creating them if necessary)
         create = '__default__' not in dirs
         defaults = ([], ['.ini', '.py'], [])
-        defaults = yield self._load('__default__', create, defaults)
+        defaults = await self._load('__default__', create, defaults)
 
         # load this node (creating config if necessary)
         create = self.nodename not in dirs
-        config = yield self._load(self.nodename, create, defaults)
+        config = await self._load(self.nodename, create, defaults)
         self._update(config, False)
 
         # setup messages when registry changes
         self._reg.addListener(self._handleMessage, context=self._ctx)
         p = self._packet()
         p.notify_on_change(2345, True)
-        yield p.send()
+        await p.send()
 
     def _packet(self):
         """Create a packet to the registry server in our context."""
@@ -461,8 +460,8 @@ class NodeConfig(object):
         if triggerRefresh:
             self.parent.refreshServers()
 
-    @inlineCallbacks
-    def _load(self, nodename=None, create=False, defaults=None):
+    @util.ensure_deferred
+    async def _load(self, nodename=None, create=False, defaults=None):
         """Load the current configuration out of the registry."""
         p = self._packet()
         if nodename is not None:
@@ -474,13 +473,13 @@ class NodeConfig(object):
         p.get('directories', '*s', key='dirs')
         p.get('extensions', '*s', key='exts')
         p.get('autostart', '*s', True, [], key='autostart')
-        ans = yield p.send()
+        ans = await p.send()
         def remove_empties(strs):
             return [s for s in strs if s]
         dirs = remove_empties(ans.dirs)
         exts = remove_empties(ans.exts)
         autostart = sorted(remove_empties(ans.autostart))
-        returnValue((dirs, exts, autostart))
+        return (dirs, exts, autostart)
 
     def _save(self):
         """Save the current configuration to the registry."""
@@ -489,17 +488,17 @@ class NodeConfig(object):
         p.set('extensions', self.extensions)
         return p.send()
 
-    @inlineCallbacks
-    def _handleMessage(self, c, msg):
+    @util.ensure_deferred
+    async def _handleMessage(self, c, msg):
         """Reload when we get a message from the registry."""
         try:
-            config = yield self._load()
+            config = await self._load()
             self._update(config)
         except Exception:
             logging.error('Error in _handleMessage', exc_info=True)
 
-    @inlineCallbacks
-    def update_autostart(self, autostart):
+    @util.ensure_deferred
+    async def update_autostart(self, autostart):
         """Update the list of servers to be autostarted.
 
         Args:
@@ -509,7 +508,7 @@ class NodeConfig(object):
         p = self._packet()
         p.cd(['', 'Nodes', self.nodename])
         p.set('autostart', sorted(autostart))
-        yield p.send()
+        await p.send()
 
 
 class NodeServer(LabradServer):
@@ -549,10 +548,10 @@ class NodeServer(LabradServer):
         # stopped.
         self.instances = {}
 
-    @inlineCallbacks
-    def initServer(self):
+    @util.ensure_deferred
+    async def initServer(self):
         """Initialize this server after connecting to the labrad manager."""
-        self.config = yield NodeConfig.create(self)
+        self.config = await NodeConfig.create(self)
         self.refreshServers()
         self.autostart(None)
 
@@ -682,7 +681,7 @@ class NodeServer(LabradServer):
     # LabRAD settings
 
     @setting(1, name='s', environ='*(ss)', returns='s')
-    def start(self, c, name, environ={}):
+    async def start(self, c, name, environ={}):
         """Start an instance of a server."""
         if name not in self.server_configs:
             raise Exception("Unknown server: '%s'." % name)
@@ -700,41 +699,41 @@ class NodeServer(LabradServer):
         instance_name = srv.name
         if instance_name in self.instances:
             raise Exception("Server '%s' already running." % instance_name)
-        yield srv.start()
+        await srv.start()
         self.instances[instance_name] = srv
 
         # remove instance from instance dict when it shuts down
-        @inlineCallbacks
-        def handle_shutdown():
-            yield srv.on_shutdown()
+        @util.ensure_deferred
+        async def handle_shutdown():
+            await srv.on_shutdown()
             self._remove_instance(instance_name)
         handle_shutdown()
 
-        returnValue(instance_name)
+        return instance_name
 
     @setting(2, instance_name='s', returns='s')
-    def stop(self, c, instance_name):
+    async def stop(self, c, instance_name):
         """Stop a running server instance."""
-        yield self._stop(instance_name)
-        returnValue(instance_name)
+        await self._stop(instance_name)
+        return instance_name
 
     @setting(3, instance_name='s', returns='s')
-    def restart(self, c, instance_name):
+    async def restart(self, c, instance_name):
         """Restart a running server instance."""
-        inst = yield self._stop(instance_name)
-        yield self.start(c, inst.server_name, inst.env)
-        returnValue(instance_name)
+        inst = await self._stop(instance_name)
+        await self.start(c, inst.server_name, inst.env)
+        return instance_name
 
-    @inlineCallbacks
-    def _stop(self, instance_name):
+    @util.ensure_deferred
+    async def _stop(self, instance_name):
         """Stop a running server instance, and return the instance."""
         if instance_name not in self.instances:
             raise Exception("'%s' is not running." % instance_name)
         inst = self.instances[instance_name]
-        yield inst.stop()
+        await inst.stop()
         # ensure instance is removed from instance dict before we return
         self._remove_instance(instance_name) 
-        returnValue(inst)
+        return inst
 
     def _remove_instance(self, instance_name):
         if instance_name in self.instances:
@@ -800,7 +799,7 @@ class NodeServer(LabradServer):
         """
 
     @setting(200, returns='')
-    def autostart(self, c):
+    async def autostart(self, c):
         """Start all servers from the configured autostart list.
 
         Any servers that are already running will be left as is, while those
@@ -814,7 +813,7 @@ class NodeServer(LabradServer):
         deferreds = [(name, self.start(c, name)) for name in to_start]
         for name, deferred in deferreds:
             try:
-                yield deferred
+                await deferred
             except Exception:
                 logging.error('Failed to autostart "%s"', name, exc_info=True)
 
@@ -824,23 +823,23 @@ class NodeServer(LabradServer):
         return self.config.autostart
 
     @setting(202, name='s', returns='')
-    def autostart_add(self, c, name):
+    async def autostart_add(self, c, name):
         """Add a server to the autostart list."""
         if name not in self.server_configs:
             raise Exception("Unknown server: '%s'." % name)
         autostart = set(self.config.autostart)
         autostart.add(name)
-        yield self.config.update_autostart(sorted(autostart))
+        await self.config.update_autostart(sorted(autostart))
 
     @setting(203, name='s', returns='')
-    def autostart_remove(self, c, name):
+    async def autostart_remove(self, c, name):
         """Remove a server from the autostart list."""
         autostart = set(self.config.autostart)
         try:
             autostart.remove(name)
         except KeyError:
             pass
-        yield self.config.update_autostart(sorted(autostart))
+        await self.config.update_autostart(sorted(autostart))
 
     @setting(300, returns='?')
     def outdated_list(self, c):
@@ -850,13 +849,13 @@ class NodeServer(LabradServer):
             return tuple(tuple(info.items()) for info in outdated)
 
     @setting(301, returns='?')
-    def outdated_restart(self, c):
+    async def outdated_restart(self, c):
         """Restart any servers that are outdated."""
         outdated = self._get_outdated()
         restarts = [self.restart(c, info['instance']) for info in outdated]
         for info, restart in zip(outdated, restarts):
             try:
-                yield restart
+                await restart
             except Exception:
                 logging.error('Failed to restart "%s"', info['instance'],
                               exc_info=True)
@@ -864,7 +863,7 @@ class NodeServer(LabradServer):
             else:
                 info['status'] = 'restarted'
         if outdated:
-            returnValue(tuple(tuple(info.items()) for info in outdated))
+            return tuple(tuple(info.items()) for info in outdated)
 
     def _get_outdated(self):
         outdated = []

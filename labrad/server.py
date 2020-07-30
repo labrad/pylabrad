@@ -29,7 +29,6 @@ import traceback
 
 from concurrent import futures
 from twisted.internet import defer, reactor, threads
-from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionDone, ConnectionLost
 from twisted.python import failure, log, threadable
 
@@ -212,8 +211,8 @@ class LabradServer(object):
         return func(*args, **kw)
 
     # request handling
-    @inlineCallbacks
-    def request_handler(self, source, context, flat_records):
+    @util.ensure_deferred
+    async def request_handler(self, source, context, flat_records):
         """Handle an incoming request.
 
         If this is a new context, we create a context object and a lock
@@ -224,26 +223,26 @@ class LabradServer(object):
         c = self.contexts.get(context, None)
         if c is None:
             c = self.contexts[context] = Context()
-            yield c.acquire() # make sure we're the first in line
-            c.data = yield self._dispatch(self.newContext, context)
-            yield self._dispatch(self.initContext, c.data)
+            await c.acquire() # make sure we're the first in line
+            c.data = await self._dispatch(self.newContext, context)
+            await self._dispatch(self.initContext, c.data)
         else:
-            yield c.acquire() # wait for previous requests in this context to finish
+            await c.acquire() # wait for previous requests in this context to finish
 
         if self.prioritizeWrites:
-            # yield here so that pending writes will be sent in preference to processing
+            # await here so that pending writes will be sent in preference to processing
             # new requests.  This can help in cases where server settings do long-running
             # computations that block, though we are still limited fundamentally by
             # the completely single-threaded way twisted operates
-            yield util.wakeupCall(0.0)
+            await util.wakeupCall(0.0)
         response = []
         try:
-            yield self._dispatch(self.startRequest, c.data, source)
+            await self._dispatch(self.startRequest, c.data, source)
             for ID, flat_data in flat_records:
                 c.check() # make sure this context hasn't expired
                 try:
                     setting = self.settings[ID]
-                    result = yield self._dispatch(setting.handleRequest, self, c.data, flat_data)
+                    result = await self._dispatch(setting.handleRequest, self, c.data, flat_data)
                     response.append((ID, result, setting.returns))
                 except Exception as e:
                     response.append((ID, self._getTraceback(e)))
@@ -251,7 +250,7 @@ class LabradServer(object):
             c.check() # make sure this context hasn't expired
         finally:
             reactor.callLater(0, c.release)
-        returnValue(response)
+        return response
 
     def _getTraceback(self, e):
         """Turn an exception into a LabRAD error packet.
@@ -330,8 +329,8 @@ class LabradServer(object):
         self.signals.remove(signal)
         return self.removeSetting(signal, packet)
 
-    @inlineCallbacks
-    def startup(self, protocol):
+    @util.ensure_deferred
+    async def startup(self, protocol):
         """Start this server using the given protocol connection.
 
         Identifies this server to the manager, creates an async wrapper for the
@@ -350,15 +349,15 @@ class LabradServer(object):
         """
         try:
             name = getattr(self, 'instanceName', self.name)
-            yield protocol.loginServer(name, self.description, self.notes)
+            await protocol.loginServer(name, self.description, self.notes)
             self._cxn = protocol
             self.ID = protocol.ID
             protocol.request_handler = self.request_handler
             protocol.onDisconnect().addBoth(self._connection_lost)
             self.__protocol = protocol
             self.__async_client = ClientAsync(protocol)
-            yield self.__async_client._init()
-            yield self._initServer()
+            await self.__async_client._init()
+            await self._initServer()
             self.started = True
             self.onStartup.callback(self)
         except Exception as e:
@@ -389,8 +388,8 @@ class LabradServer(object):
     # Network events
     # these methods are called by network events from twisted
 
-    @inlineCallbacks
-    def _initServer(self):
+    @util.ensure_deferred
+    async def _initServer(self):
         """Called after we've authenticated with the LabRAD manager.
 
         Here we register the settings and signals found on this server
@@ -406,34 +405,34 @@ class LabradServer(object):
             else:
                 self.addSetting(s, p)
 
-        yield p.send()
+        await p.send()
 
         # do server-specific initialization
-        yield self._dispatch(self.initServer)
+        await self._dispatch(self.initServer)
         # make sure we shut down gracefully when reactor quits or a remote message is fired
         self._shutdownID = reactor.addSystemEventTrigger('before', 'shutdown', self._stopServer)
         self._cxn.addListener(self._stopServer, ID=987654321)
 
         # sign up for notifications from the manager
-        yield mgr.subscribe_to_named_message('Server Connect', 55443322, True)
-        yield mgr.subscribe_to_named_message('Server Disconnect', 66554433, True)
+        await mgr.subscribe_to_named_message('Server Connect', 55443322, True)
+        await mgr.subscribe_to_named_message('Server Disconnect', 66554433, True)
         self._cxn.addListener(self._serverConnected, source=mgr.ID, ID=55443322, sync=True)
         self._cxn.addListener(self._serverDisconnected, source=mgr.ID, ID=66554433, sync=True)
 
-        #yield mgr.notify_on_connect.connect(self._serverConnected)
-        #yield mgr.notify_on_disconnect.connect(self._serverDisconnected)
-        yield mgr.s__notify_on_context_expiration.connect(
+        #await mgr.notify_on_connect.connect(self._serverConnected)
+        #await mgr.notify_on_disconnect.connect(self._serverDisconnected)
+        await mgr.s__notify_on_context_expiration.connect(
                   self._contextExpired, connectargs=(True,))
 
         # let the rest of the world know we're ready
-        yield mgr.s__start_serving()
+        await mgr.s__start_serving()
         log.msg('%s now serving' % self.name)
 
-    @inlineCallbacks
-    def _stopServer(self, *ignored):
+    @util.ensure_deferred
+    async def _stopServer(self, *ignored):
         self.stopping = True
         try:
-            yield self._dispatch(self.stopServer)
+            await self._dispatch(self.stopServer)
         except Exception as e:
             self._error = failure.Failure(e)
         finally:
@@ -607,15 +606,15 @@ class ThreadedServer(LabradServer):
         super(ThreadedServer, self).__init__()
         self.__pool = pool
 
-    @inlineCallbacks
-    def _dispatch(self, func, *args, **kw):
+    @util.ensure_deferred
+    async def _dispatch(self, func, *args, **kw):
         if self.__pool is None:
-            result = yield threads.deferToThread(func, *args, **kw)
+            result = await threads.deferToThread(func, *args, **kw)
         else:
             result = self.__pool.submit(func, *args, **kw)
         while isinstance(result, futures.Future):
-            result = yield labrad.concurrent.future_to_deferred(result)
-        returnValue(result)
+            result = await labrad.concurrent.future_to_deferred(result)
+        return result
 
 
 class SingleThreadedServer(ThreadedServer):

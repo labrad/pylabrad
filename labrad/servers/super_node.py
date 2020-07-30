@@ -24,7 +24,6 @@ from labrad.devices import DeviceWrapper, DeviceServer
 from labrad.server import setting
 from labrad.wrappers import connectAsync
 from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks, returnValue
 
 class NodeWrapper(DeviceWrapper):
     """A wrapper for a node device."""

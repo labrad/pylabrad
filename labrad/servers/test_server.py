@@ -38,7 +38,6 @@ from labrad.units import m, s
 from labrad.util import hydrant
 
 from twisted.internet import defer, reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
 
 
 class PythonTestServer(LabradServer):
@@ -52,17 +51,17 @@ class PythonTestServer(LabradServer):
     testMode = True
     shutdownMessage = 987654321
 
-    @inlineCallbacks
-    def initServer(self):
-        yield None
+    @util.ensure_deferred
+    async def initServer(self):
+        await None
         #from registry_wrapper_async import RegistryWrapperAsync
-        #self.regWrapper = yield RegistryWrapperAsync.create(self.client, ['', 'Servers', 'Python Test Server'])
+        #self.regWrapper = await RegistryWrapperAsync.create(self.client, ['', 'Servers', 'Python Test Server'])
 
-    @inlineCallbacks
-    def stopServer(self):
-        print('before yield')
-        yield None
-        print('after yield')
+    @util.ensure_deferred
+    async def stopServer(self):
+        print('before await')
+        await None
+        print('after await')
 
     def serverConnected(self, ID, name):
         print('server connected:', ID, name)
@@ -72,10 +71,10 @@ class PythonTestServer(LabradServer):
         print('server disconnected:', ID, name)
         self.checkServerWrappers(name)
 
-    @inlineCallbacks
-    def checkServerWrappers(self, name):
+    @util.ensure_deferred
+    async def checkServerWrappers(self, name):
         """Check that server wrappers are up to date with the manager."""
-        mgrServers = yield self.client.manager.servers()
+        mgrServers = await self.client.manager.servers()
         mgrServers = set(s[1] for s in mgrServers)
         cxnServers = set(self.client.servers.keys())
         if cxnServers == mgrServers:
@@ -90,10 +89,10 @@ class PythonTestServer(LabradServer):
         c['dict'] = {}
 
     @setting(2, "Delayed Echo", data='?')
-    def delayed_echo(self, c, data):
+    async def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""
-        yield util.wakeupCall(c['delay'][s])
-        returnValue(data)
+        await util.wakeupCall(c['delay'][s])
+        return data
 
     @setting(3, "Delayed Echo Deferred", data='?')
     def delayed_echo_deferred(self, c, data):
@@ -111,13 +110,13 @@ class PythonTestServer(LabradServer):
         return c['delay']
 
     @setting(42, "Delayed Echo Wrapper", data='?', returns='?')
-    def delayed_echo_wrapper(self, c, data):
+    async def delayed_echo_wrapper(self, c, data):
         """Echo a packet after a delay just like delayed_echo.
 
         This tests calling a coroutine from another coroutine.
         """
-        rv = yield self.delayed_echo(c, data)
-        returnValue(rv)
+        rv = await self.delayed_echo(c, data)
+        return rv
 
     @setting(40, "Speed", speed='v[m/s]', returns='v[m/s]')
     def speed(self, c, speed=None):
@@ -163,10 +162,10 @@ class PythonTestServer(LabradServer):
         return d
 
     @setting(9, "Exc in inlineCallback", data='?')
-    def exc_in_inlinecallback(self, c, data):
+    async def exc_in_inlinecallback(self, c, data):
         """Raises an exception in an inlineCallback."""
         self.log('Exception from an inlineCallback.')
-        yield util.wakeupCall(c['delay'][s])
+        await util.wakeupCall(c['delay'][s])
         raise Exception('Raised in inlineCallback.')
 
     @setting(10, "Bad Return Type", data='?', returns='s')

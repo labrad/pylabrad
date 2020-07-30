@@ -29,7 +29,6 @@ import hashlib
 import traceback
 
 from twisted.internet import reactor, protocol, defer
-from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import failure, log
 
 import labrad.types as T
@@ -108,14 +107,14 @@ class LabradProtocol(protocol.Protocol):
         raw = flattenPacket(target, context, request, records, endianness=self.endianness)
         self.transport.write(raw)
 
-    @inlineCallbacks
-    def sendMessage(self, target, records, context=(0, 0)):
+    @util.ensure_deferred
+    async def sendMessage(self, target, records, context=(0, 0)):
         """Send a message to the specified target."""
-        target, records = yield self._lookupNames(target, records)
+        target, records = await self._lookupNames(target, records)
         self.sendPacket(target, context, 0, records)
 
-    @inlineCallbacks
-    def sendRequest(self, target, records, context=(0, 0), timeout=None, unflatten=True):
+    @util.ensure_deferred
+    async def sendRequest(self, target, records, context=(0, 0), timeout=None, unflatten=True):
         """Send a request to the given target server.
 
         Returns a deferred that will fire the resulting data packet when
@@ -126,12 +125,12 @@ class LabradProtocol(protocol.Protocol):
         Lookup results are cached to avoid lookup overhead on subsequent
         requests to the same server or settings.
         """
-        target, records = yield self._lookupNames(target, records)
-        resp = yield self._sendRequestNoLookup(target, records, context, timeout, unflatten)
-        returnValue(resp)
+        target, records = await self._lookupNames(target, records)
+        resp = await self._sendRequestNoLookup(target, records, context, timeout, unflatten)
+        return resp
 
-    @inlineCallbacks
-    def _lookupNames(self, server, records):
+    @util.ensure_deferred
+    async def _lookupNames(self, server, records):
         """Translate server and setting names into IDs.
 
         We first attempt to look up these names in the local cache.
@@ -164,7 +163,7 @@ class LabradProtocol(protocol.Protocol):
                 indices, names = [], []
             # send the actual lookup request
             recs = [(C.LOOKUP, (server, names), ['w*s', 's*s'])]
-            resp = yield self._sendRequestNoLookup(C.MANAGER_ID, recs)
+            resp = await self._sendRequestNoLookup(C.MANAGER_ID, recs)
             serverID, IDs = resp[0][1]
             # cache the results
             if isinstance(server, str):
@@ -176,7 +175,7 @@ class LabradProtocol(protocol.Protocol):
             for index, ID in zip(indices, IDs):
                 records[index] = (ID,) + tuple(records[index][1:])
 
-        returnValue((server, records))
+        return (server, records)
 
     def clearCache(self):
         """Clear the cache of looked-up server and settings IDs."""
@@ -207,14 +206,14 @@ class LabradProtocol(protocol.Protocol):
         self.sendPacket(target, context, n, records)
         return d
 
-    @inlineCallbacks
-    def _sendManagerRequest(self, setting_id=None, data=None, timeout=None):
+    @util.ensure_deferred
+    async def _sendManagerRequest(self, setting_id=None, data=None, timeout=None):
         if setting_id is None:
             records = []
         else:
             records = [(setting_id, data)]
-        resp = yield self.sendRequest(C.MANAGER_ID, records, timeout=timeout)
-        returnValue(resp[0][1])
+        resp = await self.sendRequest(C.MANAGER_ID, records, timeout=timeout)
+        return resp[0][1]
 
     def _cancelTimeout(self, result, timeoutCall):
         """Cancel a pending request timeout call."""
@@ -241,14 +240,14 @@ class LabradProtocol(protocol.Protocol):
         else:
             self.messageReceived(source, context, records)
 
-    @inlineCallbacks
-    def requestReceived(self, source, context, request, flat_records):
+    @util.ensure_deferred
+    async def requestReceived(self, source, context, request, flat_records):
         """Process incoming request."""
         try:
             if self.request_handler is None:
                 log.msg('server request_handler not set')
                 raise Exception('server request_handler not set')
-            response = yield self.request_handler(source, context, flat_records)
+            response = await self.request_handler(source, context, flat_records)
             self.sendPacket(source, context, -request, response)
         except Exception as e:
             # this will only happen if there was a problem while sending,
@@ -276,8 +275,8 @@ class LabradProtocol(protocol.Protocol):
         """Process incoming messages."""
         self._messageLock.run(self._dispatchMessage, source, context, flat_records)
 
-    @inlineCallbacks
-    def _dispatchMessage(self, source, context, flat_records):
+    @util.ensure_deferred
+    async def _dispatchMessage(self, source, context, flat_records):
         """Dispatch a message to all matching listeners."""
         for ID, flat_data in flat_records:
             data = flat_data.unflatten()
@@ -289,17 +288,17 @@ class LabradProtocol(protocol.Protocol):
             for key in keys:
                 for listener, sync in self.listeners[key]:
                     func, args, kw = listener
-                    @inlineCallbacks
-                    def call_handler():
+                    @util.ensure_deferred
+                    async def call_handler():
                         try:
-                            yield func(msgCtx, data, *args, **kw)
+                            await func(msgCtx, data, *args, **kw)
                         except Exception:
                             print('Unhandled error in message listener:',
                                   msgCtx, data, listener)
                             traceback.print_exc()
                     d = call_handler()
                     if sync:
-                        yield d
+                        await d
 
     # message handling
     def addListener(self, listener, source=None, context=None, ID=None, sync=False, args=(), kw={}, **kwargs):
@@ -333,28 +332,28 @@ class LabradProtocol(protocol.Protocol):
         else:
             del self.listeners[key]
 
-    @inlineCallbacks
-    def spawn(self, client=True):
-        p = yield connect(**self.spawn_kw)
+    @util.ensure_deferred
+    async def spawn(self, client=True):
+        p = await connect(**self.spawn_kw)
         if client or len(self.ident) == 1:
-            yield p.loginClient(self.name)
+            await p.loginClient(self.name)
         else:
-            yield p.loginServer(*self.ident)
-        returnValue(p)
+            await p.loginServer(*self.ident)
+        return p
 
-    @inlineCallbacks
-    def authenticate(self, username=None, password=None, headless=False):
+    @util.ensure_deferred
+    async def authenticate(self, username=None, password=None, headless=False):
         """Authenticate to the manager using the given credentials."""
 
-        @inlineCallbacks
-        def get_manager_auth_methods():
+        @util.ensure_deferred
+        async def get_manager_auth_methods():
             if 'auth-server' in self.manager_features:
                 # Ask the manager what auth methods it supports
-                methods = yield self._sendManagerRequest(101, None)
+                methods = await self._sendManagerRequest(101, None)
             else:
                 # Old managers only support password auth
                 methods = ['password']
-            returnValue(set(methods))
+            return set(methods)
 
         def require_secure_connection(auth_type):
             is_secure = hasattr(self.transport, 'getPeerCertificate')
@@ -388,7 +387,7 @@ class LabradProtocol(protocol.Protocol):
                     credential = auth.Password(password=password)
                 else:
                     # Some other user; make sure manager supports user auth.
-                    manager_auth_methods = yield get_manager_auth_methods()
+                    manager_auth_methods = await get_manager_auth_methods()
                     if 'username+password' not in manager_auth_methods:
                         raise Exception('Manager does not support '
                                         'username+password auth. Cannot log in '
@@ -398,7 +397,7 @@ class LabradProtocol(protocol.Protocol):
         else:
             # Have neither username nor password.
             # Check manager-supported auth methods; use OAuth if available.
-            manager_auth_methods = yield get_manager_auth_methods()
+            manager_auth_methods = await get_manager_auth_methods()
             oauth_methods = {'oauth_token', 'oauth_access_token'}
             client_auth_methods = {'password', 'username+password'} | oauth_methods
             allowed = client_auth_methods & manager_auth_methods
@@ -409,7 +408,7 @@ class LabradProtocol(protocol.Protocol):
                     method = 'oauth_access_token'
                 else:
                     method = 'oauth_token'
-                auth_info = yield self._sendManagerRequest(102, method)
+                auth_info = await self._sendManagerRequest(102, method)
                 auth_info = dict(auth_info)
                 credential = oauth.get_token(auth_info['client_id'],
                                              auth_info['client_secret'],
@@ -424,7 +423,7 @@ class LabradProtocol(protocol.Protocol):
         if isinstance(credential, auth.Password):
             if not credential.username:
                 # send login packet to get password challenge
-                challenge = yield self._sendManagerRequest()
+                challenge = await self._sendManagerRequest()
 
                 # send password response
                 m = hashlib.md5()
@@ -434,7 +433,7 @@ class LabradProtocol(protocol.Protocol):
                 else:
                     m.update(credential.password.encode('UTF-8'))
                 try:
-                    resp = yield self._sendManagerRequest(0, m.digest())
+                    resp = await self._sendManagerRequest(0, m.digest())
                 except Exception:
                     raise errors.LoginFailedError('Incorrect password.')
             else:
@@ -442,7 +441,7 @@ class LabradProtocol(protocol.Protocol):
                 require_secure_connection(method)
                 try:
                     data = (credential.username, credential.password)
-                    resp = yield self._sendManagerRequest(103, (method, data))
+                    resp = await self._sendManagerRequest(103, (method, data))
                 except Exception as e:
                     raise errors.LoginFailedError(str(e))
             auth.cache_password(self.host, self.port, credential)
@@ -454,7 +453,7 @@ class LabradProtocol(protocol.Protocol):
                     data = credential.access_token
                 else:
                     data = credential.id_token
-                resp = yield self._sendManagerRequest(103, (method, data))
+                resp = await self._sendManagerRequest(103, (method, data))
             except Exception as e:
                 raise errors.LoginFailedError(str(e))
 
@@ -491,8 +490,8 @@ class LabradProtocol(protocol.Protocol):
         """
         return self._doLogin(name, descr, notes)
 
-    @inlineCallbacks
-    def _doLogin(self, *ident):
+    @util.ensure_deferred
+    async def _doLogin(self, *ident):
         self.ident = ident
         # Store name, which is always the first identification param.
         self.name = ident[0]
@@ -500,7 +499,7 @@ class LabradProtocol(protocol.Protocol):
         data = (1,) + ident
         tag = 'w' + 's'*len(ident)
         flat = T.flatten(data, tag)
-        self.ID = yield self._sendManagerRequest(0, flat)
+        self.ID = await self._sendManagerRequest(0, flat)
 
 
 class MessageContext(object):
@@ -519,8 +518,8 @@ class MessageContext(object):
 _factory = protocol.ClientCreator(reactor, LabradProtocol)
 
 
-@inlineCallbacks
-def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
+@util.ensure_deferred
+async def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
             username=None, password=None, headless=False):
     """Connect to LabRAD and return a deferred that fires the protocol object.
 
@@ -546,29 +545,29 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
     if port is None:
         port = C.MANAGER_PORT_TLS if tls_mode == 'on' else C.MANAGER_PORT
 
-    @inlineCallbacks
-    def authenticate(p):
-        yield p.authenticate(username, password, headless)
+    @util.ensure_deferred
+    async def authenticate(p):
+        await p.authenticate(username, password, headless)
 
     if tls_mode == 'on':
         tls_options = crypto.tls_options(host)
-        p = yield _factory.connectSSL(host, port, tls_options, timeout=C.TIMEOUT)
+        p = await _factory.connectSSL(host, port, tls_options, timeout=C.TIMEOUT)
         p.set_address(host, port)
         p.spawn_kw = spawn_kw
-        yield authenticate(p)
-        returnValue(p)
+        await authenticate(p)
+        return p
 
-    @inlineCallbacks
-    def do_connect():
-        p = yield _factory.connectTCP(host, port, timeout=C.TIMEOUT)
+    @util.ensure_deferred
+    async def do_connect():
+        p = await _factory.connectTCP(host, port, timeout=C.TIMEOUT)
         p.set_address(host, port)
         p.spawn_kw = spawn_kw
-        returnValue(p)
+        return p
 
-    @inlineCallbacks
-    def start_tls(p, cert_string=None):
+    @util.ensure_deferred
+    async def start_tls(p, cert_string=None):
         try:
-            cert = yield p._sendManagerRequest(1, ('STARTTLS', host))
+            cert = await p._sendManagerRequest(1, ('STARTTLS', host))
         except Exception:
             raise Exception(
                 'Failed sending STARTTLS command to server. You should update '
@@ -576,35 +575,35 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
                 'disable encryption for clients. See '
                 'https://github.com/labrad/pylabrad/blob/master/CONFIG.md')
         p.transport.startTLS(crypto.tls_options(host, cert_string=cert_string))
-        returnValue(cert)
+        return cert
 
-    @inlineCallbacks
-    def ping(p):
-        resp = yield p._sendManagerRequest(2, 'PING')
+    @util.ensure_deferred
+    async def ping(p):
+        resp = await p._sendManagerRequest(2, 'PING')
         if isinstance(resp, tuple):
             manager_features = set(resp[1])
         else:
             manager_features = set()
-        returnValue(manager_features)
+        return manager_features
 
-    p = yield do_connect()
+    p = await do_connect()
     is_local_connection = util.is_local_connection(p.transport)
     if ((tls_mode == 'starttls-force') or
         (tls_mode == 'starttls' and not is_local_connection)):
         try:
-            cert = yield start_tls(p)
+            cert = await start_tls(p)
         except Exception:
             # TODO: remove this retry. This is a temporary fix to support
             # compatibility until TLS is fully deployed.
             print('STARTTLS failed; will retry without encryption in case we '
                   'are connecting to a legacy manager.')
-            p = yield connect(host, port, tls_mode='off')
+            p = await connect(host, port, tls_mode='off')
             print('Connected without encryption.')
             p.manager_features = set()
-            yield authenticate(p)
-            returnValue(p)
+            await authenticate(p)
+            return p
         try:
-            manager_features = yield ping(p)
+            manager_features = await ping(p)
         except Exception:
             print('STARTTLS failed due to untrusted server certificate:')
             print('SHA1 Fingerprint={}'.format(crypto.fingerprint(cert)))
@@ -621,16 +620,16 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
                     print('Invalid input:', ans)
             if ans == 'r':
                 raise
-            p = yield do_connect()
-            yield start_tls(p, cert)
-            manager_features = yield ping(p)
+            p = await do_connect()
+            await start_tls(p, cert)
+            manager_features = await ping(p)
             if ans == 's':
                 # save now that we know TLS succeeded,
                 # including hostname verification.
                 crypto.save_cert(host, cert)
     else:
-        manager_features = yield ping(p)
+        manager_features = await ping(p)
     p.manager_features = manager_features
 
-    yield authenticate(p)
-    returnValue(p)
+    await authenticate(p)
+    return p

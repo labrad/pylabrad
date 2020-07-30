@@ -23,9 +23,9 @@ from labrad import errors
 from labrad.server import LabradServer, setting
 from labrad.errors import Error
 from labrad.support import MultiDict
+from labrad.util import ensure_deferred
 
 from twisted.internet import defer, reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
 
 LOCK_TIMEOUT = 10
 
@@ -141,11 +141,11 @@ class DeviceServer(LabradServer):
         """
         return self.deviceWrapper
 
-    @inlineCallbacks
-    def _doRefresh(self):
+    @ensure_deferred
+    async def _doRefresh(self):
         """Do the actual refreshing."""
         self.log('refreshing device list...')
-        all_found = yield self.findDevices()
+        all_found = await self.findDevices()
 
         # If there are devices for which we don't have wrappers,
         # create them. If we have a wrapper for a
@@ -182,7 +182,7 @@ class DeviceServer(LabradServer):
 
             deviceWrapper = self.chooseDeviceWrapper(name, *args, **kw)
             dev = deviceWrapper(guid, name)
-            yield dev.connect(*args, **kw)
+            await dev.connect(*args, **kw)
             self.devices[guid, name] = dev
 
         # do deletions
@@ -193,7 +193,7 @@ class DeviceServer(LabradServer):
             dev = self.devices[name]
             del self.devices[name]
             try:
-                yield dev.shutdown()
+                await dev.shutdown()
             except Exception as e:
                 self.log('Error while shutting down device "%s": %s' % (name, e))
 
@@ -321,10 +321,10 @@ class DeviceServer(LabradServer):
         dev = self.deselectDevice(c)
 
     @setting(4, 'Refresh Devices', returns=['*(ws)'])
-    def refresh_devices(self, c):
+    async def refresh_devices(self, c):
         """Refresh the list of available devices."""
-        yield self.refreshDeviceList()
-        returnValue(self.list_devices(c))
+        await self.refreshDeviceList()
+        return self.list_devices(c)
 
     @setting(1000001, 'Lock Device',
                       timeout=[': Lock the selected device for default time',

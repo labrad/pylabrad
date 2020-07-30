@@ -15,8 +15,8 @@
 
 from __future__ import print_function
 
-from twisted.internet.defer import inlineCallbacks, returnValue
 from labrad.support import SafeIterDict
+from labrad.util import ensure_deferred
 
 class RegistryWrapperAsync(SafeIterDict):
 
@@ -36,12 +36,12 @@ class RegistryWrapperAsync(SafeIterDict):
     MESSAGE_ID = 463462
 
     @classmethod
-    @inlineCallbacks
-    def create(cls, cxn, directory=''):
+    @ensure_deferred
+    async def create(cls, cxn, directory=''):
         """Create a registry wrapper and initialize it."""
         wrapper = cls(cxn, directory)
-        yield wrapper._init()
-        returnValue(wrapper)
+        await wrapper._init()
+        return wrapper
 
     def __init__(self, cxn, directory=''):
         """Basic (synchronous) initialization."""
@@ -54,8 +54,8 @@ class RegistryWrapperAsync(SafeIterDict):
         self._dir = directory
         self._listen(True)
 
-    @inlineCallbacks
-    def _init(self):
+    @ensure_deferred
+    async def _init(self):
         """Initialize this registry wrapper.
 
         We get the data for this directory and create wrappers for
@@ -64,7 +64,7 @@ class RegistryWrapperAsync(SafeIterDict):
         p = self._packet()
         p.cd(self._dir, True)
         p.dir()
-        ans = yield p.send()
+        ans = await p.send()
         dirs, keys = ans['dir']
         _dict = SafeIterDict()
         for d in dirs:
@@ -73,9 +73,9 @@ class RegistryWrapperAsync(SafeIterDict):
         p.notify_on_change(self.MESSAGE_ID, True)
         for k in keys:
             p.get(k, key=k)
-        ans = yield p.send()
+        ans = await p.send()
         for d in dirs:
-            _dict[d] = yield _dict[d]
+            _dict[d] = await _dict[d]
         for k in keys:
             _dict[k] = ans[k]
         self.update(_dict)
@@ -107,17 +107,17 @@ class RegistryWrapperAsync(SafeIterDict):
         """Create a packet to the registry."""
         return self._cxn.registry.packet(context=self._ctx)
 
-    @inlineCallbacks
-    def _messageReceived(self, c, data):
+    @ensure_deferred
+    async def _messageReceived(self, c, data):
         """Handle update messages from the registry."""
         name, isDir, addOrChange = data
         print('update message:', data)
         try:
             if addOrChange:
                 if isDir:
-                    val = yield self._wrapSubdir(name)
+                    val = await self._wrapSubdir(name)
                 else:
-                    val = yield self._getKey(name)
+                    val = await self._getKey(name)
                 self[name] = val
             else:
                 del self[name]

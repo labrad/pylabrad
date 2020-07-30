@@ -13,6 +13,7 @@ from twisted.internet import defer, reactor
 
 from labrad import concurrent, constants as C, support, thread, types as T
 from labrad.wrappers import getConnection
+from labrad.util import ensure_deferred
 
 
 class TwistedConnection(object):
@@ -35,10 +36,10 @@ class TwistedConnection(object):
         # connection is lost. We launch this but do not wait for the result of
         # the future because we want this to happen asynchronously in the
         # background.
-        @defer.inlineCallbacks
-        def handle_disconnect():
+        @ensure_deferred
+        async def handle_disconnect():
             try:
-                yield cxn.onDisconnect()
+                await cxn.onDisconnect()
             except Exception:
                 pass
             self._connected.clear()

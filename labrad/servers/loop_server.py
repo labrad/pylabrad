@@ -17,7 +17,6 @@ from labrad import util
 from labrad.server import LabradServer, setting
 
 from twisted.python import log
-from twisted.internet.defer import inlineCallbacks
 
 from datetime import datetime
 
@@ -40,20 +39,20 @@ class LoopServer(LabradServer):
     def stopServer(self):
         self.alive = False
 
-    @inlineCallbacks
-    def readLoop(self):
+    @util.ensure_deferred
+    async def readLoop(self):
         cxn = self.client
         while self.alive:
-            yield cxn.refresh()
+            await cxn.refresh()
             for s in self.queries:
                 server = s['server']
                 setting = s['setting']
                 try:
-                    rslt = yield cxn[server][setting]()
+                    rslt = await cxn[server][setting]()
                     s['last'] = str(rslt[0]), datetime.now()
                 except Exception:
                     pass
-            yield util.wakeupCall(self.delayTime)
+            await util.wakeupCall(self.delayTime)
 
 
     @setting(2, 'Queries', returns=['*s'])

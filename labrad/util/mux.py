@@ -25,10 +25,10 @@ def select(options):
         error.
     """
     result = defer.Deferred()
-    @defer.inlineCallbacks
-    def handle(key, deferred):
+    @util.ensure_deferred
+    async def handle(key, deferred):
         try:
-            value = yield deferred
+            value = await deferred
             try:
                 result.callback(Selection(key, value))
             except defer.AlreadyCalledError:

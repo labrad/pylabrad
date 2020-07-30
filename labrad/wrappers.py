@@ -23,11 +23,11 @@ except ImportError:
     UnboundMethodType = None
 
 from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks, returnValue
 
 from labrad import constants as C, manager, protocol, support, types as T
 from labrad.support import (indent, mangle, extractKey, MultiDict, PacketRecord,
                             PacketResponse, hexdump)
+from labrad.util import ensure_deferred
 
 
 class AsyncSettingWrapper(object):
@@ -47,8 +47,8 @@ class AsyncSettingWrapper(object):
         self.ID = ID
         self.__doc__, self.accepts, self.returns, self.notes = info
 
-    @inlineCallbacks
-    def __call__(self, *args, **kw):
+    @ensure_deferred
+    async def __call__(self, *args, **kw):
         """Send a request to this setting."""
         tag = extractKey(kw, 'tag', None) or self.accepts
         if len(args) == 0:
@@ -56,11 +56,11 @@ class AsyncSettingWrapper(object):
         elif len(args) == 1:
             args = args[0]
         flat = T.flatten(args, tag)
-        r = yield self._server._send([(self.ID, flat)], **kw)
-        returnValue(r[0][1])
+        r = await self._server._send([(self.ID, flat)], **kw)
+        return r[0][1]
 
-    @inlineCallbacks
-    def connect(self, handler, context=(0, 0),
+    @ensure_deferred
+    async def connect(self, handler, context=(0, 0),
                 connectargs=(), connectkw={},
                 handlerargs=(), handlerkw={}):
         """Connect a handler to messages from this signal.
@@ -75,7 +75,7 @@ class AsyncSettingWrapper(object):
                                args=handlerargs, kw=handlerkw)
         self._num_listeners += 1
         try:
-            yield self.__call__(self.ID, context=context, *connectargs, **connectkw)
+            await self.__call__(self.ID, context=context, *connectargs, **connectkw)
         except Exception:
             self._prot.removeListener(handler,
                                       source=self._server.ID, context=context, ID=self.ID)
@@ -165,13 +165,13 @@ class AsyncPacketWrapper(object):
         self._kw = kw
         self.settings = SettingBinder(self)
 
-    @inlineCallbacks
-    def send(self, **kw):
+    @ensure_deferred
+    async def send(self, **kw):
         """Send this packet to the server."""
         # drop keys from records before sending
         records = [(rec.ID, rec.flat) for rec in self._packet]
-        r = yield self._server._send(records, **dict(self._kw, **kw))
-        returnValue(PacketResponse(r, self._server, self._packet))
+        r = await self._server._send(records, **dict(self._kw, **kw))
+        return PacketResponse(r, self._server, self._packet)
 
     def _bind(self, method):
         """Bind a method to this instance."""
@@ -286,12 +286,12 @@ class AsyncServerWrapper(object):
     def refresh(self):
         return self._refreshLock.run(self._refresh)
 
-    @inlineCallbacks
-    def _refresh(self):
+    @ensure_deferred
+    async def _refresh(self):
         """Update the list of available settings for this server."""
 
         # get info about this server and its settings
-        info = yield self._mgr.getServerInfoWithSettings(self.ID)
+        info = await self._mgr.getServerInfoWithSettings(self.ID)
         self.__doc__, self.notes, settings = info
         names = [s[0] for s in settings]
 
@@ -395,36 +395,34 @@ class AsyncServerWrapper(object):
         """Send packet to this server."""
         return self._cxn._send(self.ID, *args, **kw)
 
-
-@inlineCallbacks
-def getConnection(host=C.MANAGER_HOST, port=None, name=None,
+@ensure_deferred
+async def getConnection(host=C.MANAGER_HOST, port=None, name=None,
                   password=None, tls_mode=C.MANAGER_TLS, username=None,
                   headless=False):
     """Connect to LabRAD and return a deferred that fires the protocol object."""
     name = name or 'Python Client ({})'.format(support.getNodeName())
-    p = yield protocol.connect(host, port, tls_mode, username, password,
+    p = await protocol.connect(host, port, tls_mode, username, password,
                                headless)
-    yield p.loginClient(name)
-    returnValue(p)
+    await p.loginClient(name)
+    return p
 
-
-@inlineCallbacks
-def connectAsync(host=C.MANAGER_HOST, port=None, name=None,
+@ensure_deferred
+async def connectAsync(host=C.MANAGER_HOST, port=None, name=None,
                  password=None, tls_mode=C.MANAGER_TLS, username=None,
                  headless=False):
     """Connect to LabRAD and return a deferred that fires the client object."""
-    p = yield getConnection(host, port, name, password, tls_mode=tls_mode,
+    p = await getConnection(host, port, name, password, tls_mode=tls_mode,
                             username=username, headless=headless)
-    cxn = yield ClientAsync.create(p)
-    returnValue(cxn)
+    cxn = await ClientAsync.create(p)
+    return cxn
 
 
 def runAsync(func, *args, **kw):
     from twisted.internet import reactor
-    @inlineCallbacks
-    def runIt():
+    @ensure_deferred
+    async def runIt():
         try:
-            yield func(*args, **kw)
+            await func(*args, **kw)
         finally:
             reactor.stop()
     reactor.callWhenRunning(runIt)
@@ -435,11 +433,11 @@ class ClientAsync(object):
     """Adapt a LabRAD request protocol object to an asynchronous client."""
 
     @staticmethod
-    @inlineCallbacks
-    def create(protocol):
+    @ensure_deferred
+    async def create(protocol):
         cxn = ClientAsync(protocol)
-        yield cxn._init()
-        returnValue(cxn)
+        await cxn._init()
+        return cxn
 
     def __init__(self, prot):
         self.servers = MultiDict()
@@ -450,40 +448,40 @@ class ClientAsync(object):
 
     _staticAttrs = ['servers', 'refresh', 'context']
 
-    @inlineCallbacks
-    def _init(self):
+    @ensure_deferred
+    async def _init(self):
         """Refresh the cache of available servers and their settings.
 
         Also set up messages so that servers that connect and disconnect later
         will be automatically detected, without needing a refresh.
         """
         try:
-            yield self._mgr.subscribeToNamedMessage('Server Connect', 314159265, True)
-            yield self._mgr.subscribeToNamedMessage('Server Disconnect', 314159266, True)
+            await self._mgr.subscribeToNamedMessage('Server Connect', 314159265, True)
+            await self._mgr.subscribeToNamedMessage('Server Disconnect', 314159266, True)
             self._cxn.addListener(self._serverConnected, source=self._mgr.ID, ID=314159265, sync=True)
             self._cxn.addListener(self._serverDisconnected, source=self._mgr.ID, ID=314159266, sync=True)
-            yield self.refresh()
+            await self.refresh()
         except Exception as e:
             print('error!')
             print(repr(e))
             raise
 
-    @inlineCallbacks
-    def _serverConnected(self, _c, data):
+    @ensure_deferred
+    async def _serverConnected(self, _c, data):
         """Add a wrapper when a server connects."""
         ID, name = data
         try:
-            yield self._addServer(name, ID)
+            await self._addServer(name, ID)
         except Exception as e:
             print('Error adding server %d, "%s":' % (ID, name))
             print(str(e))
 
-    @inlineCallbacks
-    def _serverDisconnected(self, _c, data):
+    @ensure_deferred
+    async def _serverDisconnected(self, _c, data):
         """Remove the wrapper when a server disconnects."""
         ID, name = data
         try:
-            yield self._delServer(name)
+            await self._delServer(name)
         except Exception as e:
             print('Error removing server %d, "%s":' % (ID, name))
             print(str(e))
@@ -495,12 +493,12 @@ class ClientAsync(object):
     def refresh(self):
         return self._refreshLock.run(self._refresh)
 
-    @inlineCallbacks
-    def _refresh(self):
+    @ensure_deferred
+    async def _refresh(self):
         """Update the list of available LabRAD servers."""
 
         # get a list of the currently-available servers
-        slist = yield self._mgr.getServersList()
+        slist = await self._mgr.getServersList()
         names = [s[0] for s in slist]
 
         # determine what to add, update and delete to be current
@@ -511,7 +509,7 @@ class ClientAsync(object):
         actions = ([self._addServer(*s) for s in additions] +
                    [self._refreshServer(n) for n in refreshes] +
                    [self._delServer(n) for n in deletions])
-        yield defer.DeferredList(actions, fireOnOneErrback=True)
+        await defer.DeferredList(actions, fireOnOneErrback=True)
 
     def _fixName(self, name):
         pyName = mangle(name)
@@ -519,8 +517,8 @@ class ClientAsync(object):
             pyName = 'lr_' + pyName
         return pyName
 
-    @inlineCallbacks
-    def _addServer(self, name, ID):
+    @ensure_deferred
+    async def _addServer(self, name, ID):
         """Create a wrapper for a new server and add it to the list.
 
         Wrappers are cached so that if a server stops and restarts,
@@ -536,7 +534,7 @@ class ClientAsync(object):
             server = AsyncServerWrapper(self, name, pyName, ID)
             self._cache[name] = server
         try:
-            yield server.refresh()
+            await server.refresh()
         except Exception as e:
             print('Error while refreshing server "%s":' % name)
             print(repr(e))
@@ -544,16 +542,16 @@ class ClientAsync(object):
             self.servers[name, server._py_name, ID] = server
             setattr(self, server._py_name, server)
 
-    @inlineCallbacks
-    def _refreshServer(self, name):
+    @ensure_deferred
+    async def _refreshServer(self, name):
         """Trigger a refresh on a server wrapper."""
         server = self.servers[name]
         try:
-            yield server.refresh()
+            await server.refresh()
         except Exception as e:
             print('Error while refreshing server "%s":' % name)
             print(repr(e))
-            yield self._delServer(name)
+            await self._delServer(name)
 
     def _delServer(self, name):
         """Remove a server wrapper.
@@ -571,11 +569,11 @@ class ClientAsync(object):
         """Create a new communication context for this connection."""
         return self._cxn.context()
 
-    @inlineCallbacks
-    def spawn(self):
-        p = yield self._cxn.spawn()
-        cxn = yield ClientAsync.create(p)
-        returnValue(cxn)
+    @ensure_deferred
+    async def spawn(self):
+        p = await self._cxn.spawn()
+        cxn = await ClientAsync.create(p)
+        return cxn
 
     def __getitem__(self, key):
         return self.servers[key]
@@ -599,8 +597,8 @@ class ClientAsync(object):
     def _removeListener(self):
         return self._cxn.removeListener
 
-@inlineCallbacks
-def wrapAsync(cls, *args, **kw):
+@ensure_deferred
+async def wrapAsync(cls, *args, **kw):
     obj = cls(*args, **kw)
-    yield obj.refresh()
-    returnValue(obj)
+    await obj.refresh()
+    return obj

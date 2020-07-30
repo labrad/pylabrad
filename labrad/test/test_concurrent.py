@@ -7,6 +7,7 @@ import pytest
 
 import labrad.concurrent as concurrent
 import labrad.thread as thread
+from labrad.util import ensure_deferred
 
 
 def test_map_future():
@@ -47,22 +48,22 @@ class TestCallFuture(object):
             f.result(timeout=0.1)
 
     def test_asynchronous_func(self):
-        @defer.inlineCallbacks
-        def func():
+        @ensure_deferred
+        async def func():
             d = defer.Deferred()
             reactor.callLater(0, d.callback, 'woot')
-            result = yield d
-            defer.returnValue(result)
+            result = await d
+            return result
 
         f = concurrent.call_future(func)
         assert f.result(timeout=0.1) == 'woot'
 
     def test_asynchronous_error(self):
-        @defer.inlineCallbacks
-        def func():
+        @ensure_deferred
+        async def func():
             d = defer.Deferred()
             reactor.callLater(0, d.callback, 'woot')
-            result = yield d
+            result = await d
             raise ValueError()
 
         f = concurrent.call_future(func)
@@ -79,10 +80,10 @@ class TestFutureToDeferred(object):
         thread.startReactor()
 
     def test_result_already_set(self):
-        @defer.inlineCallbacks
-        def func(f):
-            result = yield concurrent.future_to_deferred(f)
-            defer.returnValue(result)
+        @ensure_deferred
+        async def func(f):
+            result = await concurrent.future_to_deferred(f)
+            return result
 
         f1 = Future()
         f1.set_result(1)
@@ -90,10 +91,10 @@ class TestFutureToDeferred(object):
         assert f2.result(timeout=0.1) == 1
 
     def test_set_result_outside_reactor(self):
-        @defer.inlineCallbacks
-        def func(f):
-            result = yield concurrent.future_to_deferred(f)
-            defer.returnValue(result)
+        @ensure_deferred
+        async def func(f):
+            result = await concurrent.future_to_deferred(f)
+            return result
 
         f1 = Future()
         f2 = concurrent.call_future(func, f1)
@@ -101,22 +102,22 @@ class TestFutureToDeferred(object):
         assert f2.result(timeout=0.1) == 1
 
     def test_set_result_inside_reactor(self):
-        @defer.inlineCallbacks
-        def func(f):
+        @ensure_deferred
+        async def func(f):
             d = concurrent.future_to_deferred(f)
             f.set_result(1)
-            result = yield d
-            defer.returnValue(result)
+            result = await d
+            return result
 
         f = Future()
         future = concurrent.call_future(func, f)
         assert future.result() == 1
 
     def test_exception_already_set(self):
-        @defer.inlineCallbacks
-        def func(f):
-            result = yield concurrent.future_to_deferred(f)
-            defer.returnValue(result)
+        @ensure_deferred
+        async def func(f):
+            result = await concurrent.future_to_deferred(f)
+            return result
 
         f1 = Future()
         f1.set_exception(ValueError())
@@ -125,10 +126,10 @@ class TestFutureToDeferred(object):
             f2.result(timeout=0.1)
 
     def test_set_exception_outside_reactor(self):
-        @defer.inlineCallbacks
-        def func(f):
-            result = yield concurrent.future_to_deferred(f)
-            defer.returnValue(result)
+        @ensure_deferred
+        async def func(f):
+            result = await concurrent.future_to_deferred(f)
+            return result
 
         f1 = Future()
         f2 = concurrent.call_future(func, f1)
@@ -137,12 +138,12 @@ class TestFutureToDeferred(object):
             f2.result(timeout=0.1)
 
     def test_set_result_inside_reactor(self):
-        @defer.inlineCallbacks
-        def func(f):
+        @ensure_deferred
+        async def func(f):
             d = concurrent.future_to_deferred(f)
             f.set_exception(ValueError())
-            result = yield d
-            defer.returnValue(result)
+            result = await d
+            return result
 
         f = Future()
         future = concurrent.call_future(func, f)

@@ -25,15 +25,15 @@ from labrad import types as T, constants as C, util, errors
 from labrad.devices import DeviceWrapper, DeviceServer, DeviceLockedError
 from labrad.server import LabradServer, setting
 from labrad.support import MultiDict
+from labrad.util import ensure_deferred
 
 from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks, returnValue
 
 class GPIBDeviceWrapper(DeviceWrapper):
     """A wrapper for a gpib device."""
 
-    @inlineCallbacks
-    def connect(self, gpib, addr):
+    @ensure_deferred
+    async def connect(self, gpib, addr):
         """Connect to this device.
 
         We set the address and timeout in the context reserved
@@ -49,24 +49,24 @@ class GPIBDeviceWrapper(DeviceWrapper):
         p = self._packet()
         p.address(self.addr)
         p.timeout(self._timeout)
-        yield p.send()
+        await p.send()
 
         # do device-specific initialization
-        yield self.initialize()
+        await self.initialize()
 
     def _packet(self):
         return self.gpib.packet(context=self._context)
 
-    @inlineCallbacks
-    def timeout(self, seconds):
+    @ensure_deferred
+    async def timeout(self, seconds):
         """Set the GPIB timeout for this device."""
         self._timeout = T.Value(seconds, 's')
         p = self._packet()
         p.timeout(self._timeout)
-        yield p.send()
+        await p.send()
 
-    @inlineCallbacks
-    def query(self, query, bytes=None, timeout=None):
+    @ensure_deferred
+    async def query(self, query, bytes=None, timeout=None):
         """Query this GPIB device."""
         p = self._packet()
         if timeout is not None:
@@ -74,11 +74,11 @@ class GPIBDeviceWrapper(DeviceWrapper):
         p.query(query)
         if timeout is not None:
             p.timeout(self._timeout)
-        resp = yield p.send()
-        returnValue(resp.query)
+        resp = await p.send()
+        return resp.query
 
-    @inlineCallbacks
-    def write(self, s, timeout=None):
+    @ensure_deferred
+    async def write(self, s, timeout=None):
         """Write a string to the device."""
         p = self._packet()
         if timeout is not None:
@@ -86,11 +86,11 @@ class GPIBDeviceWrapper(DeviceWrapper):
         p.write(s)
         if timeout is not None:
             p.timeout(self._timeout)
-        resp = yield p.send()
-        returnValue(resp.write)
+        resp = await p.send()
+        return resp.write
 
-    @inlineCallbacks
-    def write_raw(self, s, timeout=None):
+    @ensure_deferred
+    async def write_raw(self, s, timeout=None):
         """Write a string to the device."""
         p = self._packet()
         if timeout is not None:
@@ -98,12 +98,12 @@ class GPIBDeviceWrapper(DeviceWrapper):
         p.write_raw(s)
         if timeout is not None:
             p.timeout(self._timeout)
-        resp = yield p.send()
-        returnValue(resp.write_raw)
+        resp = await p.send()
+        return resp.write_raw
 
 
-    @inlineCallbacks
-    def read(self, bytes=None, timeout=None):
+    @ensure_deferred
+    async def read(self, bytes=None, timeout=None):
         """Read a string from the device."""
         p = self._packet()
         if timeout is not None:
@@ -111,11 +111,11 @@ class GPIBDeviceWrapper(DeviceWrapper):
         p.read(bytes)
         if timeout is not None:
             p.timeout(self._timeout)
-        resp = yield p.send()
-        returnValue(resp.read)
+        resp = await p.send()
+        return resp.read
 
-    @inlineCallbacks
-    def read_raw(self, bytes=None, timeout=None):
+    @ensure_deferred
+    async def read_raw(self, bytes=None, timeout=None):
         """Read a string from the device."""
         p = self._packet()
         if timeout is not None:
@@ -123,8 +123,8 @@ class GPIBDeviceWrapper(DeviceWrapper):
         p.read_raw(bytes)
         if timeout is not None:
             p.timeout(self._timeout)
-        resp = yield p.send()
-        returnValue(resp.read_raw)
+        resp = await p.send()
+        return resp.read_raw
 
     def initialize(self):
         """Called when we first connect to the device.
@@ -160,26 +160,26 @@ class GPIBDeviceServer(DeviceServer):
         if 'gpib' in name.lower():
             self.refreshDeviceList()
 
-    @inlineCallbacks
-    def findDevices(self):
+    @ensure_deferred
+    async def findDevices(self):
         """Find all available matching GPIB devices."""
         searches = [self._findDevicesForServer(srv)
                     for srv in _gpibServers(self.client)]
         found = []
         for search in searches:
-            found += yield search
-        returnValue(found)
+            found += await search
+        return found
 
-    @inlineCallbacks
-    def _findDevicesForServer(self, srv):
+    @ensure_deferred
+    async def _findDevicesForServer(self, srv):
         """Find matching devices on a given server."""
-        devices = yield srv.list_devices()
+        devices = await srv.list_devices()
         found = []
         for address, deviceName in zip(devices, ['<UNKNOWN>']*len(devices)):
             if deviceName == self.deviceName:
                 name = _getDeviceName(srv, address)
                 found.append((name, (srv, address), {}))
-        returnValue(found)
+        return found
 
     # server settings
 
@@ -254,8 +254,8 @@ class ManagedDeviceServer(LabradServer):
             self.deviceWrappers = dict((name, self.deviceWrapper) for name in names)
         LabradServer.__init__(self)
 
-    @inlineCallbacks
-    def initServer(self):
+    @ensure_deferred
+    async def initServer(self):
         self.devices = MultiDict() # aliases -> device
         self.device_guids = {} # name -> guid
         self._next_guid = 0
@@ -263,20 +263,20 @@ class ManagedDeviceServer(LabradServer):
         handler = lambda c, data: self.handleDeviceMessage(*data)
         self._cxn.addListener(handler, ID=self.messageID)
         if self.deviceManager in self.client.servers:
-            yield self.connectToDeviceManager()
+            await self.connectToDeviceManager()
 
-    @inlineCallbacks
-    def stopServer(self):
+    @ensure_deferred
+    async def stopServer(self):
         if hasattr(self, 'devices'):
             ds = [defer.maybeDeferred(dev.shutdown)
                   for dev in self.devices.values()]
-            yield defer.DeferredList(ds, fireOnOneErrback=True)
+            await defer.DeferredList(ds, fireOnOneErrback=True)
 
     def makeDeviceName(self, device, server, address):
         return server + ' - ' + address
 
-    @inlineCallbacks
-    def handleDeviceMessage(self, device, server, address, isConnected=True):
+    @ensure_deferred
+    async def handleDeviceMessage(self, device, server, address, isConnected=True):
         print('Device message:', device, server, address, isConnected)
         name = self.makeDeviceName(device, server, address)
         if isConnected: # add device
@@ -290,15 +290,15 @@ class ManagedDeviceServer(LabradServer):
                 guid = self.device_guids[name] = self._next_guid
                 self._next_guid += 1
             dev = self.deviceWrappers[device](guid, name)
-            yield self.client.refresh()
-            yield dev.connect(self.client[server], address)
+            await self.client.refresh()
+            await dev.connect(self.client[server], address)
             self.devices[guid, name] = dev
 
         else: # remove device
-            yield self.removeDevice(name)
+            await self.removeDevice(name)
 
-    @inlineCallbacks
-    def removeDevice(self, name):
+    @ensure_deferred
+    async def removeDevice(self, name):
         # we delete the device, but not its guid, so that
         # if this device comes back, users who have
         # selected it by guid will reconnect seamlessly
@@ -307,22 +307,22 @@ class ManagedDeviceServer(LabradServer):
         dev = self.devices[name]
         del self.devices[name]
         try:
-            yield dev.shutdown()
+            await dev.shutdown()
         except Exception as e:
             self.log('Error while shutting down device "%s": %s' % (name, e))
 
-    @inlineCallbacks
-    def connectToDeviceManager(self):
+    @ensure_deferred
+    async def connectToDeviceManager(self):
         """
 
         """
-        yield self.client.refresh()
+        await self.client.refresh()
         manager = self.client[self.deviceManager]
         #If we have a device identification function register it with the device manager
         if hasattr(self, 'deviceIdentFunc'):
-            yield manager.register_ident_function(self.deviceIdentFunc)
+            await manager.register_ident_function(self.deviceIdentFunc)
         #Register ourself as a server who cares about devices
-        devs = yield manager.register_server(list(self.deviceWrappers.keys()), self.messageID)
+        devs = await manager.register_server(list(self.deviceWrappers.keys()), self.messageID)
         # the devs list is authoritative any devices we have
         # that are _not_ on this list should be removed
         names = [self.makeDeviceName(*dev[:3]) for dev in devs]
@@ -330,7 +330,7 @@ class ManagedDeviceServer(LabradServer):
         deletions = [self.removeDevice(name)
                      for name in self.device_guids.keys()
                      if name not in names]
-        yield defer.DeferredList(additions + deletions)
+        await defer.DeferredList(additions + deletions)
 
     def serverConnected(self, ID, name):
         if name == self.deviceManager:

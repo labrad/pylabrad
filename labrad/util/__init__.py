@@ -25,7 +25,6 @@ import sys
 import functools
 
 from twisted.internet import defer, reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import blockingCallFromThread
 from twisted.python import log, reflect, util
 
@@ -257,15 +256,15 @@ def firstToFire(n=2):
     first.addCallback(lambda result: result[0])
     return first, heads
 
-@inlineCallbacks
-def maybeTimeout(deferred, timeout, timeoutResult):
+@ensure_deferred
+async def maybeTimeout(deferred, timeout, timeoutResult):
     """Takes a deferred and returns a new deferred that might timeout."""
     td = wakeupCall(timeout, timeoutResult)
-    result, _index = yield defer.DeferredList([deferred, td],
+    result, _index = await defer.DeferredList([deferred, td],
                                               fireOnOneCallback=True,
                                               fireOnOneErrback=True,
                                               consumeErrors=True)
-    returnValue(result)
+    return result
 
 class DeferredSignal(object):
     """An object that can create multiple deferreds on demand.
@@ -402,16 +401,16 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
     #observer = MyLogObserver(sys.stdout)
     #log.startLoggingWithObserver(observer.emit)
 
-    @inlineCallbacks
-    def run(srv):
+    @ensure_deferred
+    async def run(srv):
         host = config['host']
         port = int(config['port'])
         tls_mode = config['tls']
         try:
-            p = yield protocol.connect(host, port, tls_mode, config['username'],
+            p = await protocol.connect(host, port, tls_mode, config['username'],
                                        config['password'])
-            yield srv.startup(p)
-            yield srv.onShutdown()
+            await srv.startup(p)
+            await srv.onShutdown()
             log.msg('Disconnected cleanly.')
         except Exception as e:
             log.msg('There was an error: {}'.format(e))
@@ -441,15 +440,15 @@ def syncRunServer(srv, host=C.MANAGER_HOST, port=None, username=None,
     if port is None:
         port = C.MANAGER_PORT_TLS if tls_mode == 'on' else C.MANAGER_PORT
 
-    @inlineCallbacks
-    def start_server():
-        p = yield protocol.connect(host, port, tls_mode, username, password)
-        yield srv.startup(p)
+    @ensure_deferred
+    async def start_server():
+        p = await protocol.connect(host, port, tls_mode, username, password)
+        await srv.startup(p)
 
-    @inlineCallbacks
-    def stop_server():
+    @ensure_deferred
+    async def stop_server():
         srv.disconnect()
-        yield srv.onShutdown()
+        await srv.onShutdown()
 
     thread.startReactor()
     blockingCallFromThread(reactor, start_server)

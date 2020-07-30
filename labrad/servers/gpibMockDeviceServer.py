@@ -32,27 +32,19 @@ timeout = 5
 
 from labrad.server import setting
 from labrad.gpib import GPIBManagedServer, GPIBDeviceWrapper
-from twisted.internet.defer import inlineCallbacks, returnValue
+from labrad.util import ensure_deferred
 
 class Mock0ADevice(GPIBDeviceWrapper):
-    @inlineCallbacks
-    def initialize(self):
-        """Notify that we are being made
-
-        Note the important yield statement
-        """
+    @ensure_deferred
+    async def initialize(self):
+        """Notify that we are being made"""
         print("Made a Mock0A device")
-        yield
 
 class Mock1BDevice(GPIBDeviceWrapper):
-    @inlineCallbacks
-    def initialize(self):
-        """Notify that we are being made
-
-        Note the important yield statement
-        """
+    @ensure_deferred
+    async def initialize(self):
+        """Notify that we are being made"""
         print("Made a Mock1B device")
-        yield
 
 class GpibMockDeviceServer(GPIBManagedServer):
     """Provides basic CW control for Anritsu 68367C Microwave Generators"""

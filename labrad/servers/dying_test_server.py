@@ -35,7 +35,6 @@ from __future__ import print_function
 from labrad import util
 from labrad.server import LabradServer, setting, Signal
 from twisted.internet import defer, reactor
-from twisted.internet.defer import returnValue
 from twisted.python import log
 
 from datetime import datetime
@@ -62,10 +61,10 @@ class DyingTestServer(LabradServer):
     log = Signal(555, 'log', '(ts)')
 
     @setting(2)
-    def delayed_echo(self, c, data):
+    async def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""
-        yield util.wakeupCall(c['delay'])
-        returnValue(data)
+        await util.wakeupCall(c['delay'])
+        return data
 
     @setting(3)
     def delayed_echo_deferred(self, c, data):
@@ -124,9 +123,9 @@ class DyingTestServer(LabradServer):
         return d
 
     @setting(9)
-    def exc_in_inlinecallback(self, c, data):
+    async def exc_in_inlinecallback(self, c, data):
         log.msg('Exception from an inlineCallback.')
-        yield util.wakeupCall(c['delay'])
+        await util.wakeupCall(c['delay'])
         raise Exception('Raised in inlineCallback.')
 
     @setting(10, returns=['s'])

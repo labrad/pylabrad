@@ -39,7 +39,6 @@ from labrad.units import m, s
 from labrad.util import hydrant
 
 from twisted.internet import defer, reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
 
 
 class LocalTestServer(LabradServer):
@@ -54,18 +53,18 @@ class LocalTestServer(LabradServer):
     testMode = True
     shutdownMessage = 987654321
 
-    @inlineCallbacks
-    def initServer(self):
-        yield None
+    @util.ensure_deferred
+    async def initServer(self):
+        await None
         #from registry_wrapper_async import RegistryWrapperAsync
-        #self.regWrapper = yield RegistryWrapperAsync.create(self.client, ['', 'Servers', 'Python Test Server'])
+        #self.regWrapper = await RegistryWrapperAsync.create(self.client, ['', 'Servers', 'Python Test Server'])
 
-    @inlineCallbacks
-    def stopServer(self):
-        print('before yield')
-        yield None
-        #print (yield self.client.manager.convert_units(T.Value(5, 'GHz'), 'Hz'))
-        print('after yield')
+    @util.ensure_deferred
+    async def stopServer(self):
+        print('before await')
+        await None
+        #print (await self.client.manager.convert_units(T.Value(5, 'GHz'), 'Hz'))
+        print('after await')
 
     def serverConnected(self, ID, name):
         print('server connected:', ID, name)
@@ -75,10 +74,10 @@ class LocalTestServer(LabradServer):
         print('server disconnected:', ID, name)
         self.checkServerWrappers(name)
 
-    @inlineCallbacks
-    def checkServerWrappers(self, name):
+    @util.ensure_deferred
+    async def checkServerWrappers(self, name):
         """Check that server wrappers are up to date with the manager."""
-        mgrServers = yield self.client.manager.servers()
+        mgrServers = await self.client.manager.servers()
         mgrServers = set(s[1] for s in mgrServers)
         cxnServers = set(self.client.servers.keys())
         if cxnServers == mgrServers:
@@ -93,10 +92,10 @@ class LocalTestServer(LabradServer):
         c['dict'] = {}
 
     @setting(2, "Delayed Echo", data='?')
-    def delayed_echo(self, c, data):
+    async def delayed_echo(self, c, data):
         """Echo a packet after a specified delay."""
-        yield util.wakeupCall(c['delay'][s])
-        returnValue(data)
+        await util.wakeupCall(c['delay'][s])
+        return data
 
     @setting(3, "Delayed Echo Deferred", data='?')
     def delayed_echo_deferred(self, c, data):
@@ -157,10 +156,10 @@ class LocalTestServer(LabradServer):
         return d
 
     @setting(9, "Exc in inlineCallback", data='?')
-    def exc_in_inlinecallback(self, c, data):
+    async def exc_in_inlinecallback(self, c, data):
         """Raises an exception in an inlineCallback."""
         self.log('Exception from an inlineCallback.')
-        yield util.wakeupCall(c['delay'][s])
+        await util.wakeupCall(c['delay'][s])
         raise Exception('Raised in inlineCallback.')
 
     @setting(10, "Bad Return Type", data='?', returns='s')

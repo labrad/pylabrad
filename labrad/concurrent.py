@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 from concurrent import futures
 from twisted.internet import defer, reactor
+from labrad.util import ensure_deferred
 
 
 def map_future(src, func, *args, **kw):
@@ -78,10 +79,10 @@ def call_future(func, *args, **kw):
         calling func or an exception if it fails.
     """
     f = futures.Future()
-    @defer.inlineCallbacks
-    def wrapped():
+    @ensure_deferred
+    async def wrapped():
         try:
-            result = yield defer.maybeDeferred(func, *args, **kw)
+            result = await defer.maybeDeferred(func, *args, **kw)
             f.set_result(result)
         except Exception as e:
             f.set_exception(e)
