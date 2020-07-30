@@ -9,4 +9,4 @@ pyOpenSSL >= 16.2.*
 pyparsing >= 2.1.*
 requests
 service_identity
-twisted >= 16.0.*
+twisted >= 16.6.*

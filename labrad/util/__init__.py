@@ -22,6 +22,8 @@ import contextlib
 import os
 import sys
 
+import functools
+
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import blockingCallFromThread
@@ -231,6 +233,13 @@ def is_local_connection(transport):
 
 
 # deferred helpers
+
+def ensure_deferred(func):
+    """Decorator to turn a coroutine function into a Deferred-returning function."""
+    @functools.wraps(func)
+    def wrapped_func(*args, **kwargs):
+        return defer.ensureDeferred(func(*args, **kwargs))
+    return wrapped_func
 
 def wakeupCall(delay, args=None):
     """Return a deferred that will be called back

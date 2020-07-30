@@ -29,8 +29,6 @@ import inspect
 import itertools
 import types
 
-import twisted.internet.defer as defer
-
 from labrad import types as T, util
 
 def _product(lists):
@@ -46,7 +44,7 @@ def setting(lr_ID, lr_name=None, returns=[], unflatten=True, **params):
     def decorator(func):
         try:
             handler = Setting(func, lr_ID, lr_name, returns, unflatten, **params)
-            func = handler.func  # might have gotten wrapped with inlineCallbacks
+            func = handler.func  # might have gotten wrapped with ensure_deferred
             func.ID = handler.ID
             func.name = handler.name
             func.accepts = handler.accepts
@@ -111,8 +109,8 @@ class Setting(object):
         argspec = inspect.getargspec(self.func)
         args = argspec.args[2:] # Skip 'self' and context data arguments.
 
-        if inspect.isgeneratorfunction(func):
-            self.func = defer.inlineCallbacks(func)
+        if inspect.iscoroutinefunction(func):
+            self.func = util.ensure_deferred(func)
 
         for arg in args:
             if arg not in params:
@@ -233,9 +231,8 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
         args, varargs, varkw, defaults = inspect.getargspec(f)
         args = args[lr_num_params:]
 
-        # handle generators as defer.inlineCallbacks
-        if inspect.isgeneratorfunction(f):
-            f = defer.inlineCallbacks(f)
+        if inspect.iscoroutinefunction(f):
+            self.func = util.ensure_deferred(f)
 
         # make sure that defined params are actually accepted by the function.
         # having extra params would not affect the running, but it is
