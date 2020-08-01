@@ -1,6 +1,6 @@
 # pylabrad
 
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pylabrad)
+![Python Version](https://img.shields.io/badge/python-3.7+-blue.svg)
 [![PyPI](https://img.shields.io/pypi/v/pylabrad.svg)](https://pypi.python.org/pypi/pylabrad)
 [![Build Status](https://secure.travis-ci.org/labrad/pylabrad.png)](http://travis-ci.org/labrad/pylabrad)
 [![Coverage Status](https://coveralls.io/repos/labrad/pylabrad/badge.svg)](https://coveralls.io/r/labrad/pylabrad)
