@@ -26,6 +26,7 @@ from datetime import datetime
 from operator import attrgetter
 import threading
 import traceback
+import inspect
 
 from concurrent import futures
 from twisted.internet import defer, reactor, threads
@@ -207,8 +208,16 @@ class LabradServer(object):
         self.__async_client = None
         self.__thread_data = threading.local()
 
-    def _dispatch(self, func, *args, **kw):
-        return func(*args, **kw)
+    async def _dispatch(self, func, *args, **kw):
+        """Call a synchronous or asynchronous method of the server.
+
+        Can be overridden by subclasses for multithreaded servers, etc.
+        """
+        if inspect.iscoroutinefunction(func):
+            return await func(*args, **kw)
+        else:
+            # either func() will return a Deferred or func() is synchronous
+            return await defer.maybeDeferred(func, *args, **kw)
 
     # request handling
     @util.ensure_deferred
@@ -490,15 +499,17 @@ class LabradServer(object):
 
     # Connect/Disconnect notifications
     # these methods should not be overridden
-    def _serverConnected(self, c, data):
+    @util.ensure_deferred
+    async def _serverConnected(self, c, data):
         """Handle connection messages from the manager."""
         ID, name = data
-        self._dispatch(self.serverConnected, ID, name)
+        await self._dispatch(self.serverConnected, ID, name)
 
-    def _serverDisconnected(self, c, data):
+    @util.ensure_deferred
+    async def _serverDisconnected(self, c, data):
         """Handle disconnection messages from the manager."""
         ID, name = data
-        self._dispatch(self.serverDisconnected, ID, name)
+        await self._dispatch(self.serverDisconnected, ID, name)
 
     # these methods should be overridden
     def serverConnected(self, ID, name):
@@ -536,13 +547,14 @@ class LabradServer(object):
             if context[0] == ID:
                 self._expireContext(context)
 
-    def _expireContext(self, context):
+    @util.ensure_deferred
+    async def _expireContext(self, context):
         """Expire a single context."""
         if context in self.contexts:
             c = self.contexts[context]
             del self.contexts[context]
             c.expire()
-            self._dispatch(self.expireContext, c.data)
+            await self._dispatch(self.expireContext, c.data)
 
     # these methods may be overridden
     def newContext(self, ID):
