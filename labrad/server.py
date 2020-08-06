@@ -224,8 +224,8 @@ class LabradServer(object):
         if c is None:
             c = self.contexts[context] = Context()
             await c.acquire() # make sure we're the first in line
-            c.data = await defer.maybeDeferred(self._dispatch, self.newContext, context)
-            await defer.maybeDeferred(self._dispatch, self.initContext, c.data)
+            c.data = await self._dispatch(self.newContext, context)
+            await self._dispatch(self.initContext, c.data)
         else:
             await c.acquire() # wait for previous requests in this context to finish
 
@@ -237,12 +237,12 @@ class LabradServer(object):
             await util.wakeupCall(0.0)
         response = []
         try:
-            await defer.maybeDeferred(self._dispatch, self.startRequest, c.data, source)
+            await self._dispatch(self.startRequest, c.data, source)
             for ID, flat_data in flat_records:
                 c.check() # make sure this context hasn't expired
                 try:
                     setting = self.settings[ID]
-                    result = await defer.maybeDeferred(self._dispatch, setting.handleRequest, self, c.data, flat_data)
+                    result = await self._dispatch(setting.handleRequest, self, c.data, flat_data)
                     response.append((ID, result, setting.returns))
                 except Exception as e:
                     response.append((ID, self._getTraceback(e)))
@@ -408,7 +408,7 @@ class LabradServer(object):
         await p.send()
 
         # do server-specific initialization
-        await defer.maybeDeferred(self._dispatch, self.initServer)
+        await self._dispatch(self.initServer)
         # make sure we shut down gracefully when reactor quits or a remote message is fired
         self._shutdownID = reactor.addSystemEventTrigger('before', 'shutdown', self._stopServer)
         self._cxn.addListener(self._stopServer, ID=987654321)
@@ -432,7 +432,7 @@ class LabradServer(object):
     async def _stopServer(self, *ignored):
         self.stopping = True
         try:
-            await defer.maybeDeferred(self._dispatch, self.stopServer)
+            await self._dispatch(self.stopServer)
         except Exception as e:
             self._error = failure.Failure(e)
         finally:
