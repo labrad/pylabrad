@@ -15,7 +15,7 @@ install:
   - pip install .
   - pip install pytest coveralls
 env:
-  - SCALABRAD_VERSION=0.8.0
+  - SCALABRAD_VERSION=0.8.3
 cache:
   directories:
     - $HOME/scalabrad-$SCALABRAD_VERSION
