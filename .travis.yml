@@ -4,17 +4,18 @@ sudo: false
 python:
   - "3.7"
   - "3.8"
-  - "3.9-dev"
+  - "3.9"
+  - "3.10-dev"
 matrix:
   allow_failures:
-  - python: "3.9-dev"
+  - python: "3.10-dev"
 install:
   - sed 's/>=/==/' requirements.txt > exact_requirements.txt
   - pip install -r exact_requirements.txt
   - pip install .
   - pip install pytest coveralls
 env:
-  - SCALABRAD_VERSION=0.8.0
+  - SCALABRAD_VERSION=0.8.3
 cache:
   directories:
     - $HOME/scalabrad-$SCALABRAD_VERSION
