@@ -5,10 +5,11 @@ python:
   - "3.7"
   - "3.8"
   - "3.9"
-  - "3.10-dev"
+  - "3.10"
+  - "3.11-dev"
 matrix:
   allow_failures:
-  - python: "3.10-dev"
+  - python: "3.11-dev"
 install:
   - sed 's/>=/==/' requirements.txt > exact_requirements.txt
   - pip install -r exact_requirements.txt
