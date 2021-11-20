@@ -4,8 +4,8 @@ futures >= 3.0.*; python_version < '3'
 numpy >= 1.12.*; python_version < '3.7'
 numpy >= 1.15.*; python_version == '3.7'
 numpy >= 1.17.*; python_version >= '3.8'
-pyOpenSSL >= 16.2.*
+pyOpenSSL >= 18.0.*
 pyparsing >= 2.1.*
 requests
 service_identity
-twisted >= 16.0.*
+twisted >= 18.4.*

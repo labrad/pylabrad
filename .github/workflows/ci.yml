@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           sed 's/>=/==/' requirements.txt > exact_requirements.txt
-          pip install -r exact_requirements.txt
+          pip install -r requirements.txt
           pip install .
           pip install pytest coveralls
       - name: Run python tests
