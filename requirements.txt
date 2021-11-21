@@ -1,6 +1,4 @@
 configparser
-future
-futures >= 3.0.*; python_version < '3'
 numpy >= 1.12.*; python_version < '3.7'
 numpy >= 1.15.*; python_version == '3.7'
 numpy >= 1.17.*; python_version >= '3.8'
