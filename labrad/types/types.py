@@ -163,7 +163,7 @@ def parseSingleType(s):
     s.strip(WHITESPACE)
     return t
 
-COMMENTS = re.compile('\{[^\{\}]*\}')
+COMMENTS = re.compile(r'\{[^\{\}]*\}')
 
 def stripComments(s):
     """Remove comments from a type tag.
@@ -1222,9 +1222,9 @@ class TList(Type):
     def _unflatten_as_array(self, s, endianness, elem, dims, size):
         """Unflatten to numpy array."""
         def make(t, width):
-            a = np.fromstring(s.get(size*width), dtype=np.dtype(t))
+            a = np.frombuffer(s.get(size*width), dtype=np.dtype(t))
             if endianness != SYSTEM_BYTE_ORDER:
-                a.byteswap(True) # inplace
+                a = a.byteswap(inplace=False)
             return a
 
         if elem == TBool(): a = make('bool', 1)
