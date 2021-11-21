@@ -119,7 +119,7 @@ class Setting(object):
         for p in params.keys():
             if p not in args:
                 raise ValueError("Setting parameter {} not accepted by function".format(p))
-            if isinstance(params[p], basestring):
+            if isinstance(params[p], str):
                 params[p] = [params[p]]
 
         Nparams = len(args)

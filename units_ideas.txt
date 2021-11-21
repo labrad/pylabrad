@@ -4,7 +4,7 @@ _unitClassDict = {} # stores unit types that have been created
 _valueClassDict = {} # stores types inheriting from numeric type _and_ unit type
 
 def makeQuantity(value, unit=None):
-	if isinstance(unit, basestring):
+	if isinstance(unit, str):
 		lookup in dictionary of units
 	if isinstance(value, PhysicalUnit):
 		return value
