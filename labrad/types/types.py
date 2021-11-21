@@ -40,10 +40,6 @@ import numpy as np
 import labrad.units as U
 from labrad.units import Value, Complex
 
-try:
-    from types import InstanceType
-except ImportError:
-    InstanceType = None
 
 try:
     long_type = long
@@ -247,10 +243,6 @@ def getType(obj):
 
     if t == FlatData:
         return parseTypeTag(obj.tag)
-
-    # handle classic classes (python 2)
-    if InstanceType is not None and t == InstanceType:
-        t = obj.__class__
 
     # check if we know this type
     if t in _types:
