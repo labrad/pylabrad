@@ -14,7 +14,7 @@ from labrad import crypto
 
 
 IN_CI = os.environ.get('CI', False)
-ci_only = pytest.mark.skipif(not IN_CI, reason='only runs in travis-ci')
+ci_only = pytest.mark.skipif(not IN_CI, reason='only runs in CI')
 
 
 @contextlib.contextmanager
