@@ -69,12 +69,7 @@ def randValue(t):
 def genNone(): return None
 def genBool(): return choice((True, False))
 def genInt(): return int(randint(-2**31, 2**31-1))
-def genWord():
-    value = randint(0, 2**32-1)
-    try:
-        return long(value)
-    except NameError:
-        return value  # python 3 has no long type
+def genWord(): return randint(0, 2**32-1)
 
 def genStr():
     return ''.join(chr(randint(0, 255)) for _ in range(randint(0, 100)))
