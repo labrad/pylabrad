@@ -22,7 +22,7 @@ Important constants that show up throughout the code.
 import os
 import labrad.crypto
 
-DEFAULT_TLS = 'starttls' if labrad.crypto.TLS else 'off'
+DEFAULT_TLS = 'starttls'
 
 def check_tls_mode(tls_mode):
     """Check that provided tls mode is valid and convert to canonical form.

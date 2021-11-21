@@ -4,20 +4,7 @@ import logging
 import os
 import re
 
-
-try:
-    import twisted
-    if int(twisted.__version__.split('.')[0]) >= 14:
-        from twisted.internet import ssl
-        TLS = True
-    else:
-        logging.warning("Twisted version >= 14.0.0 required for SSL support. "
-                        "Older versions don't support the platform CA roots.")
-        TLS = False
-except ImportError:
-    logging.warning('pyOpenSSL not found. Without encryption you will only be '
-                    'able to connect to the labrad manager on localhost.')
-    TLS = False
+from twisted.internet import ssl
 
 
 # Location where we store trusted self-signed manager certs.
@@ -49,9 +36,6 @@ def tls_options(hostname, cert_string=None):
     Raises:
         Exception: could not import pyOpenSSL package needed for TLS.
     """
-    if not TLS:
-        raise Exception('Unable to connect to labrad with TLS. Please be sure '
-                        'to install pyOpenSSL.')
     if isinstance(hostname, bytes):
         hostname = hostname.decode('utf-8')
     if cert_string is None:
