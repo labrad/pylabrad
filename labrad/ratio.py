@@ -15,10 +15,6 @@
 
 import operator
 
-try:
-    _ = long
-except NameError:
-    long = int  # python 3 has no long type
 
 def gcd(a, b):
     """Compute the greatest common divisor of two ints."""
@@ -50,7 +46,7 @@ class Ratio(object):
             self.denom *= -1
 
     def _cmp(self, other, op):
-        if not isinstance(other, (int, long, float, Ratio)):
+        if not isinstance(other, (int, float, Ratio)):
             return NotImplemented
         if not isinstance(other, Ratio):
             other = Ratio(other)
@@ -70,11 +66,6 @@ class Ratio(object):
         if not self.isInteger():
             raise TypeError("Cannot convert %r to int." % self)
         return int(self.num)
-
-    def __long__(self):
-        if not self.isInteger():
-            raise TypeError("Cannot convert %r to long." % self)
-        return long(self.num)
 
     def __float__(self):
         return float(self.num) / float(self.denom)
@@ -101,7 +92,7 @@ class Ratio(object):
         return Ratio(abs(self.num), abs(self.denom))
 
     def __add__(self, other):
-        if not isinstance(other, (int, long, Ratio)):
+        if not isinstance(other, (int, Ratio)):
             return NotImplemented
         if not isinstance(other, Ratio):
             other = Ratio(other)
@@ -126,7 +117,7 @@ class Ratio(object):
         self.__iadd__(self, -other)
 
     def __mul__(self, other):
-        if not isinstance(other, (int, long, Ratio)):
+        if not isinstance(other, (int, Ratio)):
             return NotImplemented
         if not isinstance(other, Ratio):
             other = Ratio(other)
@@ -142,7 +133,7 @@ class Ratio(object):
         self.denom = prod.denom
 
     def __div__(self, other):
-        if not isinstance(other, (int, long, Ratio)):
+        if not isinstance(other, (int, Ratio)):
             return NotImplemented
         if not isinstance(other, Ratio):
             other = Ratio(other)
@@ -153,7 +144,7 @@ class Ratio(object):
     __truediv__ = __div__
 
     def __rdiv__(self, other):
-        if not isinstance(other, (int, long, Ratio)):
+        if not isinstance(other, (int, Ratio)):
             return NotImplemented
         if not isinstance(other, Ratio):
             other = Ratio(other)

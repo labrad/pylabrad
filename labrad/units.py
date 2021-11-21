@@ -483,10 +483,6 @@ class Value(WithUnit):
 
 WithUnit._numericTypes[float] = Value
 WithUnit._numericTypes[int] = Value
-try:
-    WithUnit._numericTypes[long] = Value
-except NameError:
-    pass  # python 3 has no long type
 WithUnit._numericTypes[np.int32] = Value
 WithUnit._numericTypes[np.int64] = Value
 
@@ -1140,10 +1136,6 @@ class DimensionlessFloat(WithDimensionlessUnit, float):
 
 WithUnit._dimensionlessTypes[float] = DimensionlessFloat
 WithUnit._dimensionlessTypes[int] = DimensionlessFloat
-try:
-    WithUnit._dimensionlessTypes[long] = DimensionlessFloat
-except NameError:
-    pass  # python 3 has no long type
 WithUnit._dimensionlessTypes[np.float64] = DimensionlessFloat
 WithUnit._dimensionlessTypes[np.int64] = DimensionlessFloat
 WithUnit._dimensionlessTypes[np.float32] = DimensionlessFloat

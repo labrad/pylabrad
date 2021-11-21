@@ -45,11 +45,6 @@ try:
 except ImportError:
     InstanceType = None
 
-try:
-    long_type = long
-except NameError:
-    long_type = int  # python 3 has no long type
-
 SYSTEM_BYTE_ORDER = '<' if sys.byteorder == 'little' else '>'
 
 
@@ -626,7 +621,7 @@ class TInt(Type, Singleton):
         return struct.unpack(endianness + 'i', s.get(4))[0]
 
     def __flatten__(self, n, endianness):
-        if not isinstance(n, (int, long_type, np.integer)):
+        if not isinstance(n, (int, np.integer)):
             raise FlatteningError(n, self)
         if n >= 0x80000000 or n < -0x80000000:
             raise ValueError("out of range for type i: {0}".format(n))
@@ -642,19 +637,15 @@ class TUInt(Type, Singleton):
     tag = 'w'
     width = 4
     def __unflatten__(self, s, endianness):
-        return long_type(struct.unpack(endianness + 'I', s.get(4))[0])
+        return int(struct.unpack(endianness + 'I', s.get(4))[0])
 
     def __flatten__(self, n, endianness):
-        if not isinstance(n, (int, long_type, np.integer)):
+        if not isinstance(n, (int, np.integer)):
             raise FlatteningError(n, self)
         if n > 0xFFFFFFFF or n < 0:
             raise ValueError("out of range for type w: {0}".format(n))
         return struct.pack(endianness + 'I', n), self
 
-try:
-    registerType(long, TUInt())
-except NameError:
-    pass  # python 3 has no long type
 registerType(np.uint32, TUInt())
 registerType(np.uint64, TUInt())
 
@@ -690,10 +681,6 @@ class TStr(Type, Singleton):
         return struct.pack(endianness + 'I', len(b)) + b, self
 
 registerType(str, TStr())
-try:
-    registerType(unicode, TStr())
-except NameError:
-    pass  # python 3 has no unicode type
 
 class TBytes(Type, Singleton):
     """A raw 8-bit byte string."""
@@ -744,7 +731,7 @@ class TTime(Type, Singleton):
     def __flatten__(self, t, endianness):
         diff = t - timeOffset()
         secs = diff.days * (60 * 60 * 24) + diff.seconds
-        us = long_type(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
+        us = int(float(diff.microseconds) / pow(10, 6) * pow(2, 64))
         return struct.pack(endianness + 'QQ', secs, us), self
 
 registerType(datetime.datetime, TTime())
@@ -771,7 +758,7 @@ class TValue(Type):
 
     # Types which can be flattened by TValue as 'v[]' via coercion to
     # float. See __flatten__.
-    CASTABLE_TYPES = [int, long_type]
+    CASTABLE_TYPES = [int]
 
     def __init__(self, unit=None):
         if isinstance(unit, U.Unit):
