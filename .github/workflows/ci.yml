@@ -1,6 +1,10 @@
 name: Continuous Integration
 
-on: [pull_request]
+on:
+  push:
+    branches:
+      - master
+  pull_request:
 
 jobs:
   test-linux:
