@@ -22,8 +22,6 @@ Decorators that help in creating LabRAD servers.
 from __future__ import absolute_import
 from __future__ import print_function
 
-from past.builtins import basestring  # for python 2/3 compatibility
-
 import functools
 import inspect
 import itertools
@@ -89,7 +87,7 @@ class Setting(object):
         self.func = func
         self.ID = lr_ID
         self.name = lr_name or func.__name__
-        self.returns = [returns] if isinstance(returns, basestring) else returns
+        self.returns = [returns] if isinstance(returns, str) else returns
         self.unflatten = unflatten
         self.description, self.notes = util.parseSettingDoc(func.__doc__)
         self.__doc__ = "Setting wrapper for {}\n\n{}".format(func.__name__, func.__doc__)
