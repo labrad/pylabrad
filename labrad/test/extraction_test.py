@@ -3,8 +3,6 @@
 # of labrad.types.Buffer, which is used in the parsing process.
 # fixing the implementation resulted in a substantial performance gain.
 
-from __future__ import print_function
-
 import time
 
 import numpy as np

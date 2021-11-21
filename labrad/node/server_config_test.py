@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from labrad.node import server_config as sc
 
 

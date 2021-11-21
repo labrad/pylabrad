@@ -20,8 +20,6 @@ Base classes for building asynchronous, context- and request- aware
 servers with labrad.
 """
 
-from __future__ import absolute_import
-
 from datetime import datetime
 from operator import attrgetter
 import threading

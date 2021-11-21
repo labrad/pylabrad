@@ -30,8 +30,6 @@ timeout = 5
 ### END NODE INFO
 """
 
-from __future__ import print_function
-
 from labrad import types as T, util
 from labrad.server import LabradServer, setting
 from labrad.units import m, s

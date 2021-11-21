@@ -30,8 +30,6 @@ timeout = 5
 ### END NODE INFO
 """
 
-from __future__ import print_function
-
 from labrad import util
 from labrad.server import LabradServer, setting, Signal
 from twisted.internet import defer, reactor

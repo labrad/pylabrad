@@ -19,8 +19,6 @@ labrad.util.hydrant
 Generate random LabRAD data for use in testing.
 """
 
-from __future__ import print_function
-
 from datetime import datetime, timedelta
 from random import choice, randint, gauss
 

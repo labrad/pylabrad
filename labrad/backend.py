@@ -3,8 +3,6 @@
 Provides a backend connection that underlies the wrapper client object.
 """
 
-from __future__ import absolute_import
-
 import threading
 import time
 

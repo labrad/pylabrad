@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from concurrent import futures
 from twisted.internet import defer, reactor
 

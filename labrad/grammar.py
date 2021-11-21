@@ -19,8 +19,6 @@ labrad.grammar
 Grammars for parsing various LabRAD stuff with pyparsing.
 """
 
-from __future__ import absolute_import
-
 from pyparsing import (Word, Literal, Group, Forward, Optional, alphas, nums,
                        alphanums, stringEnd)
 

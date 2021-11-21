@@ -21,8 +21,6 @@ as well as the protocol for connecting to the Manager and
 authenticating.
 """
 
-from __future__ import print_function
-
 import hashlib
 import traceback
 

@@ -26,9 +26,6 @@ to a server setting or returning from a setting when the accepted
 and return types have been registered), we can do even better.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
-
 import collections
 import datetime
 import itertools
