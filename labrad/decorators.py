@@ -102,7 +102,7 @@ class Setting(object):
         #    unpack tuples, so this case is not allowed:  The first argument
         #    cannot be a tuple or '?' tag if the second argument is optional.
         
-        argspec = inspect.getargspec(self.func)
+        argspec = inspect.getfullargspec(self.func)
         args = argspec.args[2:] # Skip 'self' and context data arguments.
 
         if inspect.isgeneratorfunction(func):
@@ -224,8 +224,8 @@ def messageHandler(lr_ID, lr_name=None, returns=[], lr_num_params=2, **params):
     strings of allowed types.
     """
     def decorated(f):
-        args, varargs, varkw, defaults = inspect.getargspec(f)
-        args = args[lr_num_params:]
+        argspec = inspect.getfullargspec(f)
+        args, defaults = argspec.args[lr_num_params:], argspec.defaults
 
         # handle generators as defer.inlineCallbacks
         if inspect.isgeneratorfunction(f):

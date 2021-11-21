@@ -17,8 +17,8 @@ def timeIt(f, *a, **kw):
     return result
 
 def extractAverage(packets):
-    data = ''.join(packets)
-    Is, Qs = np.fromstring(data, dtype='<i2').reshape(-1, 2).astype(int).T
+    data = b''.join(packets)
+    Is, Qs = np.frombuffer(data, dtype='<i2').reshape(-1, 2).astype(int).T
     return (Is, Qs)
 
 def extract(packets):
@@ -29,7 +29,7 @@ def extract(packets):
 mac = '01:23:45:67:89:ab'
 eth = 1
 
-packets = [(mac, mac, eth, '\x00'*44) for _ in range(9000)]
+packets = [(mac, mac, eth, b'\x00' * 44) for _ in range(9000)]
 data, t, endianness = types.flatten(packets)
 
 timeIt(extract, packets)

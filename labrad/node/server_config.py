@@ -30,7 +30,7 @@ def from_string(conf, filename=None, path=None, platform=sys.platform):
     if isinstance(conf, bytes):
         conf = conf.decode('utf-8')
     scp = ConfigParser()
-    scp.readfp(io.StringIO(conf))
+    scp.read_file(io.StringIO(conf))
 
     # general information
     name = scp.get('info', 'name', raw=True)
