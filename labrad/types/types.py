@@ -29,9 +29,6 @@ and return types have been registered), we can do even better.
 from __future__ import absolute_import
 from __future__ import print_function
 
-from builtins import range
-from future.utils import with_metaclass
-
 import collections
 import datetime
 import itertools
@@ -78,20 +75,6 @@ class Singleton(object):
 
 # a registry of parsing functions, keyed by type tag
 _parsers = {} # type tag -> parse function
-
-
-class RegisterParser(type):
-    """A metaclass for LabRAD types that have parsers.
-
-    When each class is created, this function gets called and
-    we register the __parse__ method of the class according
-    to the tag that the class specifies.
-    """
-    def __new__(cls, name, bases, dict):
-        c = type.__new__(cls, name, bases, dict)
-        if 'tag' in dict:
-            _parsers[dict['tag']] = c.__parse__
-        return c
 
 
 class Buffer(object):
@@ -454,7 +437,7 @@ def reprLRData(s):
 
 # LabRAD type classes
 
-class Type(with_metaclass(RegisterParser, object)):
+class Type:
     """Base class of all LabRAD type objects.
 
     These type classes manage parsing and creation of type tags,
@@ -463,6 +446,10 @@ class Type(with_metaclass(RegisterParser, object)):
     """
     width = 0
     isFixedWidth = True
+    tag: str
+
+    def __init_subclass__(cls) -> None:
+        _parsers[cls.tag] = cls.__parse__
 
     def __str__(self):
         """Convert to a type tag string format.
