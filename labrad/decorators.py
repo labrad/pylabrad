@@ -19,13 +19,9 @@ labrad.decorators
 Decorators that help in creating LabRAD servers.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
-
 import functools
 import inspect
 import itertools
-import types
 
 import twisted.internet.defer as defer
 

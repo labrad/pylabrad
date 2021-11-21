@@ -9,9 +9,6 @@ APIs to validate the token and extract the user's email address. It then checks
 to see that this email address has been registered as a labrad user.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
-
 import http.server
 import json
 import logging

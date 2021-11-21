@@ -19,8 +19,6 @@ labrad.client
 Contains a blocking client connection to labrad.
 """
 
-from __future__ import print_function
-
 import warnings
 
 from labrad import constants as C, types as T

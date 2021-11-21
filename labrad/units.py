@@ -52,8 +52,6 @@ The version included with LabRAD has been slightly changed:
 
 """
 
-from __future__ import print_function
-
 import itertools
 from fractions import Fraction
 from math import floor, pi

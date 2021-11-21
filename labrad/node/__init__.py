@@ -65,8 +65,6 @@ For rsyslogd on ubuntu, create the following file:
 :syslogtag,contains,"labrad"			/var/log/labrad.log;RSYSLOG_TraditionalFileFormat
 """
 
-from __future__ import print_function
-
 import logging
 import logging.handlers
 import os

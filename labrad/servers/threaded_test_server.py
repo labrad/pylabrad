@@ -15,8 +15,6 @@ timeout = 5
 ### END NODE INFO
 """
 
-from __future__ import print_function
-
 import time
 
 from labrad import types as T, util

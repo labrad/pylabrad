@@ -7,8 +7,6 @@ an optional argument 'N' which is a number of iterations
 to run.
 """
 
-from __future__ import print_function
-
 import argparse
 import json
 import random
