@@ -14,10 +14,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import functools
-try:
-    from types import UnboundMethodType
-except ImportError:
-    UnboundMethodType = None
 
 from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -122,7 +118,7 @@ class AsyncPacketWrapper(object):
         if setting.name in cls._cache:
             method = cls._cache[setting.name]
         else:
-            def wrapped(self, *args, **kw):
+            def method(self, *args, **kw):
                 key = extractKey(kw, 'key', None)
                 tag = extractKey(kw, 'tag', None) or setting.accepts
                 if len(args) == 0:
@@ -134,12 +130,7 @@ class AsyncPacketWrapper(object):
                                    key=key, name=setting.name)
                 self._packet.append(rec)
                 return self
-            wrapped.name = setting.name
-            if UnboundMethodType is not None:
-                method = UnboundMethodType(wrapped, None, cls)
-            else:
-                # in python 3, unbound methods are just functions
-                method = wrapped
+            method.name = setting.name
         cls._cache[setting.name] = method
         cls.settings[setting.name, setting._py_name, setting.ID] = method
         setattr(cls, setting._py_name, method)
