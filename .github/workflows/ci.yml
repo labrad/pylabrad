@@ -9,6 +9,8 @@ jobs:
       matrix:
         python-version: ['3.6', '3.7', '3.8', '3.9', '3.10']
     runs-on: ubuntu-latest
+    env:
+      SCALABRAD_VERSION: '0.8.3'
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v1
@@ -21,9 +23,8 @@ jobs:
           java-version: '8'
       - name: Install scalabrad
         run: |
-          export SCALABRAD_VERSION=0.8.3
           bash scripts/test/install-scalabrad.sh
-          export PATH=$PATH:$HOME/scalabrad-$SCALABRAD_VERSION/bin/
+          echo "PATH=$PATH:$HOME/scalabrad-$SCALABRAD_VERSION/bin/" >> $GITHUB_ENV
       - name: Install dependencies
         run: |
           sed 's/>=/==/' requirements.txt > exact_requirements.txt
