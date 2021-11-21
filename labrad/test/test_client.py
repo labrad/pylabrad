@@ -1,4 +1,6 @@
-import unittest
+import contextlib
+
+import pytest
 
 import labrad
 from labrad import types as T
@@ -7,36 +9,28 @@ from labrad.util import syncRunServer
 
 TEST_STR = 'this is a test, this is only a test'
 
-class ClientTests(unittest.TestCase):
-    def run(self, result=None):
-        """Override the TestCase run method to launch the test server.
+class TestClient:
+    def setup_class(cls):
+        cls.exit_stack = contextlib.ExitStack()
+        cls.exit_stack.enter_context(syncRunServer(PythonTestServer()))
+        cls.cxn = cls.exit_stack.enter_context(labrad.connect())
 
-        This seems to be the cleanest solution for effectively using a
-        context manager as part of a test fixture.  This method then calls
-        the usual test fixture setUp and tearDown within this context.
-        """
-        with syncRunServer(PythonTestServer()):
-            super(ClientTests, self).run(result)
-
-    def setUp(self):
-        self.cxn = labrad.connect()
-
-    def tearDown(self):
-        self.cxn.disconnect()
+    def teardown_class(cls):
+        cls.exit_stack.close()
 
     def _get_manager(self):
-        self.assertTrue(hasattr(self.cxn, 'manager'))
+        assert hasattr(self.cxn, 'manager')
         return self.cxn.manager
 
     def _get_tester(self):
-        self.assertTrue(hasattr(self.cxn, 'python_test_server'))
+        assert hasattr(self.cxn, 'python_test_server')
         return self.cxn.python_test_server
 
-    def testConnection(self):
+    def test_connection(self):
         servers = self.cxn.servers
-        self.assertTrue(len(servers.keys()) > 0)
-        self.assertTrue('manager' in servers)
-        self.assertTrue('python_test_server' in servers)
+        assert len(servers.keys()) > 0
+        assert 'manager' in servers
+        assert 'python_test_server' in servers
 
         self._get_manager()
         self._get_tester()
@@ -44,49 +38,49 @@ class ClientTests(unittest.TestCase):
         self._get_manager()
         self._get_tester()
 
-    def testServer(self):
+    def test_server(self):
         pts = self._get_tester()
 
         # make sure we can access the setting by both allowed methods
-        self.assertTrue(hasattr(pts, 'echo'))
-        self.assertTrue('echo' in pts.settings)
+        assert hasattr(pts, 'echo')
+        assert 'echo' in pts.settings
 
         # single setting, named explicitly
         resp = pts.echo(TEST_STR)
-        self.assertEqual(resp, TEST_STR)
+        assert resp == TEST_STR
 
         resp = pts.echo(T.Value(15.0, 's'))
-        self.assertEqual(resp['s'], 15.0)
-        self.assertEqual(resp.unit.name, 's')
+        assert resp['s'] == 15.0
+        assert resp.unit.name == 's'
 
         # single setting with the name looked up
         resp = pts.settings['echo']([1, 2, 3, 4])
-        self.assertEqual(len(resp), 4)
+        assert len(resp) == 4
 
         # single setting with delayed response
         resp = pts.echo.future(TEST_STR)
         resp = resp.result()
-        self.assertEqual(resp, TEST_STR)
+        assert resp == TEST_STR
 
         # allow calling with wait=False for backwards compatibility
         resp = pts.echo(TEST_STR, wait=False)
         resp = resp.result()
-        self.assertEqual(resp, TEST_STR)
+        assert resp == TEST_STR
 
-    def testCompoundPacket(self):
+    def test_compound_packet(self):
         pts = self._get_tester()
 
-        self.assertTrue(hasattr(pts, 'packet'))
+        assert hasattr(pts, 'packet')
 
         # make a simple packet and check the various methods of getting
         # data out of it
         pkt = pts.packet()
         resp = pkt.echo(1).echo(2).settings['echo'](3).send()
-        self.assertTrue(hasattr(resp, 'echo'))
-        self.assertEqual(len(resp.echo), 3)
-        self.assertTrue('echo' in resp.settings)
-        self.assertEqual(len(resp.settings['echo']), 3)
-        self.assertEqual(len(resp['echo']), 3)
+        assert hasattr(resp, 'echo')
+        assert len(resp.echo) == 3
+        assert 'echo' in resp.settings
+        assert len(resp.settings['echo']) == 3
+        assert len(resp['echo']) == 3
 
         # test using keys to refer to parts of a packet
         pkt2 = pts.packet()
@@ -94,28 +88,28 @@ class ClientTests(unittest.TestCase):
                    .echo_delay(T.Value(0.1, 's'))\
                    .delayed_echo('blah', key='two')\
                    .send()
-        self.assertTrue(hasattr(resp, 'one'))
-        self.assertTrue('one' in resp.settings)
-        self.assertEqual(resp['one'], 1)
-        self.assertFalse(hasattr(resp, 'echo_word'))
-        self.assertEqual(resp.two, 'blah')
+        assert hasattr(resp, 'one')
+        assert 'one' in resp.settings
+        assert resp['one'] == 1
+        assert not hasattr(resp, 'echo_word')
+        assert resp.two == 'blah'
 
         # test packet mutation by key
         pkt2['two'] = TEST_STR
         resp = pkt2.send()
-        self.assertEqual(resp.two, TEST_STR)
+        assert resp.two == TEST_STR
 
         # send packet asynchronously
         resp = pkt2.send_future()
         resp = resp.result()
-        self.assertEqual(resp.two, TEST_STR)
+        assert resp.two == TEST_STR
 
         # allow sending with wait=False for backwards compatibility
         resp = pkt2.send(wait=False)
         resp = resp.result()
-        self.assertEqual(resp.two, TEST_STR)
+        assert resp.two == TEST_STR
 
-    def testTupleKeys(self):
+    def test_tuple_keys(self):
         # allow the use of tuples as packet keys
         pts = self._get_tester()
 
@@ -125,21 +119,26 @@ class ClientTests(unittest.TestCase):
         r = repr(p)
         s = str(p)
         resp = p.send()
-        self.assertEqual(resp.a, 1)
-        self.assertEqual(resp['a'], 1)
-        self.assertEqual(resp[(1, 2)], 2)
+        assert resp.a == 1
+        assert resp['a'] == 1
+        assert resp[(1, 2)] == 2
 
-    def testExceptions(self):
+    def test_exceptions(self):
         pts = self._get_tester()
 
         pts.echo_delay(T.Value(0.1, 's'))
-        self.assertRaises(Exception, pts.exc_in_handler)
-        self.assertRaises(Exception, pts.exc_in_subfunction)
-        self.assertRaises(Exception, pts.exc_in_deferred)
-        self.assertRaises(Exception, pts.exc_in_errback)
-        self.assertRaises(Exception, pts.exc_in_inlinecallback)
+        with pytest.raises(Exception):
+            pts.exc_in_handler()
+        with pytest.raises(Exception):
+            pts.exc_in_subfunction()
+        with pytest.raises(Exception):
+            pts.exc_in_deferred()
+        with pytest.raises(Exception):
+            pts.exc_in_errback()
+        with pytest.raises(Exception):
+            pts.exc_in_inlinecallback()
 
-    def testContextWrappers(self):
+    def test_context_wrappers(self):
         cxn1 = self.cxn()
         cxn2 = self.cxn()
 
@@ -153,10 +152,10 @@ class ClientTests(unittest.TestCase):
         pts3.set('3', 3)
         pts4.set('4', 4)
 
-        self.assertEqual(pts1.keys(), ['1'])
-        self.assertEqual(pts2.keys(), ['2'])
-        self.assertEqual(pts3.keys(), ['3'])
-        self.assertEqual(pts4.keys(), ['4'])
+        assert pts1.keys() == ['1']
+        assert pts2.keys() == ['2']
+        assert pts3.keys() == ['3']
+        assert pts4.keys() == ['4']
 
     def test_server_calls(self):
         """Make sure that server settings can call other settings directly.
@@ -166,25 +165,21 @@ class ClientTests(unittest.TestCase):
         ts = cxn.python_test_server
 
         ts.set_reversed("bar", "foo")
-        self.assertEqual(ts.get("foo"), "bar")
+        assert ts.get("foo") == "bar"
 
         ts.echo_delay(T.Value(0.1, 's'))
-        self.assertEquals(ts.delayed_echo_wrapper(1), 1)
+        assert ts.delayed_echo_wrapper(1) == 1
 
     def test_spawn(self):
         cxn1 = self.cxn()
 
         # Can spawn from active client.
         with cxn1.spawn() as cxn2:
-            self.assertTrue(cxn2.connected)
+            assert cxn2.connected
             cxn2.manager.servers()
 
         # Can spawn from client after disconnect
-        self.assertFalse(cxn2.connected)
+        assert not cxn2.connected
         with cxn2.spawn() as cxn3:
-            self.assertTrue(cxn3.connected)
+            assert cxn3.connected
             cxn3.manager.servers()
-
-
-if __name__ == "__main__":
-    unittest.main()

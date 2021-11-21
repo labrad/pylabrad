@@ -13,22 +13,18 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from datetime import datetime
-import unittest
-import numpy as np
 
-import sys
-import os
-sys.path.insert(0, os.path.abspath('../..'))
+import numpy as np
+import pytest
 
 import labrad.types as T
 import labrad.units as U
-
 from labrad.units import Value, ValueArray, Complex
 
 
-class LabradTypesTests(unittest.TestCase):
+class TestLabradTypes:
 
-    def testTags(self):
+    def test_tags(self):
         """Test the parsing of type tags into Type objects."""
         tests = {
             '_': T.TNone(),
@@ -73,15 +69,15 @@ class LabradTypesTests(unittest.TestCase):
             '*b*i': T.TCluster(T.TList(T.TBool()), T.TList(T.TInt())),
         }
         for tag, type_ in tests.items():
-            self.assertEqual(T.parseTypeTag(tag), type_)
+            assert T.parseTypeTag(tag) == type_
             newtag = str(type_)
             if isinstance(type_, T.TCluster) and tag[0] + tag[-1] != '()':
                 # just added parentheses in this case
-                self.assertEqual(newtag, '(%s)' % tag)
+                assert newtag == '(%s)' % tag
             else:
-                self.assertEqual(newtag, tag)
+                assert newtag == tag
 
-    def testTagComments(self):
+    def test_tag_comments(self):
         """Test the parsing of type tags with comments and whitespace."""
         tests = {
             '': T.TNone(),
@@ -93,9 +89,9 @@ class LabradTypesTests(unittest.TestCase):
             '   i  : blah': T.TInt(),
         }
         for tag, type_ in tests.items():
-            self.assertEqual(T.parseTypeTag(tag), type_)
+            assert T.parseTypeTag(tag) == type_
 
-    def testDefaultFlatAndBack(self):
+    def test_default_flat_and_back(self):
         """
         Test roundtrip python->LabRAD->python conversion.
 
@@ -149,13 +145,13 @@ class LabradTypesTests(unittest.TestCase):
         for data_in in tests:
             data_out = T.unflatten(*T.flatten(data_in))
             if isinstance(data_in, U.ValueArray):
-                self.assertTrue(data_in.allclose(data_out))
+                assert data_in.allclose(data_out)
             elif isinstance(data_in, np.ndarray):
                 np.testing.assert_array_equal(data_out, data_in)
             else:
-                self.assertEqual(data_in, data_out)
+                assert data_in == data_out
 
-    def testDefaultFlatAndBackNonIdentical(self):
+    def test_default_flat_and_back_non_identical(self):
         """
         Test flattening/unflattening of objects which change type.
 
@@ -168,7 +164,7 @@ class LabradTypesTests(unittest.TestCase):
         """
         def compareValueArrays(a, b):
             """I check near equality of two ValueArrays"""
-            self.assertTrue(a.allclose(b))
+            assert a.allclose(b)
 
         tests = [
             ([1, 2, 3], np.array([1, 2, 3], dtype='int32'),
@@ -188,15 +184,18 @@ class LabradTypesTests(unittest.TestCase):
             (ValueArray([1.0, 2], ''), np.array([1.0, 2]),
                 np.testing.assert_array_almost_equal),
             # Numpy scalar types
-            (np.bool8(True), True, self.assertEqual) 
+            (np.bool8(True), True, None) 
         ]
         for input, expected, comparison_func in tests:
             unflat = T.unflatten(*T.flatten(input))
             if isinstance(unflat, np.ndarray):
-                self.assertEqual(unflat.dtype, expected.dtype)
-            comparison_func(unflat, expected)
+                assert unflat.dtype == expected.dtype
+            if comparison_func:
+                comparison_func(unflat, expected)
+            else:
+                assert unflat == expected
 
-    def testFlatAndBackWithTypeRequirements(self):
+    def test_flat_and_back_with_type_requirements(self):
         tests = [
             ([1, 2, 3], ['*i'], np.array([1, 2, 3]),
                 np.testing.assert_array_equal),
@@ -210,14 +209,14 @@ class LabradTypesTests(unittest.TestCase):
             unflat = T.unflatten(*flat)
             comparison_func(expected, unflat)
 
-    def testBooleanArrayFlattening(self):
+    def test_boolean_array_flattening(self):
         flat = T.flatten([True, False, True])
         unflat = T.unflatten(*flat)
         flat2 = T.flatten(unflat)
         unflat2 = T.unflatten(*flat2)
         np.testing.assert_array_equal(unflat, unflat2)
 
-    def testFailedFlattening(self):
+    def test_failed_flattening(self):
         """
         Trying to flatten data to an incompatible type should raise an error.
         """
@@ -238,7 +237,8 @@ class LabradTypesTests(unittest.TestCase):
             (U.ValueArray([1, 2], 'm'), '*v[]')
         ]
         for data, targetTag in cases:
-            self.assertRaises(T.FlatteningError, T.flatten, data, targetTag)
+            with pytest.raises(T.FlatteningError):
+                T.flatten(data, targetTag)
 
     def testTypeHints(self):
         """Test conversion to specified allowed types."""
@@ -263,9 +263,9 @@ class LabradTypesTests(unittest.TestCase):
             ((1, 2), ['??'], 'iw'),
         ]
         for data, hints, tag in passingTests:
-            self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
+            assert T.flatten(data, hints)[1] == T.parseTypeTag(tag)
 
-    def testTypeSpecialization(self):
+    def test_type_specialization(self):
         """Test specialization of the type during flattening."""
         tests = [
             # specialization without hints
@@ -273,9 +273,9 @@ class LabradTypesTests(unittest.TestCase):
             ([([],), ([Value(5, 'm')],)], '*(*v[m])'),
         ]
         for data, tag in tests:
-            self.assertEqual(T.flatten(data)[1], T.parseTypeTag(tag))
+            assert T.flatten(data)[1] == T.parseTypeTag(tag)
 
-    def testUnitTypes(self):
+    def test_unit_types(self):
         """Test flattening with units.
 
         The flattening code should not do unit conversion,
@@ -294,37 +294,33 @@ class LabradTypesTests(unittest.TestCase):
             (U.ValueArray([1j, 2j, 3j], 'm'), [], '*c[m]')
         ]
         for data, hints, tag in tests:
-            self.assertEqual(T.flatten(data, hints)[1], T.parseTypeTag(tag))
+            assert T.flatten(data, hints)[1] == T.parseTypeTag(tag)
 
         # we disallow flattening a float to a value with units,
         # as this is a major source of bugs
-        try:
+        with pytest.raises(Exception):
             T.flatten(5.0, 'v[m]')
-        except Exception:
-            pass
-        else:
-            raise Exception('Cannot flatten float to value with units')
 
-    def testNumpySupport(self):
+    def test_numpy_support(self):
         """Test flattening and unflattening of numpy arrays"""
         # TODO: flesh this out with more array types
         a = np.array([1, 2, 3, 4, 5], dtype='int32')
         b = T.unflatten(*T.flatten(a))
-        self.assertTrue(np.all(a == b))
-        self.assertTrue(T.flatten(np.int32(5))[0] == b'\x00\x00\x00\x05')
-        self.assertTrue(T.flatten(np.int64(-5))[0] == b'\xff\xff\xff\xfb')
-        self.assertTrue(len(T.flatten(np.float64(3.15))[0]) == 8)
-        with self.assertRaises(T.FlatteningError):
+        assert np.all(a == b)
+        assert T.flatten(np.int32(5))[0] == b'\x00\x00\x00\x05'
+        assert T.flatten(np.int64(-5))[0] == b'\xff\xff\xff\xfb'
+        assert len(T.flatten(np.float64(3.15))[0]) == 8
+        with pytest.raises(T.FlatteningError):
             T.flatten(np.int64(-5), T.TUInt())
 
-    def testNumpyArrayScalar(self):
-        with self.assertRaises(TypeError):
+    def test_numpy_array_scalar(self):
+        with pytest.raises(TypeError):
             T.flatten(np.array(5))
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             T.flatten(U.ValueArray(np.array(5), 'ns'))
 
 
-    def testIntegerRanges(self):
+    def test_integer_ranges(self):
         """Test flattening of out-of-range integer values"""
         tests = [
             (0x80000000, 'i'),
@@ -333,55 +329,55 @@ class LabradTypesTests(unittest.TestCase):
             (-1, 'w')
         ]
         for n, t in tests:
-            with self.assertRaises(T.FlatteningError):
+            with pytest.raises(T.FlatteningError):
                 T.flatten(n, t)
 
-    def testFlattenIsIdempotent(self):
+    def test_flatten_is_idempotent(self):
         flat = T.flatten(0x1, 'i')
-        self.assertEquals(T.flatten(flat), flat)
-        self.assertEquals(T.flatten(flat, 'i'), flat)
-        with self.assertRaises(T.FlatteningError):
+        assert T.flatten(flat) == flat
+        assert T.flatten(flat, 'i') == flat
+        with pytest.raises(T.FlatteningError):
             T.flatten(flat, 'v')
 
-    def testEvalDatetime(self):
+    def test_eval_datetime(self):
         data = datetime.now()
         data2 = T.evalLRData(repr(data))
-        self.assertEquals(data, data2)
+        assert data == data2
 
-    def testUnicodeBytes(self):
+    def test_unicode_bytes(self):
         foo = T.flatten('foo bar')
-        self.assertEquals(foo, T.flatten(u'foo bar'))
-        self.assertEquals(str(foo.tag), 's')
-        self.assertEquals(T.unflatten(foo.bytes, 'y'), b'foo bar')
-        self.assertEquals(T.unflatten(*T.flatten(b'foo bar', ['y'])), b'foo bar')
+        assert foo == T.flatten(u'foo bar')
+        assert str(foo.tag) == 's'
+        assert T.unflatten(foo.bytes, 'y') == b'foo bar'
+        assert T.unflatten(*T.flatten(b'foo bar', ['y'])) == b'foo bar'
 
-    def testFlattenIntArrayToValueArray(self):
+    def test_flatten_int_array_to_value_array(self):
         x = np.array([1, 2, 3, 4], dtype='int64')
         flat = T.flatten(x, '*v')
         y = T.unflatten(*flat)
-        self.assertTrue(np.all(x == y))
+        assert np.all(x == y)
 
-    def testFlattenArrayToClusterList(self):
+    def test_flatten_array_to_cluster_list(self):
         """Fail if trying to flatten a numpy array to type with incorrect shape.
 
         See https://github.com/labrad/pylabrad/issues/290.
         """
         arr = np.arange(5, dtype='float64')
-        with self.assertRaises(T.FlatteningError):
+        with pytest.raises(T.FlatteningError):
             T.flatten(arr, types=['*(v, v)'])
 
-    def testCanFlattenFlatData(self):
+    def test_can_flatten_flat_data(self):
         x = ('this is a test', -42, [False, True])
         flat = T.flatten(x)
-        self.assertEquals(T.parseTypeTag(flat.tag), T.parseTypeTag('si*b'))
+        assert T.parseTypeTag(flat.tag) == T.parseTypeTag('si*b')
         flat2 = T.flatten(x)
-        self.assertEquals(flat2, flat)
+        assert flat2 == flat
         flat3 = T.flatten(x, 'si*b')
-        self.assertEquals(flat3, flat)
-        with self.assertRaises(T.FlatteningError):
+        assert flat3 == flat
+        with pytest.raises(T.FlatteningError):
             T.flatten(x, 'sv')
 
-    def testCanFlattenListOfPartialFlatData(self):
+    def test_can_flatten_list_of_partial_flat_data(self):
         x1 = ('this is a test', -42, [False, True])
         piece1 = T.flatten(x1)
         x2 = ('this is also a test', -43, [False, True, True, True])
@@ -394,15 +390,15 @@ class LabradTypesTests(unittest.TestCase):
         expected = T.flatten(not_flattened)
 
         flat1 = T.flatten(partially_flattened)
-        self.assertEquals(flat1, expected)
+        assert flat1 == expected
 
         flat2 = T.flatten(partially_flattened, tag)
-        self.assertEquals(flat2, expected)
+        assert flat2 == expected
 
-        with self.assertRaises(T.FlatteningError):
+        with pytest.raises(T.FlatteningError):
             T.flatten(partially_flattened, '*(si)')
 
-    def testCanFlattenClusterOfPartialFlatData(self):
+    def test_can_flatten_cluster_of_partial_flat_data(self):
         x1 = ('this is a test', -42, [False, True])
         piece1 = T.flatten(x1)
         x2 = ('this is also a test', -43, [False, True, True, True])
@@ -415,14 +411,10 @@ class LabradTypesTests(unittest.TestCase):
         expected = T.flatten(not_flattened)
 
         flat1 = T.flatten(partially_flattened)
-        self.assertEquals(flat1, expected)
+        assert flat1 == expected
 
         flat2 = T.flatten(partially_flattened, tag)
-        self.assertEquals(flat2, expected)
+        assert flat2 == expected
 
-        with self.assertRaises(T.FlatteningError):
+        with pytest.raises(T.FlatteningError):
             T.flatten(partially_flattened, '*(s(si*b))')
-
-
-if __name__ == "__main__":
-    unittest.main()
