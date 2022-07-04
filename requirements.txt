@@ -6,3 +6,4 @@ pyparsing >= 2.1.*
 requests
 service_identity
 twisted >= 18.4.*
+rfc5424-logging-handler >= 1.4.3
