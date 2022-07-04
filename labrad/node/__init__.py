@@ -95,6 +95,7 @@ from labrad import protocol
 from labrad.node import server_config
 from labrad.logging import setupLogging
 from labrad.server import LabradServer, setting
+from labrad.util import mux
 
 # Maximum number of lines of stdout to keep per server.
 LOG_LENGTH = 1000
@@ -536,7 +537,7 @@ class NodeServer(LabradServer):
                 environment variable.
             host (str): The host where the labrad manager is running.
             port (int): The port where the labrad manager is running.
-            credential (labrad.auth.Password): Credentials for connecting to the
+            credential (auth.Password): Credentials for connecting to the
                 labrad manager.
         """
         LabradServer.__init__(self)
