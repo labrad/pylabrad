@@ -584,10 +584,14 @@ class LabradServer(object):
         return repr(c)
 
 
-    # Signals
+    # SIGNALS
     onLog = Signal(13131313, 'signal: log', 't*s')
 
     def log(self, *messages):
+        # log messages to self.logger as well
+        for msg in messages:
+            self.logger.info(msg)
+        # send messages to listeners
         self.onLog((datetime.now(), messages))
 
 
