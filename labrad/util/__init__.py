@@ -13,20 +13,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import contextlib
 import os
 import re
 import sys
 import textwrap
+import contextlib
 
 from twisted.internet import defer, reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import blockingCallFromThread
-from twisted.python import log, reflect, util
 
-from labrad import constants as C, crypto, support, thread
+from labrad import thread
+from labrad import constants as C
+from labrad.logging import setupLogging
 from labrad.support import getNodeName
 from labrad.util.unwrap import unwrap
+
 
 def fancyHelp(ID, name, accepts, returns, units, about):
     """Create informative help text for a server setting.
@@ -255,6 +257,7 @@ def maybeTimeout(deferred, timeout, timeoutResult):
                                               consumeErrors=True)
     returnValue(result)
 
+
 class DeferredSignal(object):
     """An object that can create multiple deferreds on demand.
 
@@ -386,9 +389,8 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
     config = parseServerOptions(name=srv.name)
     updateServerOptions(srv, config)
 
-    log.startLogging(sys.stdout)
-    #observer = MyLogObserver(sys.stdout)
-    #log.startLoggingWithObserver(observer.emit)
+    # set up logging
+    logger = setupLogging('labrad.server', srv)
 
     @inlineCallbacks
     def run(srv):
@@ -400,9 +402,9 @@ def runServer(srv, run_reactor=True, stop_reactor=True):
                                        config['password'])
             yield srv.startup(p)
             yield srv.onShutdown()
-            log.msg('Disconnected cleanly.')
+            logger.info('Disconnected cleanly.')
         except Exception as e:
-            log.msg('There was an error: {}'.format(e))
+            logger.info('There was an error: {}'.format(e))
         if stop_reactor:
             try:
                 reactor.stop()
@@ -448,30 +450,3 @@ def syncRunServer(srv, host=C.MANAGER_HOST, port=None, username=None,
             blockingCallFromThread(reactor, stop_server)
         except Exception:
             pass # don't care about exceptions here
-
-
-
-class MyLogObserver(log.FileLogObserver):
-    timeFormat = '%Y/%m/%d %H:%M -'
-
-    def emit(self, eventDict):
-        edm = eventDict['message']
-        if not edm:
-            if eventDict['isError'] and 'failure' in eventDict:
-                text = ((eventDict.get('why') or 'Unhandled Error')
-                        + '\n' + eventDict['failure'].getTraceback())
-            elif 'format' in eventDict:
-                text = self._safeFormat(eventDict['format'], eventDict)
-            else:
-                # we don't know how to log this
-                return
-        else:
-            text = ' '.join(map(reflect.safe_str, edm))
-
-        timeStr = self.formatTime(eventDict['time'])
-        fmtDict = {'text': text.replace("\n", "\n\t")}
-        msgStr = self._safeFormat("%(text)s\n", fmtDict)
-
-        util.untilConcludes(self.write, timeStr + " " + msgStr)
-        util.untilConcludes(self.flush)  # Hoorj!
-

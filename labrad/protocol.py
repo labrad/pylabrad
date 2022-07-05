@@ -26,11 +26,11 @@ import traceback
 
 from twisted.internet import reactor, protocol, defer
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python import failure, log
 
 import labrad.types as T
-from labrad import auth, constants as C, crypto, errors, oauth, support, util
+from labrad.logging import setupLogging
 from labrad.stream import packetStream, flattenPacket
+from labrad import auth, constants as C, crypto, errors, oauth, support, util
 
 
 class LabradProtocol(protocol.Protocol):
@@ -47,6 +47,8 @@ class LabradProtocol(protocol.Protocol):
         self.clearCache()
         self.endianness = '>'
         self.request_handler = None
+        # set up logging
+        self.log = setupLogging('labrad.protocol', sender=self)
         # create a generator to assemble the packets
         self.packetStream = packetStream(self.packetReceived, self.endianness)
         next(self.packetStream) # start the packet stream

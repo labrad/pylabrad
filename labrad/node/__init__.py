@@ -65,42 +65,53 @@ For rsyslogd on ubuntu, create the following file:
 :syslogtag,contains,"labrad"			/var/log/labrad.log;RSYSLOG_TraditionalFileFormat
 """
 
-import logging
-import logging.handlers
 import os
+import sys
 import shlex
 import socket
-import sys
 import zipfile
+import argparse
+
+import logging
+import logging.handlers
+
 from datetime import datetime
 
-from twisted.application.internet import TCPClient
-from twisted.application.service import MultiService
 from twisted.internet import defer, reactor
+from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ProcessDone, ProcessTerminated
-from twisted.internet.protocol import ProcessProtocol
-from twisted.python import usage
+
 from twisted.python.runtime import platformType
 
 import labrad
 import labrad.support
-from labrad import auth, protocol, util, types as T, constants as C
-from labrad.node import server_config
-from labrad.server import LabradServer, setting
-from labrad.util import DeferredSignal, interpEnvironmentVars, mux
+import labrad.types as T
+import labrad.constants as C
 
+from labrad import util
+from labrad import auth
+from labrad import protocol
+from labrad.node import server_config
+from labrad.logging import setupLogging
+from labrad.server import LabradServer, setting
+from labrad.util import mux
 
 # Maximum number of lines of stdout to keep per server.
 LOG_LENGTH = 1000
 
-
 # Named message fired by the manager when new servers connect.
 SERVER_CONNECTED = 'Server Connect'
 
-
 # Labrad type of the node status info.
 STATUS_TYPE = '*(s{name} s{desc} s{ver} s{instname} *s{vars} *s{running})'
+
+# create a logger for all of the node module
+_extraDict = {
+    'sender_host': socket.gethostname(),
+    'sender_name': "node",
+}
+node_log_global = setupLogging('labrad.node', extraDict=_extraDict)
 
 
 class ServerProcess(ProcessProtocol):
@@ -138,18 +149,17 @@ class ServerProcess(ProcessProtocol):
         if config.path:
             self.full_env['DIR'] = config.path
         self.client = client
-        self.name = interpEnvironmentVars(config.instance_name, self.full_env)
+        self.name = util.interpEnvironmentVars(config.instance_name, self.full_env)
         self.args = shlex.split(config.cmdline)
-        self.args = [interpEnvironmentVars(a, self.full_env) for a in self.args]
+        self.args = [util.interpEnvironmentVars(a, self.full_env) for a in self.args]
         self.status = None
         self.output = []
         self.on_message = on_message
         self._lock = defer.DeferredLock()
-        logname = 'labrad.' + labrad.support.mangle(self.name)
-        self.logger = logging.getLogger(logname)
+        self.logger = node_log_global
 
         # Signal that will fire when the server process is shutdown.
-        self.on_shutdown = DeferredSignal()
+        self.on_shutdown = util.DeferredSignal()
 
     @property
     def server_name(self):
@@ -234,10 +244,10 @@ class ServerProcess(ProcessProtocol):
 
         # wait for the server to connect to labrad, shutdown, or timeout,
         # whichever comes first.
-        selected = yield mux.select({
+        selected = yield util.mux.select({
             'connected': connected,
             'shutdown': self.on_shutdown(),
-            'timeout': mux.after(self.timeout)
+            'timeout': util.mux.after(self.timeout)
         })
 
         # stop listening for server connect messages
@@ -292,9 +302,9 @@ class ServerProcess(ProcessProtocol):
                     self.logger.info('Error while shutting down with setting',
                                      exc_info=True)
 
-            selected = yield mux.select({
+            selected = yield util.mux.select({
                 'shutdown': self.on_shutdown(),
-                'timeout': mux.after(self.config.shutdown_timeout)
+                'timeout': util.mux.after(self.config.shutdown_timeout)
             })
 
             if selected.key == 'shutdown':
@@ -367,7 +377,7 @@ class Node(object):
     @inlineCallbacks
     def run(self):
         """Run the node in a loop, reconnecting after connection loss."""
-        log = logging.getLogger('labrad.node')
+        log = node_log_global
         while True:
             print('Connecting to {}:{}...'.format(self.host, self.port))
             try:
@@ -494,7 +504,7 @@ class NodeConfig(object):
             config = yield self._load()
             self._update(config)
         except Exception:
-            logging.error('Error in _handleMessage', exc_info=True)
+            self.logger.error('Error in _handleMessage', exc_info=True)
 
     @inlineCallbacks
     def update_autostart(self, autostart):
@@ -527,7 +537,7 @@ class NodeServer(LabradServer):
                 environment variable.
             host (str): The host where the labrad manager is running.
             port (int): The port where the labrad manager is running.
-            credential (labrad.auth.Password): Credentials for connecting to the
+            credential (auth.Password): Credentials for connecting to the
                 labrad manager.
         """
         LabradServer.__init__(self)
@@ -644,8 +654,7 @@ class NodeServer(LabradServer):
                         versions.setdefault(config.version, []).append(config)
                     except Exception:
                         fname = os.path.join(path, f)
-                        logging.error('Error while loading config file "%s":' % fname,
-                                  exc_info=True)
+                        self.logger.error('Error while loading config file "%s":' % fname, exc_info=True)
 
         server_configs = {}
         for versions in configs.values():
@@ -653,7 +662,7 @@ class NodeServer(LabradServer):
                 if len(servers) > 1:
                     conflicting_files = [s.filename for s in servers]
                     s = servers[0]
-                    logging.warning(
+                    self.logger.warning(
                         'Found redundant server configs with same name and '
                         'version; will use {}. name={}, version={}, '
                         'conflicting_files={}'
@@ -814,7 +823,7 @@ class NodeServer(LabradServer):
             try:
                 yield deferred
             except Exception:
-                logging.error('Failed to autostart "%s"', name, exc_info=True)
+                self.logger.error('Failed to autostart "%s"', name, exc_info=True)
 
     @setting(201, returns='*s')
     def autostart_list(self, c):
@@ -856,7 +865,7 @@ class NodeServer(LabradServer):
             try:
                 yield restart
             except Exception:
-                logging.error('Failed to restart "%s"', info['instance'],
+                self.logger.error('Failed to restart "%s"', info['instance'],
                               exc_info=True)
                 info['status'] = 'failed to restart'
             else:
@@ -897,83 +906,68 @@ class NodeServer(LabradServer):
         return list(info.items())
 
 
-class NodeOptions(usage.Options):
-    optParameters = [
-            ['name', 'n', util.getNodeName(), 'Node name.'],
-            ['host', 'h', C.MANAGER_HOST, 'Manager location.'],
-            ['port', 'p', C.MANAGER_PORT, 'Manager port.'],
-            ['username', 'u', None, 'Login username.'],
-            ['password', 'w', None, 'Login password.'],
-            ['tls', '', C.MANAGER_TLS,
-             'TLS mode for connecting to manager (on/starttls/off)'],
-            ['logfile', 'l', None, 'Enable logging to a file'],
-            ['syslog_socket', 'x', None,
-             'Override default syslog socket. Absolute path or host[:port]']]
-    optFlags = [['syslog', 's', 'Enable syslog'],
-                ['verbose', 'v', 'Enable debug output']]
+def get_argparser():
+    parser = argparse.ArgumentParser(description="LabRAD Node")
 
+    parser.add_argument("-n", "--name", default=util.getNodeName(),
+                        help="node name (default: '%(default)s')")
 
-def makeService(options):
-    """Construct a TCPServer from a LabRAD node."""
-    name = options['name']
-    host = options['host']
-    port = int(options['port'])
-    username = options['username']
-    password = options['password']
-    tls_mode = C.check_tls_mode(options['tls'])
-    return Node(name, host, port, username, password, tls_mode)
+    # manager arguments
+    manager_group = parser.add_argument_group("manager")
+    manager_group.add_argument("--host", default=C.MANAGER_HOST,
+                       help="manager host ip address (default: '%(default)s')")
+    manager_group.add_argument("-p", "--port", default=C.MANAGER_PORT,
+                       help="manager host ip port (default: '%(default)s')")
+    manager_group.add_argument("--tls", default=C.MANAGER_TLS, choices=('ON', 'STARTTLS', 'OFF'),
+                       help="TLS mode for connecting to manager (default: '%(default)s')")
 
+    # login arguments
+    manager_group.add_argument("-u", "--username", default=None, help="login username")
+    manager_group.add_argument("-w", "--password", default=None, help="login password")
 
-def setup_logging(options):
-    logging.basicConfig()
-    node_log = logging.getLogger('labrad')
-    if options['syslog']:
-        # We need to find the path to the system log socket, which varies by
-        # platform. Linux and OS/X defaults are listed below. On windows the
-        # only option is UDP logging, but since UDP is connectionless there is
-        # no way to tell if there is actually a syslog daemon listening.
-        # https://docs.python.org/2/library/logging.handlers.html#sysloghandler
-        if options['syslog_socket']:
-            if '/' in options['syslog_socket']:
-                address = options['syslog_socket']
-            else:
-                host, _, port = options['syslog_socket'].partition(':')
-                if port == '':
-                    address = (host, 514)
-                else:
-                    address = (host, int(port))
-        elif sys.platform.startswith('linux'):
-            address = '/dev/log'
-        elif sys.platform.startswith('darwin'):
-            address = '/var/run/syslog'
-        else:
-            node_log.critical(
-                    'Syslog specified, but default socket not known for '
-                    'platform {}. Use -s option'.format(sys.platform))
-            sys.exit(1)
-        syslog_handler = logging.handlers.SysLogHandler(address=address)
-        syslog_handler.setFormatter(logging.Formatter('%(name)s: %(message)s'))
-        node_log.addHandler(syslog_handler)
-    if options['logfile']:
-        file_handler = logging.handlers.RotatingFileHandler(
-                options['logfile'], maxBytes=800000, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s: %(message)s',
-                                      datefmt='%Y-%m-%d %H:%M:%S')
-        file_handler.setFormatter(formatter)
-        node_log.addHandler(file_handler)
-    if options['verbose']:
-        node_log.setLevel(logging.DEBUG)
-    else:
-        node_log.setLevel(logging.INFO)
+    # logging arguments
+    logging_group = parser.add_argument_group("logging")
+    logging_group.add_argument("-v", "--verbose", default=logging.INFO,
+                       help="set the logging level for the node (default: '%(default)s')")
+    logging_group.add_argument("-l", "--logfile", default=None,
+                       help="log to a logfile in the specified directory (default: '%(default)s')")
+    logging_group.add_argument("-s", "--syslog", default=True,
+                        help="enable syslog (default: %(default)s)")
+    logging_group.add_argument("-x", "--syslog_socket", default='{}:{}'.format(C.MANAGER_HOST, os.environ["EGGS_LABRAD_SYSLOG_PORT"]),
+                       help="the socket to log to (default: '%(default)s')")
+    logging_group.add_argument("-z", "--syslog_rfc", default='5424', choices=('5424', '3164'),
+                       help="set the protocol to use for syslog (default: '%(default)s')")
+
+    return parser
+
 
 def main():
-    config = NodeOptions()
-    config.parseOptions()
-    setup_logging(config)
-    logging.getLogger('labrad.node').info('Starting')
-    service = makeService(config)
+    # get node config
+    node_parser = get_argparser()
+    args = node_parser.parse_args()
+
+    # extract logging args
+    logging_args = {}
+    for group in node_parser._action_groups:
+        if group.title == 'logging':
+            logging_args = {arg.dest: getattr(args, arg.dest, None) for arg in group._group_actions}
+
+    # massage argparse options into arguments of setupLogging
+    logging_args['log_level'] = logging_args.pop('verbose')
+    if logging_args['syslog']:
+        logging_args['syslog_socket'] = tuple(args.syslog_socket.split(':'))
+
+    # create logger!
+    node_log = setupLogging('labrad.node', extraDict=_extraDict, **logging_args)
+
+    # construct a TCPServer from a LabRAD node
+    service = Node(args.name, args.host, args.port,
+                   args.username, args.password,
+                   C.check_tls_mode(args.tls))
+    node_log.info('Starting...')
     service.run()
     reactor.run()
+
 
 if __name__ == '__main__':
     main()

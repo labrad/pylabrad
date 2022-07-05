@@ -20,22 +20,24 @@ Base classes for building asynchronous, context- and request- aware
 servers with labrad.
 """
 
-from datetime import datetime
-from operator import attrgetter
+import sys
 import threading
 import traceback
-
+from datetime import datetime
 from concurrent import futures
+from operator import attrgetter
+
 from twisted.internet import defer, reactor, threads
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.error import ConnectionDone, ConnectionLost
-from twisted.python import failure, log, threadable
+from twisted.python import failure, threadable
 
-from labrad import constants as C, types as T, util
 import labrad.backend
 import labrad.client
 import labrad.concurrent
+from labrad import types as T, util
 from labrad.decorators import setting
+from labrad.logging import setupLogging, _LoggerWriter
 from labrad.wrappers import ClientAsync
 
 
@@ -191,6 +193,10 @@ class LabradServer(object):
 
     def __init__(self):
         self.description, self.notes = util.parseSettingDoc(self.__doc__)
+
+        # set logger as instance variable
+        self.logger = setupLogging('labrad.server', sender=self)
+        sys.stdout = _LoggerWriter(self.logger.info)
 
         self.started = False
         self.stopping = False
@@ -360,7 +366,7 @@ class LabradServer(object):
             self.started = True
             self.onStartup.callback(self)
         except Exception as e:
-            log.err("connection failed, disconnecting")
+            self.logger.error("Connection failed, disconnecting.")
             traceback.print_exc()
             self.disconnect(e)
             raise
@@ -394,7 +400,7 @@ class LabradServer(object):
         Here we register the settings and signals found on this server
         and set up message handlers for messages coming from the manager.
         """
-        log.msg('%s starting...' % self.name)
+        self.logger.info('%s starting...' % self.name)
         # register handlers for settings and signals
         mgr = self.client.manager
         p = mgr.packet()
@@ -425,7 +431,7 @@ class LabradServer(object):
 
         # let the rest of the world know we're ready
         yield mgr.s__start_serving()
-        log.msg('%s now serving' % self.name)
+        self.logger.info('%s now serving.' % self.name)
 
     @inlineCallbacks
     def _stopServer(self, *ignored):
@@ -578,10 +584,14 @@ class LabradServer(object):
         return repr(c)
 
 
-    # Signals
+    # SIGNALS
     onLog = Signal(13131313, 'signal: log', 't*s')
 
     def log(self, *messages):
+        # log messages to self.logger as well
+        for msg in messages:
+            self.logger.info(msg)
+        # send messages to listeners
         self.onLog((datetime.now(), messages))
 
 
