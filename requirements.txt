@@ -1,8 +1,8 @@
-numpy >= 1.12.*; python_version < '3.7'
-numpy >= 1.15.*; python_version == '3.7'
-numpy >= 1.17.*; python_version >= '3.8'
-pyOpenSSL >= 18.0.*
-pyparsing >= 2.1.*
+numpy >= 1.12; python_version < '3.7'
+numpy >= 1.15; python_version == '3.7'
+numpy >= 1.17; python_version >= '3.8'
+pyOpenSSL >= 18.0
+pyparsing >= 2.1
 requests
 service_identity
-twisted >= 18.4.*
+twisted >= 18.4
