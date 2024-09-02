@@ -598,12 +598,12 @@ class TBool(Type, Singleton):
         return bool(ord(s.get(1)))
 
     def __flatten__(self, b, endianness):
-        if not isinstance(b, (bool, np.bool8)):
+        if not isinstance(b, (bool, np.bool_)):
             raise FlatteningError(b, self)
         return b'\x01' if b else b'\x00', self
 
 registerType(bool, TBool())
-registerType(np.bool8, TBool())
+registerType(np.bool_, TBool())
 
 class TInt(Type, Singleton):
     """A signed 32-bit integer."""

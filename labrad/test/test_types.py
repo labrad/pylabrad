@@ -184,7 +184,7 @@ class TestLabradTypes:
             (ValueArray([1.0, 2], ''), np.array([1.0, 2]),
                 np.testing.assert_array_almost_equal),
             # Numpy scalar types
-            (np.bool8(True), True, None) 
+            (np.bool_(True), True, None) 
         ]
         for input, expected, comparison_func in tests:
             unflat = T.unflatten(*T.flatten(input))
