@@ -390,7 +390,6 @@ class LabradProtocol(protocol.Protocol):
                                         'username+password auth. Cannot log in '
                                         'as user {}.'.format(username))
                     credential = auth.Password(username, password)
-
         else:
             # Have neither username nor password.
             # Check manager-supported auth methods; use OAuth if available.
@@ -419,20 +418,34 @@ class LabradProtocol(protocol.Protocol):
 
         if isinstance(credential, auth.Password):
             if not credential.username:
-                # send login packet to get password challenge
-                challenge = yield self._sendManagerRequest()
+                if 'srp' in self.manager_features:
+                    # send identity
+                    group, salt, B_bytes = yield self._sendManagerRequest(10, username)
 
-                # send password response
-                m = hashlib.md5()
-                m.update(challenge)
-                if isinstance(credential.password, bytes):
-                    m.update(credential.password)
+                    # send password response
+                    srp = crypto.SRP(identity=username, group=group,
+                                     password=credential.password)
+                    A_bytes, M1 = srp.process_server_challenge(salt, B_bytes)
+                    try:
+                        resp, M2 = yield self._sendManagerRequest(11, (A_bytes, M1))
+                    except Exception:
+                        raise errors.LoginFailedError('Incorrect password.')
+                    srp.process_server_confirmation(M2)
                 else:
-                    m.update(credential.password.encode('UTF-8'))
-                try:
-                    resp = yield self._sendManagerRequest(0, m.digest())
-                except Exception:
-                    raise errors.LoginFailedError('Incorrect password.')
+                    # send login packet to get password challenge
+                    challenge = yield self._sendManagerRequest()
+
+                    # send password response
+                    m = hashlib.md5()
+                    m.update(challenge)
+                    if isinstance(credential.password, bytes):
+                        m.update(credential.password)
+                    else:
+                        m.update(credential.password.encode('UTF-8'))
+                    try:
+                        resp = yield self._sendManagerRequest(0, m.digest())
+                    except Exception:
+                        raise errors.LoginFailedError('Incorrect password.')
             else:
                 method = 'username+password'
                 require_secure_connection(method)
@@ -546,14 +559,6 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
     def authenticate(p):
         yield p.authenticate(username, password, headless)
 
-    if tls_mode == 'on':
-        tls_options = crypto.tls_options(host)
-        p = yield _factory.connectSSL(host, port, tls_options, timeout=C.TIMEOUT)
-        p.set_address(host, port)
-        p.spawn_kw = spawn_kw
-        yield authenticate(p)
-        returnValue(p)
-
     @inlineCallbacks
     def do_connect():
         p = yield _factory.connectTCP(host, port, timeout=C.TIMEOUT)
@@ -582,6 +587,15 @@ def connect(host=C.MANAGER_HOST, port=None, tls_mode=C.MANAGER_TLS,
         else:
             manager_features = set()
         returnValue(manager_features)
+
+    if tls_mode == 'on':
+        tls_options = crypto.tls_options(host)
+        p = yield _factory.connectSSL(host, port, tls_options, timeout=C.TIMEOUT)
+        p.set_address(host, port)
+        p.spawn_kw = spawn_kw
+        p.manager_features = yield ping(p)
+        yield authenticate(p)
+        returnValue(p)
 
     p = yield do_connect()
     is_local_connection = util.is_local_connection(p.transport)
